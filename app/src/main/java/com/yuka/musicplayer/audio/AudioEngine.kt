@@ -8,6 +8,9 @@ class AudioEngine {
         init {
             System.loadLibrary("kewmobile")
         }
+
+        @JvmStatic
+        external fun setUsbBufferProfile(transfers: Int, packets: Int)
     }
 
 
@@ -59,6 +62,8 @@ class AudioEngine {
     external fun getOutputSampleRate(): Int
     external fun triggerWarmup(durationMs: Int): Boolean
     external fun isWarmingUp(): Boolean
+    external fun getTimingTelemetry(): String
+    external fun isBitPerfectIntegerPassActive(): Boolean
 
     // Callback dari C++ saat lagu habis
     var onTrackFinishedCallback: (() -> Unit)? = null

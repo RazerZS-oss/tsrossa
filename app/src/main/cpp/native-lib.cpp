@@ -293,3 +293,29 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_isWarmingUp(JNIEnv *env, jobject thiz) {
   return is_warming_up_internal() ? JNI_TRUE : JNI_FALSE;
 }
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_yuka_musicplayer_audio_AudioEngine_isBitPerfectIntegerPassActive(JNIEnv *env, jobject thiz) {
+  return g_audioState.bitPerfectDirectPassActive.load() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_yuka_musicplayer_audio_AudioEngine_setUsbBufferProfile(JNIEnv *env, jobject thiz, jint transfers, jint packets) {
+  if (transfers >= 4 && transfers <= 32) {
+    g_audioState.isoTransfersCount.store(transfers);
+  }
+  if (packets >= 4 && packets <= 64) {
+    g_audioState.isoPacketsCount.store(packets);
+  }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_yuka_musicplayer_audio_AudioEngine_getTimingTelemetry(JNIEnv *env, jobject thiz) {
+  std::string json = "{";
+  json += "\"interfaceSettleUs\":" + std::to_string(g_audioState.lastInterfaceSettleUs.load()) + ",";
+  json += "\"pllRelockUs\":" + std::to_string(g_audioState.lastPllRelockUs.load()) + ",";
+  json += "\"antiPopPaddingUs\":" + std::to_string(g_audioState.lastAntiPopPaddingUs.load()) + ",";
+  json += "\"maxIsoJitterNs\":" + std::to_string(g_audioState.maxIsoJitterNs.load());
+  json += "}";
+  return env->NewStringUTF(json.c_str());
+}

@@ -281,6 +281,23 @@ void close_usb_dac_internal() {
       munlock(g_audioState.pcmBufferNext.data(), g_audioState.pcmBufferNext.size() * sizeof(int32_t));
       g_audioState.pcmBufferNext.clear();
     }
+
+    if (g_audioState.callbackObj != nullptr && g_jvm != nullptr) {
+      JNIEnv *env = nullptr;
+      bool needDetach = false;
+      if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
+          needDetach = true;
+        }
+      }
+      if (env != nullptr) {
+        env->DeleteGlobalRef(g_audioState.callbackObj);
+        g_audioState.callbackObj = nullptr;
+        if (needDetach) {
+          g_jvm->DetachCurrentThread();
+        }
+      }
+    }
     
     LOGI("[Thread] Cleanup finished successfully in closeUsbDac");
   }
@@ -751,6 +768,16 @@ bool init_usb_dac_internal(int fd) {
       g_controlQueue.push(initVolReq);
       g_controlCv.notify_one();
     }
+  } else {
+    g_audioState.isHardwareVolumeActive.store(false);
+    float vol = g_audioState.rawLinearVolume;
+    float scaled_vol = vol;
+    if (vol < 0.001f) {
+      scaled_vol = 0.0f;
+    } else {
+      scaled_vol = (std::exp(vol * 4.0f) - 1.0f) / (std::exp(4.0f) - 1.0f);
+    }
+    g_audioState.targetVolume.store(scaled_vol);
   }
 
   snprintf(dbg, sizeof(dbg), "=== initUsbDac SUCCESS: VID=%04X, PID=%04X, Product='%s', Manufacturer='%s', UAC=%d, Claimed=%zu ifaces ===",

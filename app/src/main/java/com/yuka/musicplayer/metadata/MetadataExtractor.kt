@@ -82,5 +82,37 @@ fun extractMetadata(file: File): TrackInfo {
         retriever.release()
     }
 
-    return TrackInfo(file, title, artist, album, year, durationSec, bitmap, dominantColor)
+    // MQA Detection: check filename conventions and Vorbis Comment / ID3 header
+    val isMqa = detectMqa(file)
+
+    return TrackInfo(file, title, artist, album, year, durationSec, bitmap, dominantColor, isMqa)
+}
+
+/**
+ * Checks for MQA indicators in filename or raw file header bytes.
+ */
+fun detectMqa(file: File): Boolean {
+    val nameLower = file.name.lowercase()
+    if (nameLower.contains("[mqa]") || nameLower.contains(".mqa.") || nameLower.contains("mqa.flac")) {
+        return true
+    }
+    // Inspect first 8KB of FLAC header for Vorbis Comment "MQAENCODER" or "MQA" tag
+    if (file.extension.equals("flac", ignoreCase = true) && file.exists() && file.length() > 64) {
+        try {
+            file.inputStream().use { input ->
+                val header = ByteArray(8192)
+                val read = input.read(header)
+                if (read > 0) {
+                    val headerStr = String(header, 0, read, Charsets.ISO_8859_1)
+                    if (headerStr.contains("MQAENCODER", ignoreCase = true) ||
+                        headerStr.contains("MQA", ignoreCase = false) && headerStr.contains("ORIGINALSAMPLERATE", ignoreCase = true)) {
+                        return true
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Non-critical check failure fallback
+        }
+    }
+    return false
 }

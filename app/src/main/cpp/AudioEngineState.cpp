@@ -12,7 +12,6 @@ std::mutex g_usbDiagMutex;
 // Global JVM pointer and API Mutex
 JavaVM *g_jvm = nullptr;
 std::mutex g_apiMutex;
-uint32_t g_fast_rand_state = 123456789;
 
 void record_usb_diag(const std::string &msg) {
   std::lock_guard<std::mutex> lock(g_usbDiagMutex);

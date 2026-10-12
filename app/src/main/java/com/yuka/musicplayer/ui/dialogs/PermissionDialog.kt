@@ -136,9 +136,11 @@ fun PermissionSetupDialog(
     isNotificationGranted: Boolean,
     isStorageGranted: Boolean,
     isDndGranted: Boolean,
+    isBatteryOptimizationIgnored: Boolean = true,
     onRequestNotification: () -> Unit,
     onRequestStorage: () -> Unit,
     onRequestDnd: () -> Unit,
+    onRequestBatteryOptimization: () -> Unit = {},
     onComplete: () -> Unit
 ) {
     Column(
@@ -216,6 +218,19 @@ fun PermissionSetupDialog(
                     desc = "Dibutuhkan pada Android 13+ untuk menampilkan kontrol pemutar musik (MediaStyle) di bar notifikasi & lockscreen, serta status DAC Bit-Perfect.",
                     actionLabel = if (isNotificationGranted) "SUDAH DIIZINKAN" else "IZINKAN NOTIFIKASI",
                     onAction = onRequestNotification
+                )
+            }
+
+            item {
+                PermissionCard(
+                    icon = "⚡",
+                    title = "MANAJEMEN BATERAI OEM (ANTI-KILL)",
+                    badge = if (isBatteryOptimizationIgnored) "DIIZINKAN (KEBAL) ✅" else "DIREKOMENDASIKAN ⚠️",
+                    isGranted = isBatteryOptimizationIgnored,
+                    isEssential = false,
+                    desc = "Penting pada Xiaomi (HyperOS/MIUI), OnePlus, Oppo & Vivo agar pemutaran musik USB bit-perfect tidak dihentikan paksa saat layar ponsel terkunci.",
+                    actionLabel = if (isBatteryOptimizationIgnored) "SUDAH DIATUR" else "PENGATURAN BATERAI OEM",
+                    onAction = onRequestBatteryOptimization
                 )
             }
 

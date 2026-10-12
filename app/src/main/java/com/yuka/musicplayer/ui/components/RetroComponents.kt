@@ -30,6 +30,7 @@ fun RetroButton(
     val isAccent = isSelected || color == LocalAccentColor.current
     Box(
         modifier = modifier
+            .defaultMinSize(minWidth = 44.dp, minHeight = 40.dp)
             .border(1.dp, if (isAccent) LocalAccentColor.current else color.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
             .background(
                 if (isAccent) LocalAccentColor.current.copy(alpha = 0.15f) else Color.Transparent,
@@ -64,8 +65,8 @@ fun RetroActionItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 3.dp)
-            .background(accent.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
-            .border(0.8.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(8.dp))
+            .background(Color(0xFF0A0F1D).copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+            .border(0.8.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
             .padding(horizontal = 14.dp, vertical = 11.dp)
     ) {
         Row(
@@ -95,9 +96,9 @@ fun RetroCircularButton(
     activeColor: Color = LocalAccentColor.current,
     inactiveColor: Color = LocalAccentColor.current
 ) {
-    val borderColor = if (isActive) activeColor else inactiveColor.copy(alpha = 0.45f)
-    val bgColor = if (isActive) activeColor.copy(alpha = 0.22f) else Color.Transparent
-    val textColor = if (isActive) activeColor else inactiveColor.copy(alpha = 0.8f)
+    val borderColor = if (isActive) activeColor else inactiveColor.copy(alpha = 0.60f)
+    val bgColor = if (isActive) activeColor.copy(alpha = 0.25f) else Color(0xFF0C101D).copy(alpha = 0.70f)
+    val textColor = if (isActive) activeColor else TerminalWhite.copy(alpha = 0.85f)
 
     Box(
         modifier = modifier

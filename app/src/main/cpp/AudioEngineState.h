@@ -98,6 +98,7 @@ struct AudioEngineState {
   std::thread *isoThread = nullptr;
   std::atomic<bool> stopIsoThread{false};
   std::atomic<bool> isoThreadExited{true};
+  std::atomic<bool> stallFaultReported{false};
   std::vector<libusb_transfer *> transfers;
   std::vector<struct libusb_transfer *> orphanTransfers;
 
@@ -141,6 +142,18 @@ struct AudioEngineState {
   // Refused track history (max 5 entries)
   std::vector<RefusedTrackInfo> refusedTrackHistory;
   std::mutex refusedHistoryMutex;
+
+  // Oscilloscope Hardware Timing Telemetry (sub-microsecond precision)
+  std::atomic<int64_t> lastInterfaceSettleUs{0};
+  std::atomic<int64_t> lastPllRelockUs{0};
+  std::atomic<int64_t> lastAntiPopPaddingUs{0};
+  std::atomic<int64_t> maxIsoJitterNs{0};
+  std::atomic<int64_t> lastIsoPacketTimeNs{0};
+
+  // Bit-Perfect Pure Integer Path Telemetry & Buffer Profile Configuration
+  std::atomic<bool> bitPerfectDirectPassActive{false};
+  std::atomic<int> isoTransfersCount{12};
+  std::atomic<int> isoPacketsCount{16};
 };
 
 extern AudioEngineState g_audioState;

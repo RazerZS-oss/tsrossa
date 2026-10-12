@@ -12,8 +12,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -80,7 +85,9 @@ fun PrecisionScrubber(
     )
 
     BoxWithConstraints(
-        modifier = modifier.fillMaxWidth(0.88f)
+        modifier = modifier
+            .fillMaxWidth(0.88f)
+            .systemGestureExclusion()
     ) {
         val totalWidthPx = constraints.maxWidth.toFloat()
         val density = LocalDensity.current
@@ -225,9 +232,11 @@ fun TrackView(
 ) {
     val dynamicColor = LocalAccentColor.current
 
+    val scrollState = rememberScrollState()
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceEvenly
@@ -309,6 +318,7 @@ fun TrackView(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
         ) {
+            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
             Text(
                 text = track.title,
                 color = TerminalWhite,
@@ -317,11 +327,17 @@ fun TrackView(
                 fontFamily = TerminalFont,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .basicMarquee(
+                        iterations = Int.MAX_VALUE,
+                        delayMillis = 1500
+                    )
             )
 
             Spacer(modifier = Modifier.height(3.dp))
 
+            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
             Text(
                 text = track.artist,
                 color = dynamicColor.copy(alpha = 0.9f),
@@ -329,16 +345,23 @@ fun TrackView(
                 fontFamily = TerminalFont,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .basicMarquee(
+                        iterations = Int.MAX_VALUE,
+                        delayMillis = 1500
+                    )
             )
         }
 
-        // 3. Audiophile Spec Strip (Minimalist Industrial Badges)
+        // 3. Audiophile Spec Strip (Minimalist Industrial Badges with Horizontal Scroll)
+        val specScrollState = rememberScrollState()
         Row(
             modifier = Modifier
                 .background(Color(0xFF0A0E1A), RoundedCornerShape(20.dp))
                 .border(0.6.dp, dynamicColor.copy(alpha = 0.20f), RoundedCornerShape(20.dp))
-                .padding(horizontal = 10.dp, vertical = 3.dp),
+                .horizontalScroll(specScrollState)
+                .padding(horizontal = 12.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -349,6 +372,18 @@ fun TrackView(
                 fontWeight = FontWeight.Bold,
                 fontFamily = TerminalFont
             )
+            if (track.bitrateKbps > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${track.bitrateKbps} KBPS",
+                    color = TerminalWhite.copy(alpha = 0.85f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = TerminalFont
+                )
+            }
             Spacer(modifier = Modifier.width(6.dp))
             Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
             Spacer(modifier = Modifier.width(6.dp))
@@ -368,6 +403,18 @@ fun TrackView(
                 fontWeight = FontWeight.Bold,
                 fontFamily = TerminalFont
             )
+            if (track.isMqa) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "MQA PASSTHROUGH",
+                    color = Color(0xFFFF4081), // Authentic MQA Magenta
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = TerminalFont
+                )
+            }
         }
 
         // 4. Precision Scrubber
@@ -379,10 +426,11 @@ fun TrackView(
             onSeekTo = onSeekTo
         )
 
-        // 5. Tactile Volume Stepper Row
+        // 5. Tactile Volume Stepper Row with 0 dBFS Bit-Perfect Lock
         val volPercent = (currentVolume * 100).roundToInt()
+        val isBitPerfectLocked = currentVolume >= 0.999f
         Row(
-            modifier = Modifier.fillMaxWidth(0.85f),
+            modifier = Modifier.fillMaxWidth(0.92f),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -390,43 +438,70 @@ fun TrackView(
                 onClick = { onVolumeChange((currentVolume - 0.05f).coerceAtLeast(0.0f)) },
                 pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(width = 38.dp, height = 28.dp)
+                    .size(width = 36.dp, height = 28.dp)
                     .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, dynamicColor.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
             ) {
                 Text("-", color = TerminalWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
-            Box(
+            // Volume indicator box (Clicking toggles 100% Bit-Perfect)
+            com.yuka.musicplayer.ui.components.TactileBox(
+                onClick = { onVolumeChange(1.0f) },
+                pressedScale = 0.95f,
                 modifier = Modifier
                     .height(28.dp)
-                    .background(Color(0xFF0A0E1A), RoundedCornerShape(6.dp))
-                    .border(0.6.dp, dynamicColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.Center
+                    .background(if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.16f) else Color(0xFF0A0E1A), RoundedCornerShape(6.dp))
+                    .border(
+                        0.8.dp,
+                        if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.75f) else dynamicColor.copy(alpha = 0.40f),
+                        RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 10.dp)
             ) {
-                Text(
-                    text = "VOL: $volPercent%",
-                    color = dynamicColor,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont,
-                    fontSize = 10.sp
-                )
-            }
+                    Text(
+                        text = if (isBitPerfectLocked) "0 dBFS BIT-PERFECT (INT)" else "VOL: $volPercent%",
+                        color = if (isBitPerfectLocked) dynamicColor else TerminalWhite,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = TerminalFont,
+                        fontSize = 9.sp
+                    )
+                }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             com.yuka.musicplayer.ui.components.TactileBox(
                 onClick = { onVolumeChange((currentVolume + 0.05f).coerceAtMost(1.0f)) },
                 pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(width = 38.dp, height = 28.dp)
+                    .size(width = 36.dp, height = 28.dp)
                     .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, dynamicColor.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
             ) {
                 Text("+", color = TerminalWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
+            }
+
+            if (!isBitPerfectLocked) {
+                Spacer(modifier = Modifier.width(6.dp))
+                com.yuka.musicplayer.ui.components.TactileBox(
+                    onClick = { onVolumeChange(1.0f) },
+                    pressedScale = 0.90f,
+                    modifier = Modifier
+                        .height(28.dp)
+                        .background(Color(0xFFFF9100).copy(alpha = 0.10f), RoundedCornerShape(6.dp))
+                        .border(0.8.dp, Color(0xFFFF9100).copy(alpha = 0.50f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Text(
+                        text = "MAX",
+                        color = Color(0xFFFF9100),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = TerminalFont
+                    )
+                }
             }
         }
 

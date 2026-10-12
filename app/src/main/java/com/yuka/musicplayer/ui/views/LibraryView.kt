@@ -52,10 +52,9 @@ fun LibraryView(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val filteredIndexedFiles = remember(filesInDir, searchQuery) {
-        val indexed = filesInDir.mapIndexed { index, file -> index to file }
-        if (searchQuery.isEmpty()) indexed
-        else indexed.filter { it.second.name.contains(searchQuery, ignoreCase = true) }
+    val filteredFiles = remember(filesInDir, searchQuery) {
+        if (searchQuery.isEmpty()) filesInDir
+        else filesInDir.filter { it.name.contains(searchQuery, ignoreCase = true) }
     }
 
     Column(
@@ -69,7 +68,7 @@ fun LibraryView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "— FILE LIBRARY (${filteredIndexedFiles.size}) —",
+                text = "— FILE LIBRARY (${filteredFiles.size}) —",
                 color = Color.White,
                 fontSize = 11.sp,
                 letterSpacing = 1.sp,
@@ -188,7 +187,7 @@ fun LibraryView(
                 }
             }
 
-            items(filteredIndexedFiles) { (originalIndex, file) ->
+            items(filteredFiles) { file ->
                 val isDir = file.isDirectory
                 val isPlaying = file.absolutePath == playingFile?.absolutePath
                 val inPlaylist = playlistSet.contains(file.absolutePath)

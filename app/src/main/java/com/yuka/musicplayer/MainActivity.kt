@@ -198,14 +198,27 @@ fun KewApp(audioEngine: AudioEngine) {
     var bgMode by remember { mutableStateOf(sharedPref.getString("bg_mode", "BLACK") ?: "BLACK") }
     var accentMode by remember { mutableStateOf(sharedPref.getString("accent_mode", "DYNAMIC") ?: "DYNAMIC") }
     var accentFixedColorStr by remember { mutableStateOf(sharedPref.getString("accent_fixed_color", "#00FF00") ?: "#00FF00") }
+    var usbBufferProfile by remember { mutableStateOf(sharedPref.getInt("usb_buffer_profile", 1)) }
+
+    // Inisialisasi profil buffer USB ke C++ saat aplikasi pertama kali menyala
+    LaunchedEffect(Unit) {
+        val (transfers, packets) = when (usbBufferProfile) {
+            0 -> 8 to 8       // 64ms Ultra Low Latency
+            2 -> 16 to 32     // 500ms Maximum Stability
+            else -> 12 to 16  // 192ms Audiophile Low Jitter (Default)
+        }
+        com.yuka.musicplayer.audio.AudioEngine.setUsbBufferProfile(transfers, packets)
+    }
     
     val permState = com.yuka.musicplayer.util.rememberAppPermissionState(context)
     val isNotificationGranted = permState.isNotificationGranted
     val isStorageGranted = permState.isStorageGranted
     val isDndGranted = permState.isDndGranted
+    val isBatteryOptimizationIgnored = permState.isBatteryOptimizationIgnored
     val requestNotificationPermission = permState.requestNotificationPermission
     val requestStoragePermission = permState.requestStoragePermission
     val requestDndPermission = permState.requestDndPermission
+    val requestBatteryOptimizationPermission = permState.requestBatteryOptimizationPermission
 
     val hasCompletedOnboarding = remember {
         sharedPref.getBoolean("completed_permission_onboarding", false)
@@ -214,10 +227,6 @@ fun KewApp(audioEngine: AudioEngine) {
         mutableStateOf(!isStorageGranted || (!isNotificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasCompletedOnboarding))
     }
 
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val performHaptic = {
-        if (hapticEnabled) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-    }
     val initialViewState = remember {
         if ((com.yuka.musicplayer.audio.AudioPlayerManager.isPlaying || audioEngine.isPlaying()) && com.yuka.musicplayer.audio.AudioPlayerManager.currentTrack != null) {
             ViewState.TRACK
@@ -316,7 +325,6 @@ fun KewApp(audioEngine: AudioEngine) {
     var playlistPaths by remember { mutableStateOf(com.yuka.musicplayer.audio.AudioPlayerManager.playlistPaths) }
     val playlistSet = remember(playlistPaths) { playlistPaths.toSet() }
     var currentPlaybackSourceStr by rememberSaveable { mutableStateOf(com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource.name) }
-    val getCurrentSource = { currentPlaybackSourceStr }
     val currentPlaybackSource = PlaybackSource.valueOf(currentPlaybackSourceStr)
 
     LaunchedEffect(currentPlaybackSourceStr) {
@@ -350,11 +358,19 @@ fun KewApp(audioEngine: AudioEngine) {
         try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(accentFixedColorStr)) } catch(e:Exception) { androidx.compose.ui.graphics.Color(0xFF00FF00) }
     }
     
-    val currentAccentColor = if (accentMode == "FIXED") {
-        accentFixedColor
-    } else {
-        currentTrack?.dominantColor ?: androidx.compose.ui.graphics.Color(0xFF00FF00)
+    val targetAccentColor = remember(accentMode, accentFixedColor, currentTrack?.dominantColor) {
+        com.yuka.musicplayer.util.ColorContrastHelper.resolveAccent(
+            accentMode = accentMode,
+            trackDominantColor = currentTrack?.dominantColor,
+            userFixedColor = accentFixedColor
+        )
     }
+
+    val currentAccentColor by animateColorAsState(
+        targetValue = targetAccentColor,
+        animationSpec = tween(durationMillis = 350, easing = LinearEasing),
+        label = "dynamicAccentCrossfade"
+    )
 
     var searchQuery by remember { mutableStateOf("") }
 
@@ -503,22 +519,7 @@ fun KewApp(audioEngine: AudioEngine) {
         }
     }
 
-    var uacVersion by remember { mutableIntStateOf(0) }
-    var claimedInterfaces by remember { mutableStateOf("") }
-    
-    var negotiatedSampleRate by remember { mutableIntStateOf(0) }
-    var negotiatedBitDepth by remember { mutableIntStateOf(0) }
-    var sourceSampleRate by remember { mutableIntStateOf(0) }
-    var sourceBitDepth by remember { mutableIntStateOf(0) }
-    var recentErrorCount by remember { mutableIntStateOf(0) }
-
-    // Live I/O Monitor state
-    var outputBitDepth by remember { mutableIntStateOf(0) }
-    var outputSampleRate by remember { mutableIntStateOf(0) }
-    var supportedBitDepths by remember { mutableStateOf("") }
-    var supportedSampleRates by remember { mutableStateOf("") }
     var formatIncompatibleError by remember { mutableStateOf<String?>(null) }
-    var refusedTrackHistory by remember { mutableStateOf<List<RefusedTrackEntry>>(emptyList()) }
 
     DisposableEffect(usbAudioController) {
         com.yuka.musicplayer.audio.AudioPlayerManager.onDacReady = { dacName ->
@@ -632,8 +633,6 @@ fun KewApp(audioEngine: AudioEngine) {
         }
     }
 
-    val hwSampleRate = remember { 44100 } // Hardcoded fallback
-
     val filesInDir = remember(currentDirectory, isStorageGranted, librarySortMode, libraryRefreshTrigger) {
         val files = currentDirectory.listFiles()?.toList() ?: emptyList()
         val filtered = files.filter {
@@ -678,103 +677,35 @@ fun KewApp(audioEngine: AudioEngine) {
     }
 
     fun ensureShuffleDeck(activeList: List<File>, currentFile: File?) {
-        if (activeList.isEmpty()) {
-            shuffledList = emptyList()
-            currentShuffleIndex = -1
-            return
-        }
-        val activePaths = activeList.map { it.absolutePath }.toSet()
-        val deckPaths = shuffledList.map { it.absolutePath }.toSet()
-
-        if (shuffledList.isNotEmpty() && deckPaths == activePaths) {
-            if (currentFile != null) {
-                val idx = shuffledList.indexOfFirst { it.absolutePath == currentFile.absolutePath }
-                if (idx != -1) {
-                    currentShuffleIndex = idx
-                    return
-                }
-            } else {
-                return
-            }
-        }
-
-        if (currentFile != null && activeList.any { it.absolutePath == currentFile.absolutePath }) {
-            val remaining = activeList.filter { it.absolutePath != currentFile.absolutePath }.shuffled()
-            shuffledList = listOf(currentFile) + remaining
-            currentShuffleIndex = 0
-        } else {
-            shuffledList = activeList.shuffled()
-            currentShuffleIndex = 0
-        }
+        val (deck, idx) = com.yuka.musicplayer.player.queue.QueueHelper.ensureShuffleDeck(
+            activeList = activeList,
+            currentFile = currentFile,
+            currentShuffledList = shuffledList,
+            currentShuffleIndex = currentShuffleIndex
+        )
+        shuffledList = deck
+        currentShuffleIndex = idx
     }
 
     fun getNextTrackFile(isAutoAdvance: Boolean, consumeQueue: Boolean): File? {
-        if (priorityQueue.isNotEmpty()) {
-            val nextQueueFile = priorityQueue.first()
-            if (consumeQueue) {
-                priorityQueue = priorityQueue.drop(1)
-                com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = priorityQueue
-            }
-            return nextQueueFile
+        val result = com.yuka.musicplayer.player.queue.QueueHelper.resolveNextTrack(
+            isAutoAdvance = isAutoAdvance,
+            consumeQueue = consumeQueue,
+            priorityQueue = priorityQueue,
+            currentTrack = currentTrack,
+            repeatMode = repeatMode,
+            activeList = getActiveTrackList(com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource),
+            isShuffleEnabled = isShuffleEnabled,
+            shuffledList = shuffledList,
+            currentShuffleIndex = currentShuffleIndex
+        )
+        if (consumeQueue) {
+            priorityQueue = result.updatedQueue
+            com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = result.updatedQueue
+            shuffledList = result.updatedShuffledList
+            currentShuffleIndex = result.updatedShuffleIndex
         }
-
-        if (isAutoAdvance && repeatMode == RepeatMode.ONE && currentTrack?.file != null) {
-            return currentTrack?.file
-        }
-
-        val currentActiveList = getActiveTrackList(com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource)
-        if (currentActiveList.isEmpty()) return null
-
-        if (isShuffleEnabled) {
-            if (currentActiveList.size == 1) {
-                return if (repeatMode != RepeatMode.OFF || !isAutoAdvance) currentActiveList.first() else null
-            }
-
-            val activePaths = currentActiveList.map { it.absolutePath }.toSet()
-            val deckPaths = shuffledList.map { it.absolutePath }.toSet()
-            if (shuffledList.isEmpty() || deckPaths != activePaths) {
-                ensureShuffleDeck(currentActiveList, currentTrack?.file)
-            }
-
-            val nextIndex = currentShuffleIndex + 1
-            if (nextIndex < shuffledList.size) {
-                val nextFile = shuffledList[nextIndex]
-                if (consumeQueue) {
-                    currentShuffleIndex = nextIndex
-                }
-                return nextFile
-            } else if (repeatMode == RepeatMode.ALL || (!isAutoAdvance && repeatMode == RepeatMode.OFF)) {
-                if (consumeQueue) {
-                    val currentPlaying = currentTrack?.file
-                    val candidates = if (currentActiveList.size > 1 && currentPlaying != null) {
-                        val withoutCurrent = currentActiveList.filter { it.absolutePath != currentPlaying.absolutePath }
-                        val reshuffled = withoutCurrent.shuffled()
-                        reshuffled + listOf(currentPlaying)
-                    } else {
-                        currentActiveList.shuffled()
-                    }
-                    shuffledList = candidates
-                    currentShuffleIndex = 0
-                    return candidates.firstOrNull()
-                } else {
-                    return shuffledList.firstOrNull()
-                }
-            } else {
-                return null
-            }
-        }
-
-        val currentTrackFile = currentTrack?.file
-        val currentIndex = currentActiveList.indexOfFirst {
-            it.absolutePath == currentTrackFile?.absolutePath || it.canonicalPath == currentTrackFile?.canonicalPath
-        }
-        return if (currentIndex != -1 && currentIndex + 1 < currentActiveList.size) {
-            currentActiveList[currentIndex + 1]
-        } else if (repeatMode == RepeatMode.ALL && currentActiveList.isNotEmpty()) {
-            currentActiveList[0]
-        } else {
-            null
-        }
+        return result.nextFile
     }
 
     fun peekNextTrackFile(): File? = getNextTrackFile(isAutoAdvance = true, consumeQueue = false)
@@ -879,15 +810,6 @@ fun KewApp(audioEngine: AudioEngine) {
                     // Success
                     withContext(Dispatchers.Main) {
                         formatIncompatibleError = null
-                        
-                        if (isDacConnected) {
-                            negotiatedSampleRate = audioEngine.getSampleRate()
-                            negotiatedBitDepth = audioEngine.getNegotiatedBitDepth()
-                            sourceSampleRate = audioEngine.getSourceSampleRate()
-                            sourceBitDepth = audioEngine.getSourceBitDepth()
-                            outputBitDepth = audioEngine.getOutputBitDepth()
-                            outputSampleRate = audioEngine.getOutputSampleRate()
-                        }
 
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                             audioManager.requestAudioFocus(audioFocusRequest!!)
@@ -954,48 +876,18 @@ fun KewApp(audioEngine: AudioEngine) {
     fun playPrev() {
         val currentSource = com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource
         val currentActiveList = getActiveTrackList(currentSource)
-        if (currentActiveList.isEmpty()) return
-
-        // 1. Check history stack first (only pop tracks belonging to CURRENT active list to prevent cross-source leak)
-        val currentTrackFile = currentTrack?.file
-        while (playbackHistory.isNotEmpty()) {
-            val prevFile = playbackHistory.removeAt(playbackHistory.size - 1)
-            if (currentActiveList.any { it.absolutePath == prevFile.absolutePath || it.canonicalPath == prevFile.canonicalPath }) {
-                if (isShuffleEnabled && shuffledList.isNotEmpty()) {
-                    val idx = shuffledList.indexOfFirst { it.absolutePath == prevFile.absolutePath || it.canonicalPath == prevFile.canonicalPath }
-                    if (idx != -1) {
-                        currentShuffleIndex = idx
-                    }
-                }
-                playTrack(prevFile, isAutoAdvance = false, recordHistory = false, source = currentSource)
-                return
-            }
-        }
-
-        // 2. Shuffle mode fallback if history is empty
-        if (isShuffleEnabled && shuffledList.isNotEmpty()) {
-            if (currentShuffleIndex > 0) {
-                currentShuffleIndex--
-                playTrack(shuffledList[currentShuffleIndex], isAutoAdvance = false, recordHistory = false, source = currentSource)
-            } else if (repeatMode == RepeatMode.ALL && shuffledList.isNotEmpty()) {
-                currentShuffleIndex = shuffledList.lastIndex
-                playTrack(shuffledList[currentShuffleIndex], isAutoAdvance = false, recordHistory = false, source = currentSource)
-            } else {
-                currentTrackFile?.let { playTrack(it, isAutoAdvance = false, recordHistory = false, source = currentSource) }
-            }
-            return
-        }
-
-        // 3. Normal sequential fallback
-        val currentIndex = currentActiveList.indexOfFirst {
-            it.absolutePath == currentTrackFile?.absolutePath || it.canonicalPath == currentTrackFile?.canonicalPath
-        }
-        if (currentIndex > 0) {
-            playTrack(currentActiveList[currentIndex - 1], false, recordHistory = false, source = currentSource)
-        } else if (repeatMode == RepeatMode.ALL && currentActiveList.isNotEmpty()) {
-            playTrack(currentActiveList.last(), false, recordHistory = false, source = currentSource)
-        } else {
-            currentTrackFile?.let { playTrack(it, false, recordHistory = false, source = currentSource) }
+        val result = com.yuka.musicplayer.player.queue.QueueHelper.resolvePrevTrack(
+            playbackHistory = playbackHistory,
+            activeList = currentActiveList,
+            currentTrackFile = currentTrack?.file,
+            isShuffleEnabled = isShuffleEnabled,
+            shuffledList = shuffledList,
+            currentShuffleIndex = currentShuffleIndex,
+            repeatMode = repeatMode
+        )
+        currentShuffleIndex = result.updatedShuffleIndex
+        result.prevFile?.let { prev ->
+            playTrack(prev, isAutoAdvance = false, recordHistory = false, source = currentSource)
         }
     }
 
@@ -1054,7 +946,6 @@ fun KewApp(audioEngine: AudioEngine) {
     }
 
     val currentPlayNext by rememberUpdatedState(::playNext)
-    val currentActiveList by rememberUpdatedState(activeList)
     
     DisposableEffect(Unit) {
         com.yuka.musicplayer.audio.AudioPlayerManager.onPlayNext = {
@@ -1148,16 +1039,6 @@ fun KewApp(audioEngine: AudioEngine) {
                         com.yuka.musicplayer.audio.AudioPlayerManager.notifyStateChanged()
 
                         playbackPosition = 0.0
-                        
-                        if (isDacConnected) {
-                            negotiatedSampleRate = audioEngine.getSampleRate()
-                            negotiatedBitDepth = audioEngine.getNegotiatedBitDepth()
-                            sourceSampleRate = audioEngine.getSourceSampleRate()
-                            sourceBitDepth = audioEngine.getSourceBitDepth()
-                            recentErrorCount = audioEngine.getRecentErrorCount()
-                            outputBitDepth = audioEngine.getOutputBitDepth()
-                            outputSampleRate = audioEngine.getOutputSampleRate()
-                        }
                         syncPreparedNextTrack()
                     }
                 }
@@ -1194,33 +1075,10 @@ fun KewApp(audioEngine: AudioEngine) {
         ),
         LocalAccentColor provides currentAccentColor
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (bgMode == "BLUR" && wallpaperBitmap != null) {
-                androidx.compose.foundation.Image(
-                    bitmap = wallpaperBitmap!!,
-                    contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(24.dp)
-                )
-                Box(modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.65f)))
-            } else if (bgMode == "SIGNATURE") {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            androidx.compose.ui.graphics.Brush.verticalGradient(
-                                colors = listOf(
-                                    SignatureDeepNavy,
-                                    SignatureSurfaceNavy.copy(alpha = 0.85f),
-                                    SignatureDeepNavy
-                                )
-                            )
-                        )
-                )
-            } else {
-                Box(modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black))
-            }
-            
+        AppBackgroundContainer(
+            bgMode = bgMode,
+            wallpaperBitmap = wallpaperBitmap
+        ) {
             Column(modifier = Modifier.fillMaxSize()) {
         AppHeader(
             viewState = viewState,
@@ -1261,42 +1119,41 @@ fun KewApp(audioEngine: AudioEngine) {
 
         // 4. Upcoming Tracks calculation for Queue Panel
         val upcomingTracks = remember(priorityQueue, currentTrack, activeList, isShuffleEnabled, shuffledList, currentShuffleIndex, repeatMode) {
-            val currentActiveList = activeList
+            com.yuka.musicplayer.player.queue.QueueHelper.calculateUpcomingTracks(
+                currentTrack = currentTrack,
+                activeList = activeList,
+                isShuffleEnabled = isShuffleEnabled,
+                shuffledList = shuffledList,
+                currentShuffleIndex = currentShuffleIndex,
+                repeatMode = repeatMode
+            )
+        }
 
-            if (isShuffleEnabled && shuffledList.isNotEmpty()) {
-                val startIndex = if (currentTrack?.file != null) {
-                    val idx = shuffledList.indexOfFirst { it.absolutePath == currentTrack?.file?.absolutePath }
-                    if (idx != -1) idx else currentShuffleIndex
-                } else {
-                    currentShuffleIndex
-                }
-                val afterCurrent = if (startIndex in shuffledList.indices && startIndex + 1 < shuffledList.size) {
-                    shuffledList.subList(startIndex + 1, shuffledList.size)
-                } else emptyList()
-
-                if (repeatMode == RepeatMode.ALL && startIndex > 0) {
-                    afterCurrent + shuffledList.subList(0, startIndex)
-                } else {
-                    afterCurrent
-                }
-            } else if (currentActiveList.isNotEmpty()) {
-                val currentIndex = currentActiveList.indexOfFirst { it.absolutePath == currentTrack?.file?.absolutePath }
-                if (currentIndex != -1) {
-                    val afterCurrent = if (currentIndex + 1 < currentActiveList.size) {
-                        currentActiveList.subList(currentIndex + 1, currentActiveList.size)
-                    } else emptyList()
-
-                    if (repeatMode == RepeatMode.ALL && currentIndex > 0) {
-                        afterCurrent + currentActiveList.subList(0, currentIndex)
-                    } else {
-                        afterCurrent
-                    }
-                } else {
-                    currentActiveList
-                }
-            } else {
-                emptyList()
-            }
+        val modalActionHandler = remember(
+            context, coroutineScope, sharedPref, priorityQueue, playlistPaths, playlistSet,
+            currentPlaybackSourceStr, isShuffleEnabled, shuffledList, librarySortMode
+        ) {
+            com.yuka.musicplayer.ui.dialogs.AppModalActionHandler(
+                context = context,
+                coroutineScope = coroutineScope,
+                sharedPref = sharedPref,
+                getPriorityQueue = { priorityQueue },
+                setPriorityQueue = { priorityQueue = it },
+                getPlaylistPaths = { playlistPaths },
+                setPlaylistPaths = { playlistPaths = it },
+                getPlaylistSet = { playlistSet },
+                getCurrentPlaybackSourceStr = { currentPlaybackSourceStr },
+                isShuffleEnabled = { isShuffleEnabled },
+                getShuffledList = { shuffledList },
+                setShuffledList = { shuffledList = it },
+                getLibrarySortMode = { librarySortMode },
+                setPlaybackLibraryFiles = { playbackLibraryFiles = it },
+                syncPreparedNextTrack = ::syncPreparedNextTrack,
+                playTrack = { f, auto, rec, src -> playTrack(f, auto, rec, src) },
+                onDismissPermissionDialog = { showPermissionDialog = false },
+                onDismissQueuePanel = { showQueuePanel = false },
+                onDismissTrackOptions = { trackActionTarget = null }
+            )
         }
 
         // Modal Sheets Host (Logs, Help, Update, Permissions, Queue, Track Options)
@@ -1317,20 +1174,18 @@ fun KewApp(audioEngine: AudioEngine) {
             showPermissionDialog = showPermissionDialog,
             onDismissPermissionDialog = {
                 if (isStorageGranted) {
-                    sharedPref.edit().putBoolean("completed_permission_onboarding", true).apply()
-                    showPermissionDialog = false
+                    modalActionHandler.onCompletePermissions()
                 }
             },
             isNotificationGranted = isNotificationGranted,
             isStorageGranted = isStorageGranted,
             isDndGranted = isDndGranted,
+            isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
             onRequestNotification = requestNotificationPermission,
             onRequestStorage = requestStoragePermission,
             onRequestDnd = requestDndPermission,
-            onCompletePermissions = {
-                sharedPref.edit().putBoolean("completed_permission_onboarding", true).apply()
-                showPermissionDialog = false
-            },
+            onRequestBatteryOptimization = requestBatteryOptimizationPermission,
+            onCompletePermissions = modalActionHandler::onCompletePermissions,
             updateCheckState = updateCheckState,
             downloadState = downloadState,
             onTriggerCheckUpdate = { triggerCheckUpdate() },
@@ -1340,86 +1195,17 @@ fun KewApp(audioEngine: AudioEngine) {
             currentTrack = currentTrack,
             priorityQueue = priorityQueue,
             upcomingTracks = upcomingTracks,
-            onRemoveFromQueue = { idx ->
-                if (idx in priorityQueue.indices) {
-                    priorityQueue = priorityQueue.filterIndexed { i, _ -> i != idx }
-                    com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = priorityQueue
-                    syncPreparedNextTrack()
-                }
-            },
-            onClearQueue = {
-                priorityQueue = emptyList()
-                com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = emptyList()
-                syncPreparedNextTrack()
-            },
-            onSelectQueueTrack = { file ->
-                showQueuePanel = false
-                if (priorityQueue.any { it.absolutePath == file.absolutePath }) {
-                    priorityQueue = priorityQueue.filter { it.absolutePath != file.absolutePath }
-                    com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = priorityQueue
-                }
-                val targetSource = if (playlistPaths.any { it == file.absolutePath }) {
-                    PlaybackSource.PLAYLIST
-                } else {
-                    PlaybackSource.LIBRARY
-                }
-                playTrack(file, false, source = targetSource)
-            },
+            onRemoveFromQueue = modalActionHandler::onRemoveFromQueue,
+            onClearQueue = modalActionHandler::onClearQueue,
+            onSelectQueueTrack = modalActionHandler::onSelectQueueTrack,
             trackActionTarget = trackActionTarget,
             onDismissTrackOptions = { trackActionTarget = null },
             playlistSet = playlistSet,
-            onPlayTrackAction = { target, targetSource ->
-                trackActionTarget = null
-                if (targetSource == PlaybackSource.LIBRARY) {
-                    playbackLibraryFiles = target.parentFile?.listFiles()?.filter {
-                        !it.isDirectory && (
-                            it.extension.equals("flac", ignoreCase = true) ||
-                            it.extension.equals("wav", ignoreCase = true) ||
-                            it.extension.equals("wave", ignoreCase = true)
-                        )
-                    }?.let { sortLibraryFiles(it, librarySortMode) } ?: emptyList()
-                }
-                playTrack(target, false, source = targetSource)
-            },
-            onPlayNextInQueue = { target ->
-                priorityQueue = listOf(target) + priorityQueue
-                com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = priorityQueue
-                syncPreparedNextTrack()
-                Toast.makeText(context, "Added as next track", Toast.LENGTH_SHORT).show()
-            },
-            onAddToQueue = { target ->
-                priorityQueue = priorityQueue + target
-                com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = priorityQueue
-                syncPreparedNextTrack()
-                Toast.makeText(context, "Added to queue (#${priorityQueue.size})", Toast.LENGTH_SHORT).show()
-            },
-            onAddToPlaylist = { pathToAdd ->
-                coroutineScope.launch(Dispatchers.IO) {
-                    val added = appendPlaylist(context, pathToAdd, playlistSet)
-                    if (added) {
-                        val newPaths = loadPlaylist(context)
-                        withContext(Dispatchers.Main) {
-                            playlistPaths = newPaths
-                            Toast.makeText(context, "Added to playlist", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-            },
-            onRemoveFromPlaylist = { pathToRemove ->
-                coroutineScope.launch(Dispatchers.IO) {
-                    val newPaths = removePlaylist(context, pathToRemove, playlistPaths)
-                    withContext(Dispatchers.Main) {
-                        playlistPaths = newPaths
-                        if (currentPlaybackSourceStr == PlaybackSource.PLAYLIST.name) {
-                            if (isShuffleEnabled) {
-                                shuffledList = shuffledList.filter { it.absolutePath != pathToRemove }
-                            }
-                            syncPreparedNextTrack()
-                        }
-                        Toast.makeText(context, "Removed from playlist", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
+            onPlayTrackAction = modalActionHandler::onPlayTrackAction,
+            onPlayNextInQueue = modalActionHandler::onPlayNextInQueue,
+            onAddToQueue = modalActionHandler::onAddToQueue,
+            onAddToPlaylist = modalActionHandler::onAddToPlaylist,
+            onRemoveFromPlaylist = modalActionHandler::onRemoveFromPlaylist
         )
 
         val sharedOnTogglePlay: () -> Unit = {
@@ -1528,7 +1314,6 @@ fun KewApp(audioEngine: AudioEngine) {
             currentVolume = currentVolume,
             onVolumeChange = { vol ->
                 currentVolume = vol
-                audioEngine.setSoftwareVolume(vol)
             },
             onPlayNext = { playNext(false) },
             onPlayPrev = { playPrev() },
@@ -1564,14 +1349,30 @@ fun KewApp(audioEngine: AudioEngine) {
             isNotificationGranted = isNotificationGranted,
             isStorageGranted = isStorageGranted,
             isDndGranted = isDndGranted,
+            isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
             onRequestNotification = requestNotificationPermission,
             onRequestStorage = requestStoragePermission,
             onRequestDnd = requestDndPermission,
+            onRequestBatteryOptimization = requestBatteryOptimizationPermission,
             onOpenPermissionDialog = { showPermissionDialog = true },
             onOpenHelp = { showHelpPanel = true },
             updateCheckState = updateCheckState,
             onCheckForUpdate = { triggerCheckUpdate() },
-            onOpenUpdateDialog = { showUpdatePanel = true }
+            onOpenUpdateDialog = { showUpdatePanel = true },
+            usbBufferProfile = usbBufferProfile,
+            onUsbBufferProfileChange = { newProfile ->
+                usbBufferProfile = newProfile
+                sharedPref.edit().putInt("usb_buffer_profile", newProfile).apply()
+                val (transfers, packets) = when (newProfile) {
+                    0 -> 8 to 8       // 64ms Ultra Low Latency
+                    2 -> 16 to 32     // 500ms Maximum Stability
+                    else -> 12 to 16  // 192ms Audiophile Low Jitter (Default)
+                }
+                com.yuka.musicplayer.audio.AudioEngine.setUsbBufferProfile(transfers, packets)
+                if (audioEngine.isPlaying()) {
+                    Toast.makeText(context, "Buffer profile updated (active on next track)", Toast.LENGTH_SHORT).show()
+                }
+            }
         )
         
         BottomNavigationBar(

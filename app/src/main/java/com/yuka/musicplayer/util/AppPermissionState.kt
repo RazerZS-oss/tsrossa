@@ -19,15 +19,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
 /**
- * State holder for runtime app permissions (Storage, Notifications, DND).
+ * State holder for runtime app permissions (Storage, Notifications, DND, Battery).
  */
 class AppPermissionState(
     val isNotificationGranted: Boolean,
     val isStorageGranted: Boolean,
     val isDndGranted: Boolean,
+    val isBatteryOptimizationIgnored: Boolean,
     val requestNotificationPermission: () -> Unit,
     val requestStoragePermission: () -> Unit,
-    val requestDndPermission: () -> Unit
+    val requestDndPermission: () -> Unit,
+    val requestBatteryOptimizationPermission: () -> Unit
 )
 
 @Composable
@@ -35,6 +37,7 @@ fun rememberAppPermissionState(context: Context): AppPermissionState {
     var isNotificationGranted by remember { mutableStateOf(checkNotificationPermission(context)) }
     var isStorageGranted by remember { mutableStateOf(checkStoragePermission(context)) }
     var isDndGranted by remember { mutableStateOf(checkDndPermission(context)) }
+    var isBatteryOptimizationIgnored by remember { mutableStateOf(OemBatteryHelper.isBatteryOptimizationIgnored(context)) }
 
     val notificationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -75,6 +78,10 @@ fun rememberAppPermissionState(context: Context): AppPermissionState {
         context.startActivity(intent)
     }
 
+    val requestBatteryOptimizationPermission = {
+        OemBatteryHelper.openBatteryOptimizationSettings(context)
+    }
+
     val appLifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(appLifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -82,6 +89,7 @@ fun rememberAppPermissionState(context: Context): AppPermissionState {
                 isNotificationGranted = checkNotificationPermission(context)
                 isStorageGranted = checkStoragePermission(context)
                 isDndGranted = checkDndPermission(context)
+                isBatteryOptimizationIgnored = OemBatteryHelper.isBatteryOptimizationIgnored(context)
             }
         }
         appLifecycleOwner.lifecycle.addObserver(observer)
@@ -90,14 +98,16 @@ fun rememberAppPermissionState(context: Context): AppPermissionState {
         }
     }
 
-    return remember(isNotificationGranted, isStorageGranted, isDndGranted) {
+    return remember(isNotificationGranted, isStorageGranted, isDndGranted, isBatteryOptimizationIgnored) {
         AppPermissionState(
             isNotificationGranted = isNotificationGranted,
             isStorageGranted = isStorageGranted,
             isDndGranted = isDndGranted,
+            isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
             requestNotificationPermission = requestNotificationPermission,
             requestStoragePermission = requestStoragePermission,
-            requestDndPermission = requestDndPermission
+            requestDndPermission = requestDndPermission,
+            requestBatteryOptimizationPermission = requestBatteryOptimizationPermission
         )
     }
 }

@@ -97,12 +97,23 @@ data class TrackInfo(
     val year: String,
     val durationSeconds: Double,
     val coverArt: Bitmap?,
-    val dominantColor: Color
+    val dominantColor: Color,
+    val isMqa: Boolean = false
 ) {
     val codec: String
         get() = when (file.extension.lowercase()) {
             "flac" -> "FLAC"
             "wav", "wave" -> "WAV"
             else -> file.extension.uppercase().ifEmpty { "AUDIO" }
+        }
+
+    val bitrateKbps: Int
+        get() {
+            val size = try { file.length() } catch (_: Exception) { 0L }
+            return if (durationSeconds > 0 && size > 0) {
+                ((size * 8.0) / (durationSeconds * 1000.0)).toInt()
+            } else {
+                0
+            }
         }
 }

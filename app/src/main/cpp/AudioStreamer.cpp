@@ -15,6 +15,141 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer);
+
+bool start_iso_streaming_thread(const char *thread_name) {
+  if (g_audioState.isoThread != nullptr || g_audioState.usbHandle == nullptr) {
+    return false;
+  }
+  libusb_device *dev = libusb_get_device(g_audioState.usbHandle);
+  if (dev) {
+    int dev_speed = libusb_get_device_speed(dev);
+    int dev_fps = (dev_speed == LIBUSB_SPEED_HIGH || dev_speed == LIBUSB_SPEED_SUPER) ? 8000 : 1000;
+    g_audioState.usb_frames_per_sec.store(dev_fps);
+  }
+  g_audioState.phase_accumulator = 0.0;
+  g_audioState.isPlaying.store(true);
+  g_audioState.stopIsoThread.store(false);
+  g_audioState.isoThreadExited.store(false);
+  g_audioState.stallFaultReported.store(false);
+
+  std::string name_copy = thread_name ? thread_name : "TsrossaIso";
+  g_audioState.isoThread = new std::thread([name_copy]() {
+    pthread_setname_np(pthread_self(), name_copy.c_str());
+    setpriority(PRIO_PROCESS, 0, -19); // Urgent Audio
+    struct sched_param param;
+    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+
+    long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+    if (nprocs > 4) {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      int target_core = (int)(nprocs - 2);
+      CPU_SET(target_core, &cpuset);
+      // If affinity setting fails on non-standard CPU topologies, allow kernel SCHED_FIFO to govern
+      if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
+        LOGW("sched_setaffinity to core %d failed, relying on kernel SCHED_FIFO migration.", target_core);
+      }
+    }
+
+    // Configurable audiophile transfer queue: default 12 transfers x 16 packets = 192 packets (~190ms)
+    // Minimizes host controller buffer congestion and micro-timing jitter while preserving drop-out immunity
+    int num_transfers = g_audioState.isoTransfersCount.load();
+    int num_packets = g_audioState.isoPacketsCount.load();
+    if (num_transfers <= 0) num_transfers = 12;
+    if (num_packets <= 0) num_packets = 16;
+    int packet_size = g_audioState.maxPacketSize;
+    if (packet_size <= 0) packet_size = 1024;
+    g_audioState.activeIsoTransfers.store(0);
+
+    for (int i = 0; i < num_transfers; i++) {
+      struct libusb_transfer *transfer = libusb_alloc_transfer(num_packets);
+      uint8_t *buffer = nullptr;
+      if (posix_memalign((void **)&buffer, 64, num_packets * packet_size) != 0 || buffer == nullptr) {
+        buffer = (uint8_t *)calloc(num_packets, packet_size);
+      } else {
+        memset(buffer, 0, num_packets * packet_size);
+      }
+      libusb_fill_iso_transfer(transfer, g_audioState.usbHandle,
+                               g_audioState.epAddress, buffer,
+                               num_packets * packet_size, num_packets,
+                               iso_callback, nullptr, 1000);
+      libusb_set_iso_packet_lengths(transfer, packet_size);
+
+      g_audioState.transfers.push_back(transfer);
+      g_audioState.activeIsoTransfers.fetch_add(1);
+      int sub_res = libusb_submit_transfer(transfer);
+      if (sub_res < 0) {
+        g_audioState.activeIsoTransfers.fetch_sub(1);
+      }
+    }
+
+    while (!g_audioState.stopIsoThread.load()) {
+      struct timeval tv = {0, 10000};
+      libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
+    }
+
+    for (auto *t : g_audioState.transfers) {
+      libusb_cancel_transfer(t);
+    }
+
+    auto start_time = std::chrono::steady_clock::now();
+    bool timeout_hit = false;
+    while (g_audioState.activeIsoTransfers.load() > 0) {
+      struct timeval tv = {0, 10000};
+      libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
+      auto now = std::chrono::steady_clock::now();
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count() > 1000) {
+        LOGE("CRITICAL: Timeout waiting for transfers to cancel! Leaking memory to prevent DMA UAF.");
+        timeout_hit = true;
+        break;
+      }
+    }
+
+    if (timeout_hit) {
+      g_audioState.deviceWedged.store(true);
+      for (auto *t : g_audioState.transfers) {
+        g_audioState.orphanTransfers.push_back(t);
+      }
+      g_audioState.transfers.clear();
+    } else {
+      for (auto *t : g_audioState.transfers) {
+        if (t->buffer) free(t->buffer);
+        libusb_free_transfer(t);
+      }
+      g_audioState.transfers.clear();
+    }
+
+    // Safely report USB stall fault on exit without spawning detached threads
+    if (g_audioState.stallFaultReported.load()) {
+      g_audioState.stallFaultReported.store(false);
+      if (g_jvm && g_audioState.callbackObj) {
+        JNIEnv *env = nullptr;
+        bool needDetach = false;
+        if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+          if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
+            needDetach = true;
+          }
+        }
+        if (env && g_audioState.callbackObj) {
+          jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
+          jmethodID methodId = env->GetMethodID(clazz, "onUsbStallFault", "()V");
+          if (methodId) {
+            env->CallVoidMethod(g_audioState.callbackObj, methodId);
+          }
+          if (needDetach) {
+            g_jvm->DetachCurrentThread();
+          }
+        }
+      }
+    }
+
+    g_audioState.isoThreadExited.store(true);
+  });
+  return true;
+}
+
 void stop_and_join_decode_thread() {
   if (g_audioState.decodeThread != nullptr) {
     g_audioState.cancelDecoding.store(true);
@@ -96,19 +231,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
            transfer->status);
       g_audioState.activeIsoTransfers.fetch_sub(1);
       g_audioState.stopIsoThread.store(true);
-      std::thread([]() {
-        if (g_jvm && g_audioState.callbackObj) {
-          JNIEnv *env;
-          if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-            jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-            jmethodID methodId =
-                env->GetMethodID(clazz, "onUsbStallFault", "()V");
-            if (methodId)
-              env->CallVoidMethod(g_audioState.callbackObj, methodId);
-            g_jvm->DetachCurrentThread();
-          }
-        }
-      }).detach();
+      g_audioState.stallFaultReported.store(true);
       return;
     }
 
@@ -126,6 +249,20 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
   if (usb_frames_per_sec == 0) usb_frames_per_sec = 1000;
   uint32_t base_frames = sr / usb_frames_per_sec;
   uint32_t remainder_rate = sr % usb_frames_per_sec;
+
+  // Jitter tracking across transfers
+  auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+  int64_t last_ns = g_audioState.lastIsoPacketTimeNs.exchange(now_ns);
+  if (last_ns > 0) {
+    int64_t delta_ns = now_ns - last_ns;
+    int64_t expected_ns = (1000000000LL / usb_frames_per_sec) * num_packets;
+    int64_t jitter = std::abs(delta_ns - expected_ns);
+    int64_t current_max = g_audioState.maxIsoJitterNs.load();
+    if (jitter > current_max) {
+      g_audioState.maxIsoJitterNs.store(jitter);
+    }
+  }
 
   // Soft swapping check
   if (g_audioState.isSwapping.load()) {
@@ -219,6 +356,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
 
         // BIT-PERFECT BYPASS
         if (g_audioState.currentVolume >= 0.999f && delta == 0.0f) {
+          g_audioState.bitPerfectDirectPassActive.store(true);
           int src_bits = g_audioState.sourceBitDepth.load();
           if (sf_size == 4) {
             // 32-bit subslot container (UAC standard Type I PCM):
@@ -240,6 +378,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
             }
           }
         } else {
+          g_audioState.bitPerfectDirectPassActive.store(false);
           // Volume scaling with TPDF dither
           for (size_t s = 0; s < num_samples; s++) {
             if (delta != 0.0f) {
@@ -253,9 +392,12 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
 
             float scaled = (float)src[s] * g_audioState.currentVolume;
             if (g_audioState.currentVolume < 0.999f) {
-              float half_lsb = 128.0f;
-              if (sf_size == 2) half_lsb = 32768.0f;
-              else if (sf_size == 4) half_lsb = 0.5f;
+              float half_lsb = 128.0f; // 24-bit in 32-bit container (8-bit shift)
+              if (sf_size == 2) {
+                half_lsb = 32768.0f;   // 16-bit in 32-bit container (16-bit shift)
+              } else if (sf_size == 4) {
+                half_lsb = 1.0f;       // Native 32-bit slot
+              }
 
               float randA = fast_uniform_rand() * half_lsb;
               float randB = fast_uniform_rand() * half_lsb;
@@ -297,9 +439,23 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
                                  g_audioState.sourceBitDepthNext.load());
 
           if (format_changed) {
-            LOGW("Gapless aborted due to format change. Falling back to playAudio()");
+            LOGW("Gapless aborted due to format change. Notifying track finished for normal advance.");
             g_audioState.hasNextTrack.store(false);
-            continue;
+            g_audioState.isFinished.store(true);
+            g_audioState.isPlaying.store(false);
+
+            if (g_jvm && g_audioState.callbackObj) {
+              JNIEnv *env;
+              if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
+                jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
+                jmethodID methodId =
+                    env->GetMethodID(clazz, "onTrackFinished", "()V");
+                if (methodId)
+                  env->CallVoidMethod(g_audioState.callbackObj, methodId);
+                g_jvm->DetachCurrentThread();
+              }
+            }
+            break;
           }
 
           g_audioState.pcmBufferGarbage = std::move(g_audioState.pcmBuffer);
@@ -371,19 +527,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
       if (r != 0) {
         g_audioState.activeIsoTransfers.fetch_sub(1);
         g_audioState.stopIsoThread.store(true);
-        std::thread([]() {
-          if (g_jvm && g_audioState.callbackObj) {
-            JNIEnv *env;
-            if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-              jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-              jmethodID methodId =
-                  env->GetMethodID(clazz, "onUsbStallFault", "()V");
-              if (methodId)
-                env->CallVoidMethod(g_audioState.callbackObj, methodId);
-              g_jvm->DetachCurrentThread();
-            }
-          }
-        }).detach();
+        g_audioState.stallFaultReported.store(true);
       }
     }
   } else {
@@ -577,7 +721,17 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
       LOGI("playAudio: Activating altsetting %d (bit depth %d bytes)...",
            selected_alt->altsetting, selected_alt->subframe_size);
 
-      libusb_claim_interface(g_audioState.usbHandle, selected_alt->interface_num);
+      int claim_res = libusb_claim_interface(g_audioState.usbHandle, selected_alt->interface_num);
+      if (claim_res == LIBUSB_ERROR_BUSY && g_audioState.usbFd >= 0) {
+        libusb_detach_kernel_driver(g_audioState.usbHandle, selected_alt->interface_num);
+        struct usbdevfs_disconnect_claim dc;
+        memset(&dc, 0, sizeof(dc));
+        dc.interface = (unsigned int)selected_alt->interface_num;
+        dc.flags = 0;
+        ioctl(g_audioState.usbFd, USBDEVFS_DISCONNECT_CLAIM, &dc);
+        libusb_claim_interface(g_audioState.usbHandle, selected_alt->interface_num);
+      }
+
       int r = libusb_set_interface_alt_setting(
           g_audioState.usbHandle, selected_alt->interface_num, selected_alt->altsetting);
       if (r != 0 && g_audioState.usbFd >= 0) {
@@ -587,6 +741,12 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
         setintf.altsetting = (unsigned int)selected_alt->altsetting;
         ioctl(g_audioState.usbFd, USBDEVFS_SETINTERFACE, &setintf);
       }
+      // DWC3 USB host controller DMA endpoint flush settling time
+      auto settle_start = std::chrono::steady_clock::now();
+      std::this_thread::sleep_for(std::chrono::milliseconds(15));
+      auto settle_end = std::chrono::steady_clock::now();
+      g_audioState.lastInterfaceSettleUs.store(
+          std::chrono::duration_cast<std::chrono::microseconds>(settle_end - settle_start).count());
 
       g_audioState.usbAudioInterface = selected_alt->interface_num;
       g_audioState.epAddress = selected_alt->ep_out;
@@ -651,7 +811,11 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
       }
 
       // Essential hardware PLL lock-in settling time (gives DAC crystal oscillator time to stabilize)
+      auto pll_start = std::chrono::steady_clock::now();
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      auto pll_end = std::chrono::steady_clock::now();
+      g_audioState.lastPllRelockUs.store(
+          std::chrono::duration_cast<std::chrono::microseconds>(pll_end - pll_start).count());
     }
   }
 
@@ -741,107 +905,19 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
 
   g_audioState.isSwapping.store(false);
 
-  // Auto Warmup Pre-roll (180ms silence) on cold start or sample rate change
+  // Adaptive Warmup Pre-roll: 180ms on hardware reconfig/cold start, 50ms on warm restarts
   if (rate_changed || altsetting_changed || stream_was_stopped) {
-    uint32_t silence_frames = static_cast<uint32_t>(newSampleRate * 0.18); // 180ms
+    double silence_duration = (rate_changed || altsetting_changed) ? 0.18 : 0.05;
+    uint32_t silence_frames = static_cast<uint32_t>(newSampleRate * silence_duration);
     g_audioState.warmupSilenceFrames.store(silence_frames);
+    g_audioState.lastAntiPopPaddingUs.store(static_cast<int64_t>(silence_duration * 1000000.0));
     g_audioState.currentVolume = 0.0f; // Smooth micro fade-in attack to eliminate DC pop
-    LOGI("Warmup: Priming DAC with %u silence frames (180ms) for rate=%u", silence_frames, newSampleRate);
+    LOGI("Warmup: Priming DAC with %u silence frames (%.0fms) for rate=%u",
+         silence_frames, silence_duration * 1000.0, newSampleRate);
   }
 
   // Start ISO Thread if not running
-  if (g_audioState.isoThread == nullptr && g_audioState.usbHandle != nullptr) {
-    libusb_device *dev = libusb_get_device(g_audioState.usbHandle);
-    if (dev) {
-      int dev_speed = libusb_get_device_speed(dev);
-      int dev_fps = (dev_speed == LIBUSB_SPEED_HIGH || dev_speed == LIBUSB_SPEED_SUPER) ? 8000 : 1000;
-      g_audioState.usb_frames_per_sec.store(dev_fps);
-    }
-    g_audioState.phase_accumulator = 0.0;
-    g_audioState.isPlaying.store(true);
-    g_audioState.stopIsoThread.store(false);
-    g_audioState.isoThreadExited.store(false);
-    g_audioState.isoThread = new std::thread([]() {
-      pthread_setname_np(pthread_self(), "TsrossaIso");
-      setpriority(PRIO_PROCESS, 0, -19); // Urgent Audio
-      struct sched_param param;
-      param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-      pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-
-      long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
-      if (nprocs > 4) {
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        int target_core = (int)(nprocs - 2);
-        CPU_SET(target_core, &cpuset);
-        sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
-      }
-
-      int num_transfers = 32;
-      int num_packets = 32;
-      int packet_size = g_audioState.maxPacketSize;
-      g_audioState.activeIsoTransfers.store(0);
-
-      for (int i = 0; i < num_transfers; i++) {
-        struct libusb_transfer *transfer = libusb_alloc_transfer(num_packets);
-        uint8_t *buffer = nullptr;
-        if (posix_memalign((void **)&buffer, 64, num_packets * packet_size) != 0 || buffer == nullptr) {
-          buffer = (uint8_t *)calloc(num_packets, packet_size);
-        } else {
-          memset(buffer, 0, num_packets * packet_size);
-        }
-        libusb_fill_iso_transfer(transfer, g_audioState.usbHandle,
-                                 g_audioState.epAddress, buffer,
-                                 num_packets * packet_size, num_packets,
-                                 iso_callback, nullptr, 1000);
-        libusb_set_iso_packet_lengths(transfer, packet_size);
-
-        g_audioState.activeIsoTransfers.fetch_add(1);
-        int sub_res = libusb_submit_transfer(transfer);
-        if (sub_res < 0) {
-          g_audioState.activeIsoTransfers.fetch_sub(1);
-        }
-        g_audioState.transfers.push_back(transfer);
-      }
-
-      while (!g_audioState.stopIsoThread.load()) {
-        struct timeval tv = {0, 50000};
-        libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
-      }
-
-      for (auto t : g_audioState.transfers) {
-        libusb_cancel_transfer(t);
-      }
-
-      auto start_time = std::chrono::steady_clock::now();
-      bool timeout_hit = false;
-      while (g_audioState.activeIsoTransfers.load() > 0) {
-        struct timeval tv = {0, 10000};
-        libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count() > 1000) {
-          LOGE("CRITICAL: Timeout waiting for transfers to cancel! Leaking memory to prevent DMA UAF.");
-          timeout_hit = true;
-          break;
-        }
-      }
-
-      if (timeout_hit) {
-        g_audioState.deviceWedged.store(true);
-        for (auto t : g_audioState.transfers) {
-          g_audioState.orphanTransfers.push_back(t);
-        }
-        g_audioState.transfers.clear();
-      } else {
-        for (auto t : g_audioState.transfers) {
-          free(t->buffer);
-          libusb_free_transfer(t);
-        }
-        g_audioState.transfers.clear();
-      }
-      g_audioState.isoThreadExited.store(true);
-    });
-  }
+  start_iso_streaming_thread("TsrossaIso");
 
   g_audioState.isPlaying = true;
   snprintf(dbg, sizeof(dbg), "=== playAudio SUCCESS: isPlaying=true, activeIsoTransfers=%d ===",
@@ -1059,71 +1135,7 @@ bool trigger_warmup_internal(int durationMs) {
   g_audioState.hasNextTrack.store(false);
 
   // If isoThread is not running, spawn it to stream pure silence during warmup
-  if (g_audioState.isoThread == nullptr && g_audioState.usbHandle != nullptr) {
-    libusb_device *dev = libusb_get_device(g_audioState.usbHandle);
-    if (dev) {
-      int dev_speed = libusb_get_device_speed(dev);
-      int dev_fps = (dev_speed == LIBUSB_SPEED_HIGH || dev_speed == LIBUSB_SPEED_SUPER) ? 8000 : 1000;
-      g_audioState.usb_frames_per_sec.store(dev_fps);
-    }
-    g_audioState.phase_accumulator = 0.0;
-    g_audioState.isPlaying.store(true);
-    g_audioState.stopIsoThread.store(false);
-    g_audioState.isoThreadExited.store(false);
-
-    g_audioState.isoThread = new std::thread([]() {
-      pthread_setname_np(pthread_self(), "TsrossaIsoWarm");
-      setpriority(PRIO_PROCESS, 0, -19);
-      struct sched_param param;
-      param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-      pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-
-      int num_transfers = 32;
-      int num_packets = 32;
-      int packet_size = g_audioState.maxPacketSize;
-      if (packet_size <= 0) packet_size = 1024;
-      g_audioState.activeIsoTransfers.store(0);
-
-      for (int i = 0; i < num_transfers; i++) {
-        struct libusb_transfer *transfer = libusb_alloc_transfer(num_packets);
-        uint8_t *buffer = nullptr;
-        if (posix_memalign((void **)&buffer, 64, num_packets * packet_size) != 0 || buffer == nullptr) {
-          buffer = (uint8_t *)calloc(num_packets, packet_size);
-        } else {
-          memset(buffer, 0, num_packets * packet_size);
-        }
-        libusb_fill_iso_transfer(transfer, g_audioState.usbHandle,
-                                 g_audioState.epAddress, buffer,
-                                 num_packets * packet_size, num_packets,
-                                 iso_callback, nullptr, 1000);
-        libusb_set_iso_packet_lengths(transfer, packet_size);
-        g_audioState.transfers.push_back(transfer);
-        g_audioState.activeIsoTransfers.fetch_add(1);
-        libusb_submit_transfer(transfer);
-      }
-
-      while (!g_audioState.stopIsoThread.load()) {
-        struct timeval tv = {0, 10000};
-        libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
-      }
-
-      for (auto *tr : g_audioState.transfers) {
-        libusb_cancel_transfer(tr);
-      }
-
-      while (g_audioState.activeIsoTransfers.load() > 0) {
-        struct timeval tv = {0, 10000};
-        libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
-      }
-
-      for (auto *tr : g_audioState.transfers) {
-        if (tr->buffer) free(tr->buffer);
-        libusb_free_transfer(tr);
-      }
-      g_audioState.transfers.clear();
-      g_audioState.isoThreadExited.store(true);
-    });
-  }
+  start_iso_streaming_thread("TsrossaIsoWarm");
 
   // Launch background watchdog for warmup completion
   std::thread([dur]() {

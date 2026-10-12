@@ -27,6 +27,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +51,7 @@ fun TactileBox(
     pressedScale: Float = 0.90f,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val currentOnClick by rememberUpdatedState(onClick)
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) pressedScale else 1f,
@@ -56,6 +62,15 @@ fun TactileBox(
     Box(
         modifier = modifier
             .scale(scale)
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                onClick {
+                    if (enabled) {
+                        currentOnClick()
+                        true
+                    } else false
+                }
+            }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
@@ -67,7 +82,7 @@ fun TactileBox(
                         isPressed = false
                     }
                     if (up != null) {
-                        onClick()
+                        currentOnClick()
                     }
                 }
             },
@@ -84,7 +99,7 @@ fun GlyphPlay(
     color: Color,
     modifier: Modifier = Modifier.size(18.dp)
 ) {
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Play" }) {
         val w = size.width
         val h = size.height
         val path = Path().apply {
@@ -102,7 +117,7 @@ fun GlyphPause(
     color: Color,
     modifier: Modifier = Modifier.size(18.dp)
 ) {
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Pause" }) {
         val w = size.width
         val h = size.height
         val barWidth = w * 0.26f
@@ -132,7 +147,7 @@ fun GlyphPrev(
     color: Color,
     modifier: Modifier = Modifier.size(18.dp)
 ) {
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Previous Track" }) {
         val w = size.width
         val h = size.height
         val barW = w * 0.12f
@@ -161,7 +176,7 @@ fun GlyphNext(
     color: Color,
     modifier: Modifier = Modifier.size(18.dp)
 ) {
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Next Track" }) {
         val w = size.width
         val h = size.height
         val barW = w * 0.12f
@@ -190,7 +205,7 @@ fun GlyphShuffle(
     color: Color,
     modifier: Modifier = Modifier.size(16.dp)
 ) {
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Toggle Shuffle" }) {
         val w = size.width
         val h = size.height
         val stroke = 1.8.dp.toPx()
@@ -236,7 +251,7 @@ fun GlyphRepeat(
     color: Color,
     modifier: Modifier = Modifier.size(16.dp)
 ) {
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Toggle Repeat" }) {
         val w = size.width
         val h = size.height
         val stroke = 1.8.dp.toPx()

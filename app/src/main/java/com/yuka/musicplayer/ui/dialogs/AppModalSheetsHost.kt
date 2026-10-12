@@ -50,9 +50,11 @@ fun AppModalSheetsHost(
     isNotificationGranted: Boolean,
     isStorageGranted: Boolean,
     isDndGranted: Boolean,
+    isBatteryOptimizationIgnored: Boolean = true,
     onRequestNotification: () -> Unit,
     onRequestStorage: () -> Unit,
     onRequestDnd: () -> Unit,
+    onRequestBatteryOptimization: () -> Unit = {},
     onCompletePermissions: () -> Unit,
     // Update states
     updateCheckState: UpdateCheckState,
@@ -152,9 +154,11 @@ fun AppModalSheetsHost(
                 isNotificationGranted = isNotificationGranted,
                 isStorageGranted = isStorageGranted,
                 isDndGranted = isDndGranted,
+                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
                 onRequestNotification = onRequestNotification,
                 onRequestStorage = onRequestStorage,
                 onRequestDnd = onRequestDnd,
+                onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onComplete = onCompletePermissions
             )
         }

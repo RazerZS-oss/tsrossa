@@ -31,11 +31,11 @@ struct ApiMutexLock {
   }
 };
 
-// Ultra-fast inline PRNG for TPDF Dithering (avoiding heavy stdlib calls)
-extern uint32_t g_fast_rand_state;
+// Ultra-fast inline PRNG for TPDF Dithering (thread-local to eliminate data race)
 inline float fast_uniform_rand() {
-  g_fast_rand_state = (1103515245 * g_fast_rand_state + 12345);
-  return (float)(g_fast_rand_state & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+  thread_local uint32_t state = 123456789;
+  state = (1103515245 * state + 12345);
+  return (float)(state & 0x7FFFFFFF) / (float)0x7FFFFFFF;
 }
 
 inline uint64_t get_time_ms() {

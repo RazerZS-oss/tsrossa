@@ -91,14 +91,18 @@ fun ColumnScope.AppScreenContent(
     isNotificationGranted: Boolean,
     isStorageGranted: Boolean,
     isDndGranted: Boolean,
+    isBatteryOptimizationIgnored: Boolean = true,
     onRequestNotification: () -> Unit,
     onRequestStorage: () -> Unit,
     onRequestDnd: () -> Unit,
+    onRequestBatteryOptimization: () -> Unit = {},
     onOpenPermissionDialog: () -> Unit,
     onOpenHelp: () -> Unit,
     updateCheckState: UpdateCheckState,
     onCheckForUpdate: () -> Unit,
-    onOpenUpdateDialog: () -> Unit
+    onOpenUpdateDialog: () -> Unit,
+    usbBufferProfile: Int = 1,
+    onUsbBufferProfileChange: (Int) -> Unit = {}
 ) {
     when (viewState) {
         ViewState.LIBRARY -> {
@@ -179,14 +183,18 @@ fun ColumnScope.AppScreenContent(
                 isNotificationGranted = isNotificationGranted,
                 isStorageGranted = isStorageGranted,
                 isDndGranted = isDndGranted,
+                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
                 onRequestNotification = onRequestNotification,
                 onRequestStorage = onRequestStorage,
                 onRequestDnd = onRequestDnd,
+                onRequestBatteryOptimization = onRequestBatteryOptimization,
                 onOpenPermissionDialog = onOpenPermissionDialog,
                 onOpenHelp = onOpenHelp,
                 updateCheckState = updateCheckState,
                 onCheckForUpdate = onCheckForUpdate,
                 onOpenUpdateDialog = onOpenUpdateDialog,
+                usbBufferProfile = usbBufferProfile,
+                onUsbBufferProfileChange = onUsbBufferProfileChange,
                 modifier = Modifier.weight(1f)
             )
         }
