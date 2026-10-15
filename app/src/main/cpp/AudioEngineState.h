@@ -28,12 +28,21 @@ struct RefusedTrackInfo {
   std::string reason; // "format_incompatible" or "negotiation_failed"
 };
 
+enum ControlRequestType {
+  REQ_SET_VOLUME = 1,
+  REQ_SET_SAMPLE_RATE = 2,
+  REQ_SET_INTERFACE = 3,
+  REQ_EVENT_TRACK_FINISHED = 10,
+  REQ_EVENT_TRACK_TRANSITION = 11
+};
+
 struct ControlRequest {
-  int type; // 1 = SET_CUR Volume, 2 = SET_CUR Sample Rate, 3 = SET_INTERFACE
-  float volume;
-  int sampleRate;
-  int interfaceNum;
-  int altSetting;
+  int type; // 1 = SET_CUR Volume, 2 = SET_CUR Sample Rate, 3 = SET_INTERFACE, 10 = onTrackFinished, 11 = onTrackTransition
+  float volume = 0.0f;
+  int sampleRate = 0;
+  int interfaceNum = 0;
+  int altSetting = 0;
+  std::string eventArg;
 };
 
 struct AudioEngineState {

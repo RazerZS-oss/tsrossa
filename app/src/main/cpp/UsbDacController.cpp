@@ -31,6 +31,39 @@ void control_thread_func() {
       g_controlQueue.pop();
     }
 
+    // Asynchronous JNI event dispatcher (dispatched off realtime audio thread)
+    if (req.type == REQ_EVENT_TRACK_FINISHED || req.type == REQ_EVENT_TRACK_TRANSITION) {
+      if (g_jvm && g_audioState.callbackObj) {
+        JNIEnv *env = nullptr;
+        bool needDetach = false;
+        if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+          if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
+            needDetach = true;
+          }
+        }
+        if (env && g_audioState.callbackObj) {
+          jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
+          if (req.type == REQ_EVENT_TRACK_FINISHED) {
+            jmethodID methodId = env->GetMethodID(clazz, "onTrackFinished", "()V");
+            if (methodId) {
+              env->CallVoidMethod(g_audioState.callbackObj, methodId);
+            }
+          } else if (req.type == REQ_EVENT_TRACK_TRANSITION) {
+            jmethodID methodId = env->GetMethodID(clazz, "onTrackTransition", "(Ljava/lang/String;)V");
+            if (methodId) {
+              jstring pathStr = env->NewStringUTF(req.eventArg.c_str());
+              env->CallVoidMethod(g_audioState.callbackObj, methodId, pathStr);
+              env->DeleteLocalRef(pathStr);
+            }
+          }
+          if (needDetach) {
+            g_jvm->DetachCurrentThread();
+          }
+        }
+      }
+      continue;
+    }
+
     if (g_audioState.usbHandle == nullptr)
       continue;
 

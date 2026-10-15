@@ -444,16 +444,12 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
             g_audioState.isFinished.store(true);
             g_audioState.isPlaying.store(false);
 
-            if (g_jvm && g_audioState.callbackObj) {
-              JNIEnv *env;
-              if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-                jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-                jmethodID methodId =
-                    env->GetMethodID(clazz, "onTrackFinished", "()V");
-                if (methodId)
-                  env->CallVoidMethod(g_audioState.callbackObj, methodId);
-                g_jvm->DetachCurrentThread();
-              }
+            {
+              std::lock_guard<std::mutex> lock(g_controlMutex);
+              ControlRequest evReq;
+              evReq.type = REQ_EVENT_TRACK_FINISHED;
+              g_controlQueue.push(evReq);
+              g_controlCv.notify_one();
             }
             break;
           }
@@ -470,19 +466,13 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
           g_audioState.currentFilePath = g_audioState.nextFilePath;
           g_audioState.nextFilePath = "";
 
-          if (g_jvm && g_audioState.callbackObj) {
-            JNIEnv *env;
-            if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-              jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-              jmethodID methodId =
-                  env->GetMethodID(clazz, "onTrackTransition", "(Ljava/lang/String;)V");
-              if (methodId) {
-                jstring pathStr = env->NewStringUTF(g_audioState.currentFilePath.c_str());
-                env->CallVoidMethod(g_audioState.callbackObj, methodId, pathStr);
-                env->DeleteLocalRef(pathStr);
-              }
-              g_jvm->DetachCurrentThread();
-            }
+          {
+            std::lock_guard<std::mutex> lock(g_controlMutex);
+            ControlRequest evReq;
+            evReq.type = REQ_EVENT_TRACK_TRANSITION;
+            evReq.eventArg = g_audioState.currentFilePath;
+            g_controlQueue.push(evReq);
+            g_controlCv.notify_one();
           }
         } else {
           // If still decoding the current track in background, just wait/send silence rather than finish!
@@ -492,16 +482,12 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
           g_audioState.isFinished.store(true);
           g_audioState.isPlaying.store(false);
 
-          if (g_jvm && g_audioState.callbackObj) {
-            JNIEnv *env;
-            if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-              jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-              jmethodID methodId =
-                  env->GetMethodID(clazz, "onTrackFinished", "()V");
-              if (methodId)
-                env->CallVoidMethod(g_audioState.callbackObj, methodId);
-              g_jvm->DetachCurrentThread();
-            }
+          {
+            std::lock_guard<std::mutex> lock(g_controlMutex);
+            ControlRequest evReq;
+            evReq.type = REQ_EVENT_TRACK_FINISHED;
+            g_controlQueue.push(evReq);
+            g_controlCv.notify_one();
           }
           break;
         }
