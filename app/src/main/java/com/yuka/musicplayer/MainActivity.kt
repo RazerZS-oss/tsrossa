@@ -1333,19 +1333,40 @@ fun KewApp(audioEngine: AudioEngine) {
             },
             sharedPref = sharedPref,
             bgMode = bgMode,
-            onBgModeChange = { bgMode = it },
+            onBgModeChange = {
+                bgMode = it
+                sharedPref.edit().putString("bg_mode", it).apply()
+            },
             fontScale = fontScale,
-            onFontScaleChange = { fontScale = it },
+            onFontScaleChange = {
+                fontScale = it
+                sharedPref.edit().putFloat("font_scale", it).apply()
+            },
             hapticEnabled = hapticEnabled,
-            onHapticChange = { hapticEnabled = it },
+            onHapticChange = {
+                hapticEnabled = it
+                sharedPref.edit().putBoolean("haptic_enabled", it).apply()
+            },
             keepAwake = keepAwake,
-            onKeepAwakeChange = { keepAwake = it },
+            onKeepAwakeChange = {
+                keepAwake = it
+                sharedPref.edit().putBoolean("keep_awake", it).apply()
+            },
             defaultScreenStr = defaultScreenStr,
-            onDefaultScreenChange = { defaultScreenStr = it },
+            onDefaultScreenChange = {
+                defaultScreenStr = it
+                sharedPref.edit().putString("default_screen", it).apply()
+            },
             accentMode = accentMode,
-            onAccentModeChange = { accentMode = it },
+            onAccentModeChange = {
+                accentMode = it
+                sharedPref.edit().putString("accent_mode", it).apply()
+            },
             accentFixedColorStr = accentFixedColorStr,
-            onAccentFixedColorChange = { accentFixedColorStr = it },
+            onAccentFixedColorChange = {
+                accentFixedColorStr = it
+                sharedPref.edit().putString("accent_fixed_color", it).apply()
+            },
             isNotificationGranted = isNotificationGranted,
             isStorageGranted = isStorageGranted,
             isDndGranted = isDndGranted,
