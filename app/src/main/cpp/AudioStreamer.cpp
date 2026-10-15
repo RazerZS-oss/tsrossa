@@ -543,6 +543,25 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
                         (g_audioState.sourceBitDepth.load() == g_audioState.sourceBitDepthNext.load());
     if (format_match && g_audioState.isoThread != nullptr && !g_audioState.stopIsoThread.load()) {
       LOGI("playAudio: INSTANT GAPLESS HANDOVER for manual Next -> %s", savedPath.c_str());
+
+      // Handshake with iso_callback: instruct it to send silence while buffer is being moved
+      g_audioState.isSwapping.store(true);
+      auto wait_start = std::chrono::steady_clock::now();
+      bool ack_timeout = false;
+      while (!g_audioState.isSwappingAck.load() && !g_audioState.stopIsoThread.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - wait_start).count() > 60) {
+          ack_timeout = true;
+          break;
+        }
+      }
+
+      if (ack_timeout) {
+        LOGW("playAudio: isSwappingAck timeout during gapless handover, safely restarting isoThread");
+        stop_and_join_iso_thread("gapless handover timeout");
+      }
+
       stop_and_join_decode_thread();
       g_audioState.pcmBufferGarbage = std::move(g_audioState.pcmBuffer);
       g_audioState.pcmBuffer = std::move(g_audioState.pcmBufferNext);
@@ -554,6 +573,7 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
       g_audioState.pcmIndex.store(0);
       g_audioState.currentFilePath = savedPath;
       g_audioState.nextFilePath = "";
+      g_audioState.isSwapping.store(false);
       g_audioState.isPlaying.store(true);
       return 0; // ZERO DELAY INSTANT START!
     }
