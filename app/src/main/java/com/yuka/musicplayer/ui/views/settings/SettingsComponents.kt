@@ -56,17 +56,18 @@ fun <T> SettingsSegmentedControl(
                     )
                     .padding(vertical = 7.dp, horizontal = 4.dp)
             ) {
-                Text(
-                    text = label,
-                    color = if (isSelected) accent else TerminalGray,
-                    fontFamily = TerminalFont,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    Text(
+                        text = label,
+                        color = if (isSelected) accent else TerminalGray,
+                        fontFamily = com.yuka.musicplayer.ui.theme.ModernSansFont,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        fontSize = 9.5.sp,
+                        letterSpacing = 0.5.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
             }
         }
     }
@@ -107,10 +108,10 @@ fun SettingsCard(
                 Text(
                     text = title,
                     color = TerminalWhite,
-                    fontFamily = TerminalFont,
-                    fontWeight = FontWeight.Bold,
+                    fontFamily = com.yuka.musicplayer.ui.theme.ModernSansFont,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 11.sp,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.7.sp
                 )
             }
             if (tag != null) {

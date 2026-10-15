@@ -4,18 +4,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
-import android.os.Build
-import android.renderscript.Allocation
-import android.renderscript.Element
-import android.renderscript.RenderScript
-import android.renderscript.ScriptIntrinsicBlur
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Utility to extract and blur current system wallpaper for app background.
+ * Utility to extract current system wallpaper for app background.
+ * Hardware-accelerated blur is handled directly on the GPU in Compose using Modifier.blur().
  */
 object WallpaperBlurHelper {
 
@@ -38,31 +34,13 @@ object WallpaperBlurHelper {
                 b
             }
 
-            val scale = 0.25f
+            val scale = 0.5f
             val scaledBmp = Bitmap.createScaledBitmap(
                 bmp,
                 (bmp.width * scale).toInt().coerceAtLeast(1),
                 (bmp.height * scale).toInt().coerceAtLeast(1),
                 true
             )
-
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                try {
-                    @Suppress("DEPRECATION")
-                    val rs = RenderScript.create(context)
-                    @Suppress("DEPRECATION")
-                    val input = Allocation.createFromBitmap(rs, scaledBmp)
-                    @Suppress("DEPRECATION")
-                    val output = Allocation.createTyped(rs, input.type)
-                    @Suppress("DEPRECATION")
-                    val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
-                    script.setRadius(25f)
-                    script.setInput(input)
-                    script.forEach(output)
-                    output.copyTo(scaledBmp)
-                    rs.destroy()
-                } catch (_: Exception) {}
-            }
 
             scaledBmp.asImageBitmap()
         } catch (_: Exception) {

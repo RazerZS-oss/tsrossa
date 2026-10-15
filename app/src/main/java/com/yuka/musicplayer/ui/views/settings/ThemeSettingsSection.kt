@@ -15,11 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.yuka.musicplayer.ui.theme.LocalAccentColor
-import com.yuka.musicplayer.ui.theme.SakuraPink
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
-import com.yuka.musicplayer.ui.theme.TerminalWhite
 
 @Composable
 fun ThemeSettingsSection(
@@ -30,8 +27,6 @@ fun ThemeSettingsSection(
     accentFixedColorStr: String,
     onAccentFixedColorChange: (String) -> Unit
 ) {
-    val accent = LocalAccentColor.current
-
     SettingsCard(title = "THEME & DISPLAY", tag = "VISUAL ENGINE") {
         Text(
             text = "BACKGROUND CANVAS",

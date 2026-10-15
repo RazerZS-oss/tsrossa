@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.model.LibrarySortMode
 import com.yuka.musicplayer.model.ScannedMusicItem
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
@@ -56,6 +57,7 @@ fun LibraryView(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val accent = LocalAccentColor.current
     val filteredItems = remember(scannedItems, searchQuery) {
         if (searchQuery.isEmpty()) {
             scannedItems
@@ -74,14 +76,14 @@ fun LibraryView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         // --- Root Music Directory Terminal Banner ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF090D18), RoundedCornerShape(6.dp))
-                .border(0.8.dp, LocalAccentColor.current.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                .background(Color(0xFF090D18), RoundedCornerShape(8.dp))
+                .border(0.8.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(8.dp))
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -90,7 +92,7 @@ fun LibraryView(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "ROOT: ",
-                        color = LocalAccentColor.current,
+                        color = accent,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = TerminalFont
@@ -113,11 +115,11 @@ fun LibraryView(
                         CircularProgressIndicator(
                             modifier = Modifier.size(8.dp),
                             strokeWidth = 1.5.dp,
-                            color = LocalAccentColor.current
+                            color = accent
                         )
                         Text(
                             text = "SCANNING DIRECTORY...",
-                            color = LocalAccentColor.current,
+                            color = accent,
                             fontSize = 8.5.sp,
                             fontFamily = TerminalFont,
                             fontWeight = FontWeight.Bold
@@ -125,7 +127,7 @@ fun LibraryView(
                     } else {
                         Text(
                             text = "$playableCount PLAYABLE",
-                            color = LocalAccentColor.current,
+                            color = accent,
                             fontSize = 8.5.sp,
                             fontFamily = TerminalFont,
                             fontWeight = FontWeight.Bold
@@ -147,8 +149,8 @@ fun LibraryView(
 
             Box(
                 modifier = Modifier
-                    .border(1.dp, LocalAccentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                    .background(LocalAccentColor.current.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                    .border(0.8.dp, accent.copy(alpha = 0.5f), RoundedCornerShape(5.dp))
+                    .background(accent.copy(alpha = 0.12f), RoundedCornerShape(5.dp))
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onChangeDirectory()
@@ -157,8 +159,8 @@ fun LibraryView(
             ) {
                 Text(
                     text = "CHANGE",
-                    color = LocalAccentColor.current,
-                    fontSize = 9.sp,
+                    color = accent,
+                    fontSize = 8.5.sp,
                     fontFamily = TerminalFont,
                     fontWeight = FontWeight.Bold
                 )
@@ -174,11 +176,11 @@ fun LibraryView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "— FILE LIBRARY (${filteredItems.size}) —",
-                color = Color.White,
+                text = "STORAGE (${filteredItems.size})",
+                color = TerminalWhite,
                 fontSize = 11.sp,
-                letterSpacing = 1.sp,
-                fontFamily = TerminalFont,
+                letterSpacing = 0.8.sp,
+                fontFamily = ModernSansFont,
                 fontWeight = FontWeight.Bold
             )
 
@@ -189,8 +191,8 @@ fun LibraryView(
                 // Sort Toggle Button
                 Box(
                     modifier = Modifier
-                        .border(1.dp, LocalAccentColor.current.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .background(LocalAccentColor.current.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                        .border(0.8.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(5.dp))
+                        .background(accent.copy(alpha = 0.08f), RoundedCornerShape(5.dp))
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onCycleSort()
@@ -199,18 +201,19 @@ fun LibraryView(
                 ) {
                     Text(
                         text = "⇵ ${sortMode.shortLabel}",
-                        color = LocalAccentColor.current,
-                        fontSize = 9.sp,
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold
+                        color = accent,
+                        fontSize = 8.5.sp,
+                        fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp
                     )
                 }
 
                 // Refresh Button
                 Box(
                     modifier = Modifier
-                        .border(1.dp, LocalAccentColor.current.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .background(LocalAccentColor.current.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                        .border(0.8.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(5.dp))
+                        .background(accent.copy(alpha = 0.08f), RoundedCornerShape(5.dp))
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onRefresh()
@@ -219,10 +222,11 @@ fun LibraryView(
                 ) {
                     Text(
                         text = "⟳ REFRESH",
-                        color = LocalAccentColor.current,
-                        fontSize = 9.sp,
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold
+                        color = accent,
+                        fontSize = 8.5.sp,
+                        fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
@@ -233,19 +237,19 @@ fun LibraryView(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(34.dp)
-                .border(1.dp, LocalAccentColor.current.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                .background(LocalAccentColor.current.copy(alpha = 0.05f), RoundedCornerShape(4.dp))
+                .border(0.8.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                .background(Color(0xFF0B101D), RoundedCornerShape(6.dp))
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(">", color = LocalAccentColor.current, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(">", color = accent, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(modifier = Modifier.width(8.dp))
             BasicTextField(
                 value = searchQuery,
                 onValueChange = onSearchChange,
                 modifier = Modifier.weight(1f),
-                textStyle = TextStyle(color = LocalAccentColor.current, fontFamily = TerminalFont, fontSize = 11.sp),
-                cursorBrush = SolidColor(LocalAccentColor.current),
+                textStyle = TextStyle(color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 11.5.sp),
+                cursorBrush = SolidColor(accent),
                 singleLine = true,
                 decorationBox = { innerTextField ->
                     Box(
@@ -256,7 +260,7 @@ fun LibraryView(
                             Text(
                                 "SEARCH ALL TRACKS & FOLDERS...",
                                 color = TerminalGray.copy(alpha = 0.6f),
-                                fontFamily = TerminalFont,
+                                fontFamily = ModernSansFont,
                                 fontSize = 11.sp
                             )
                         }
@@ -287,21 +291,29 @@ fun LibraryView(
                 val displayName = file.nameWithoutExtension.ifEmpty { file.name }
                 val itemAlpha = if (isSupported) 1f else 0.42f
 
+                val (trackTitle, trackArtist) = remember(displayName) {
+                    com.yuka.musicplayer.util.TrackTitleParser.parse(displayName)
+                }
+
+                val dateFormatted = remember(file.lastModified()) {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(file.lastModified()))
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 2.dp)
                         .alpha(itemAlpha)
                         .background(
-                            if (isPlaying) LocalAccentColor.current.copy(alpha = 0.10f) else Color(0xFF090D18),
+                            if (isPlaying) accent.copy(alpha = 0.12f) else Color(0xFF090D18),
                             RoundedCornerShape(8.dp)
                         )
                         .border(
-                            width = 0.6.dp,
+                            width = if (isPlaying) 1.dp else 0.7.dp,
                             color = when {
-                                isPlaying -> LocalAccentColor.current.copy(alpha = 0.40f)
+                                isPlaying -> accent.copy(alpha = 0.65f)
                                 !isSupported -> Color(0xFFFF5252).copy(alpha = 0.15f)
-                                else -> Color.White.copy(alpha = 0.05f)
+                                else -> com.yuka.musicplayer.ui.theme.CardBorderSubtle
                             },
                             shape = RoundedCornerShape(8.dp)
                         )
@@ -314,64 +326,80 @@ fun LibraryView(
                                 }
                             }
                         )
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isPlaying) {
+                        // Left vertical accent indicator bar
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(22.dp)
+                                .background(accent, RoundedCornerShape(1.5.dp))
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+
                         // Playing Wave Bars Indicator
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(1.5.dp),
                             verticalAlignment = Alignment.Bottom,
                             modifier = Modifier.height(12.dp)
                         ) {
-                            Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.6f).background(LocalAccentColor.current, RoundedCornerShape(1.dp)))
-                            Box(modifier = Modifier.width(2.dp).fillMaxHeight(1.0f).background(LocalAccentColor.current, RoundedCornerShape(1.dp)))
-                            Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.4f).background(LocalAccentColor.current, RoundedCornerShape(1.dp)))
+                            Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.6f).background(accent, RoundedCornerShape(1.dp)))
+                            Box(modifier = Modifier.width(2.dp).fillMaxHeight(1.0f).background(accent, RoundedCornerShape(1.dp)))
+                            Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.4f).background(accent, RoundedCornerShape(1.dp)))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
 
+                    // Two-line Track Hierarchy: Line 1 Title, Line 2 Artist & Metadata
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = displayName,
+                            text = trackTitle,
                             color = when {
-                                isPlaying -> LocalAccentColor.current
+                                isPlaying -> accent
                                 isSupported -> TerminalWhite
                                 else -> TerminalGray
                             },
-                            fontFamily = TerminalFont,
-                            fontWeight = if (isPlaying || isSupported) FontWeight.Bold else FontWeight.Normal,
+                            fontFamily = ModernSansFont,
+                            fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (item.breadcrumb.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(1.dp))
+                        val secondaryMetadata = buildString {
+                            if (trackArtist.isNotEmpty()) append(trackArtist)
+                            if (item.breadcrumb.isNotEmpty()) {
+                                if (isNotEmpty()) append(" · ")
+                                append(item.breadcrumb)
+                            }
+                            if (sortMode == LibrarySortMode.DATE_DESC || sortMode == LibrarySortMode.DATE_ASC) {
+                                if (isNotEmpty()) append(" · ")
+                                append(dateFormatted)
+                            }
+                        }
+                        if (secondaryMetadata.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(1.5.dp))
                             Text(
-                                text = item.breadcrumb,
-                                color = if (isSupported) LocalAccentColor.current.copy(alpha = 0.65f) else TerminalGray.copy(alpha = 0.5f),
-                                fontSize = 9.sp,
-                                fontFamily = TerminalFont,
+                                text = secondaryMetadata,
+                                color = if (!isSupported) {
+                                    TerminalGray.copy(alpha = 0.5f)
+                                } else if (isPlaying) {
+                                    accent.copy(alpha = 0.85f)
+                                } else {
+                                    Color.White.copy(alpha = 0.68f)
+                                },
+                                fontSize = 11.5.sp,
+                                fontFamily = ModernSansFont,
+                                fontWeight = FontWeight.Normal,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
-                    if (sortMode == LibrarySortMode.DATE_DESC || sortMode == LibrarySortMode.DATE_ASC) {
-                        val dateFormatted = remember(file.lastModified()) {
-                            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(file.lastModified()))
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = dateFormatted,
-                            color = TerminalGray.copy(alpha = 0.5f),
-                            fontFamily = TerminalFont,
-                            fontSize = 8.5.sp,
-                            maxLines = 1
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // Format Badge: Supported vs Option B Warning Badge
                     if (isSupported) {
@@ -380,15 +408,15 @@ fun LibraryView(
                                 .background(Color(0xFF101626), RoundedCornerShape(4.dp))
                                 .border(
                                     0.5.dp,
-                                    if (isPlaying) LocalAccentColor.current.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.08f),
+                                    if (isPlaying) accent.copy(alpha = 0.35f) else com.yuka.musicplayer.ui.theme.BadgeBorderSubtle,
                                     RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 5.dp, vertical = 1.5.dp)
                         ) {
                             Text(
                                 text = item.formatLabel,
-                                color = if (isPlaying) LocalAccentColor.current else TerminalGray,
-                                fontSize = 8.5.sp,
+                                color = if (isPlaying) accent else TerminalGray,
+                                fontSize = 8.sp,
                                 fontFamily = TerminalFont,
                                 fontWeight = FontWeight.Bold
                             )
@@ -403,7 +431,7 @@ fun LibraryView(
                             Text(
                                 text = "${item.formatLabel} · UNSUPPORTED",
                                 color = Color(0xFFFF5252),
-                                fontSize = 8.sp,
+                                fontSize = 7.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = TerminalFont
                             )
@@ -414,8 +442,8 @@ fun LibraryView(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "★",
-                            color = LocalAccentColor.current,
-                            fontSize = 11.sp,
+                            color = accent,
+                            fontSize = 10.sp,
                             fontFamily = TerminalFont
                         )
                     }

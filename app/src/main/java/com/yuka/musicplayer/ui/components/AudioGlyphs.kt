@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,28 +41,33 @@ import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 /**
- * Tactile touch wrapper providing a bouncy spring scale feedback when pressed.
+ * Tactile touch wrapper providing a bouncy spring scale feedback when pressed on RenderThread.
  */
 @Composable
 fun TactileBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    pressedScale: Float = 0.90f,
+    pressedScale: Float = 0.92f,
     content: @Composable BoxScope.() -> Unit
 ) {
     val currentOnClick by rememberUpdatedState(onClick)
     var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
+    val animatedScale by animateFloatAsState(
         targetValue = if (isPressed) pressedScale else 1f,
-        animationSpec = spring(dampingRatio = 0.55f, stiffness = 400f),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 600f),
         label = "tactileScale"
     )
 
     Box(
         modifier = modifier
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            }
             .semantics(mergeDescendants = true) {
                 role = Role.Button
                 onClick {
@@ -74,7 +80,7 @@ fun TactileBox(
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                    awaitFirstDown(requireUnconsumed = false)
                     isPressed = true
                     val up = try {
                         waitForUpOrCancellation()
@@ -397,11 +403,180 @@ fun ModePillChip(
 
             Text(
                 text = label,
-                color = if (isActive) accentColor else TerminalWhite.copy(alpha = 0.7f),
-                fontFamily = TerminalFont,
+                color = if (isActive) accentColor else TerminalWhite.copy(alpha = 0.75f),
+                fontFamily = com.yuka.musicplayer.ui.theme.ModernSansFont,
+                fontWeight = FontWeight.SemiBold,
                 fontSize = 10.sp,
+                letterSpacing = 0.6.sp,
                 maxLines = 1
             )
         }
+    }
+}
+
+/**
+ * Geometric vector glyphs for monochrome hardware aesthetic (replaces system emojis).
+ */
+@Composable
+fun GlyphBolt(
+    color: Color,
+    modifier: Modifier = Modifier.size(14.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Warmup / Power" }) {
+        val w = size.width
+        val h = size.height
+        val boltPath = Path().apply {
+            moveTo(w * 0.55f, h * 0.05f)
+            lineTo(w * 0.20f, h * 0.55f)
+            lineTo(w * 0.48f, h * 0.55f)
+            lineTo(w * 0.40f, h * 0.95f)
+            lineTo(w * 0.80f, h * 0.45f)
+            lineTo(w * 0.52f, h * 0.45f)
+            close()
+        }
+        drawPath(boltPath, color = color, style = Fill)
+    }
+}
+
+@Composable
+fun GlyphLock(
+    color: Color,
+    modifier: Modifier = Modifier.size(13.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Locked" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.6.dp.toPx()
+
+        // Shackle (arched top)
+        val shacklePath = Path().apply {
+            moveTo(w * 0.28f, h * 0.45f)
+            lineTo(w * 0.28f, h * 0.28f)
+            cubicTo(w * 0.28f, h * 0.10f, w * 0.72f, h * 0.10f, w * 0.72f, h * 0.28f)
+            lineTo(w * 0.72f, h * 0.45f)
+        }
+        drawPath(shacklePath, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Body (solid rounded rect)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.16f, h * 0.45f),
+            size = androidx.compose.ui.geometry.Size(w * 0.68f, h * 0.50f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx())
+        )
+
+        // Keyhole dot
+        drawCircle(
+            color = Color(0xFF070A12),
+            radius = 1.2.dp.toPx(),
+            center = Offset(w * 0.50f, h * 0.66f)
+        )
+    }
+}
+
+@Composable
+fun GlyphUnlock(
+    color: Color,
+    modifier: Modifier = Modifier.size(13.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Unlocked" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.6.dp.toPx()
+
+        // Open shackle (tilted/lifted top)
+        val shacklePath = Path().apply {
+            moveTo(w * 0.28f, h * 0.45f)
+            lineTo(w * 0.28f, h * 0.24f)
+            cubicTo(w * 0.28f, h * 0.06f, w * 0.72f, h * 0.06f, w * 0.72f, h * 0.24f)
+            lineTo(w * 0.72f, h * 0.32f)
+        }
+        drawPath(shacklePath, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Body
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.16f, h * 0.45f),
+            size = androidx.compose.ui.geometry.Size(w * 0.68f, h * 0.50f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx())
+        )
+
+        // Keyhole dot
+        drawCircle(
+            color = Color(0xFF070A12),
+            radius = 1.2.dp.toPx(),
+            center = Offset(w * 0.50f, h * 0.66f)
+        )
+    }
+}
+
+@Composable
+fun GlyphClipboard(
+    color: Color,
+    modifier: Modifier = Modifier.size(13.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Clipboard" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.4.dp.toPx()
+
+        // Board outline
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.18f, h * 0.22f),
+            size = androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.72f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+
+        // Top clip
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.34f, h * 0.10f),
+            size = androidx.compose.ui.geometry.Size(w * 0.32f, h * 0.18f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx(), 1.dp.toPx())
+        )
+
+        // Text lines inside board
+        drawLine(color = color, start = Offset(w * 0.30f, h * 0.46f), end = Offset(w * 0.70f, h * 0.46f), strokeWidth = stroke)
+        drawLine(color = color, start = Offset(w * 0.30f, h * 0.62f), end = Offset(w * 0.64f, h * 0.62f), strokeWidth = stroke)
+        drawLine(color = color, start = Offset(w * 0.30f, h * 0.76f), end = Offset(w * 0.55f, h * 0.76f), strokeWidth = stroke)
+    }
+}
+
+@Composable
+fun GlyphWarning(
+    color: Color,
+    modifier: Modifier = Modifier.size(13.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Warning" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.5.dp.toPx()
+
+        // Equilateral triangle outline with rounded corners
+        val triPath = Path().apply {
+            moveTo(w * 0.50f, h * 0.12f)
+            lineTo(w * 0.90f, h * 0.86f)
+            lineTo(w * 0.10f, h * 0.86f)
+            close()
+        }
+        drawPath(triPath, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Exclamation vertical line
+        drawLine(
+            color = color,
+            start = Offset(w * 0.50f, h * 0.38f),
+            end = Offset(w * 0.50f, h * 0.62f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+
+        // Exclamation dot
+        drawCircle(
+            color = color,
+            radius = stroke * 0.6f,
+            center = Offset(w * 0.50f, h * 0.75f)
+        )
     }
 }

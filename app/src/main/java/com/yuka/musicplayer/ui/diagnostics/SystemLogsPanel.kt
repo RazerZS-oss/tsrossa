@@ -307,13 +307,23 @@ fun SystemLogsPanel(
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "📋 COPY REPORT",
-                    color = LocalAccentColor.current,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    com.yuka.musicplayer.ui.components.GlyphClipboard(
+                        color = LocalAccentColor.current,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "COPY REPORT",
+                        color = LocalAccentColor.current,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = TerminalFont
+                    )
+                }
             }
 
             Box(

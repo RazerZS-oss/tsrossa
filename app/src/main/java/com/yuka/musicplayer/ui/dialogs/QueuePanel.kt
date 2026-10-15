@@ -183,7 +183,7 @@ fun QueuePanel(
                 item {
                     LogSectionHeader("UPCOMING IN PLAYLIST / FOLDER")
                 }
-                items(upcomingTracks.take(8).mapIndexed { idx, f -> idx to f }) { (idx, file) ->
+                items(upcomingTracks.take(8).mapIndexed { idx, f -> idx to f }) { (_, file) ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

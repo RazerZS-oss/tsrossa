@@ -1,40 +1,32 @@
 package com.yuka.musicplayer.ui.views
 
-import android.content.Context
 import android.content.SharedPreferences
-import android.media.AudioFocusRequest
-import android.media.AudioManager
-import android.os.Build
-import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.yuka.musicplayer.audio.AudioEngine
 import com.yuka.musicplayer.model.LibrarySortMode
-import com.yuka.musicplayer.model.PlaybackSource
 import com.yuka.musicplayer.model.RepeatMode
 import com.yuka.musicplayer.model.TrackInfo
 import com.yuka.musicplayer.model.ViewState
-import com.yuka.musicplayer.model.sortLibraryFiles
 import com.yuka.musicplayer.update.UpdateCheckState
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
- * Screen Content Container that switches between LIBRARY, PLAYLIST, TRACK, and SETTINGS views.
+ * Screen Content Container that switches between LIBRARY, PLAYLIST, TRACK, and SETTINGS views with fluid physics transitions.
  */
 @Composable
 fun ColumnScope.AppScreenContent(
     viewState: ViewState,
-    context: Context,
-    coroutineScope: CoroutineScope,
-    audioEngine: AudioEngine,
-    audioManager: AudioManager,
-    audioFocusRequest: AudioFocusRequest?,
-    focusChangeListener: AudioManager.OnAudioFocusChangeListener,
     // Library
     musicRootDirectory: File,
     scannedItems: List<com.yuka.musicplayer.model.ScannedMusicItem>,
@@ -75,7 +67,6 @@ fun ColumnScope.AppScreenContent(
     onVolumeChange: (Float) -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrev: () -> Unit,
-    onStopPlayback: () -> Unit,
     // Settings
     sharedPref: SharedPreferences,
     bgMode: String,
@@ -103,110 +94,145 @@ fun ColumnScope.AppScreenContent(
     onOpenPermissionDialog: () -> Unit,
     onOpenHelp: () -> Unit,
     updateCheckState: UpdateCheckState,
-    onCheckForUpdate: () -> Unit,
     onOpenUpdateDialog: () -> Unit,
     usbBufferProfile: Int = 1,
     onUsbBufferProfileChange: (Int) -> Unit = {}
 ) {
-    when (viewState) {
-        ViewState.LIBRARY -> {
-            LibraryView(
-                musicRootDirectory = musicRootDirectory,
-                scannedItems = scannedItems,
-                isScanning = isScanningLibrary,
-                playingFile = currentTrack?.file,
-                playlistSet = playlistSet,
-                searchQuery = searchQuery,
-                sortMode = librarySortMode,
-                onCycleSort = onCycleSort,
-                onRefresh = onRefreshLibrary,
-                onChangeDirectory = onChangeDirectory,
-                onSearchChange = onSearchChange,
-                onTrackSelected = onSelectLibraryItem,
-                onTrackLongPressed = { file ->
-                    onTrackActionTarget(file)
-                },
-                modifier = Modifier.weight(1f)
-            )
-        }
-        ViewState.PLAYLIST -> {
-            PlaylistView(
-                playlists = playlists,
-                selectedPlaylistId = selectedPlaylistId,
-                activePlayingPlaylistId = activePlayingPlaylistId,
-                playingFile = currentTrack?.file,
-                isShuffleEnabled = isShuffleEnabled,
-                repeatMode = repeatMode,
-                priorityQueueSize = priorityQueueSize,
-                onSelectPlaylistTab = onSelectPlaylistTab,
-                onCreatePlaylistClick = onCreatePlaylistClick,
-                onRenamePlaylistClick = onRenamePlaylistClick,
-                onDeletePlaylistClick = onDeletePlaylistClick,
-                onToggleShuffle = onToggleShuffle,
-                onCycleRepeat = onCycleRepeat,
-                onOpenQueue = onOpenQueue,
-                onFileSelected = onPlayPlaylistFile,
-                onFileRemoved = onPlaylistFileRemoved,
-                onClearPlaylist = onClearPlaylistAction,
-                onTrackLongPressed = onTrackActionTarget,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        ViewState.TRACK -> {
-            TrackView(
-                track = currentTrack,
-                playbackPosition = playbackPosition,
-                isPlaying = isPlaying,
-                currentVolume = currentVolume,
-                isShuffleEnabled = isShuffleEnabled,
-                repeatMode = repeatMode,
-                priorityQueueSize = priorityQueueSize,
-                onTogglePlay = onTogglePlay,
-                onVolumeChange = onVolumeChange,
-                onPlayNext = onPlayNext,
-                onPlayPrev = onPlayPrev,
-                onStop = onStopPlayback,
-                onToggleShuffle = onToggleShuffle,
-                onCycleRepeat = onCycleRepeat,
-                onOpenQueue = onOpenQueue,
-                onSeekTo = onSeekTo,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        ViewState.SETTINGS -> {
-            SettingsView(
-                prefs = sharedPref,
-                bgMode = bgMode,
-                onBgModeChange = onBgModeChange,
-                fontScale = fontScale,
-                onFontScaleChange = onFontScaleChange,
-                hapticEnabled = hapticEnabled,
-                onHapticChange = onHapticChange,
-                keepAwake = keepAwake,
-                onKeepAwakeChange = onKeepAwakeChange,
-                defaultScreen = defaultScreenStr,
-                onDefaultScreenChange = onDefaultScreenChange,
-                accentMode = accentMode,
-                onAccentModeChange = onAccentModeChange,
-                accentFixedColorStr = accentFixedColorStr,
-                onAccentFixedColorChange = onAccentFixedColorChange,
-                isNotificationGranted = isNotificationGranted,
-                isStorageGranted = isStorageGranted,
-                isDndGranted = isDndGranted,
-                isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                onRequestNotification = onRequestNotification,
-                onRequestStorage = onRequestStorage,
-                onRequestDnd = onRequestDnd,
-                onRequestBatteryOptimization = onRequestBatteryOptimization,
-                onOpenPermissionDialog = onOpenPermissionDialog,
-                onOpenHelp = onOpenHelp,
-                updateCheckState = updateCheckState,
-                onCheckForUpdate = onCheckForUpdate,
-                onOpenUpdateDialog = onOpenUpdateDialog,
-                usbBufferProfile = usbBufferProfile,
-                onUsbBufferProfileChange = onUsbBufferProfileChange,
-                modifier = Modifier.weight(1f)
-            )
+    fun viewStateIndex(state: ViewState): Int = when (state) {
+        ViewState.LIBRARY -> 0
+        ViewState.PLAYLIST -> 1
+        ViewState.TRACK -> 2
+        ViewState.SETTINGS -> 3
+    }
+
+    Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+        AnimatedContent(
+            targetState = viewState,
+            transitionSpec = {
+                val forward = viewStateIndex(targetState) > viewStateIndex(initialState)
+                if (forward) {
+                    (slideInHorizontally(
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
+                        initialOffsetX = { fullWidth -> (fullWidth * 0.25f).toInt() }
+                    ) + fadeIn(animationSpec = tween(220))).togetherWith(
+                        slideOutHorizontally(
+                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
+                            targetOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() }
+                        ) + fadeOut(animationSpec = tween(180))
+                    )
+                } else {
+                    (slideInHorizontally(
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
+                        initialOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() }
+                    ) + fadeIn(animationSpec = tween(220))).togetherWith(
+                        slideOutHorizontally(
+                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
+                            targetOffsetX = { fullWidth -> (fullWidth * 0.25f).toInt() }
+                        ) + fadeOut(animationSpec = tween(180))
+                    )
+                }
+            },
+            label = "ScreenTransition"
+        ) { targetScreen ->
+            when (targetScreen) {
+                ViewState.LIBRARY -> {
+                    LibraryView(
+                        musicRootDirectory = musicRootDirectory,
+                        scannedItems = scannedItems,
+                        isScanning = isScanningLibrary,
+                        playingFile = currentTrack?.file,
+                        playlistSet = playlistSet,
+                        searchQuery = searchQuery,
+                        sortMode = librarySortMode,
+                        onCycleSort = onCycleSort,
+                        onRefresh = onRefreshLibrary,
+                        onChangeDirectory = onChangeDirectory,
+                        onSearchChange = onSearchChange,
+                        onTrackSelected = onSelectLibraryItem,
+                        onTrackLongPressed = { file ->
+                            onTrackActionTarget(file)
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                ViewState.PLAYLIST -> {
+                    PlaylistView(
+                        playlists = playlists,
+                        selectedPlaylistId = selectedPlaylistId,
+                        activePlayingPlaylistId = activePlayingPlaylistId,
+                        playingFile = currentTrack?.file,
+                        isShuffleEnabled = isShuffleEnabled,
+                        repeatMode = repeatMode,
+                        priorityQueueSize = priorityQueueSize,
+                        onSelectPlaylistTab = onSelectPlaylistTab,
+                        onCreatePlaylistClick = onCreatePlaylistClick,
+                        onRenamePlaylistClick = onRenamePlaylistClick,
+                        onDeletePlaylistClick = onDeletePlaylistClick,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
+                        onOpenQueue = onOpenQueue,
+                        onFileSelected = onPlayPlaylistFile,
+                        onFileRemoved = onPlaylistFileRemoved,
+                        onClearPlaylist = onClearPlaylistAction,
+                        onTrackLongPressed = onTrackActionTarget,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                ViewState.TRACK -> {
+                    TrackView(
+                        track = currentTrack,
+                        playbackPosition = playbackPosition,
+                        isPlaying = isPlaying,
+                        currentVolume = currentVolume,
+                        isShuffleEnabled = isShuffleEnabled,
+                        repeatMode = repeatMode,
+                        priorityQueueSize = priorityQueueSize,
+                        onTogglePlay = onTogglePlay,
+                        onVolumeChange = onVolumeChange,
+                        onPlayNext = onPlayNext,
+                        onPlayPrev = onPlayPrev,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
+                        onOpenQueue = onOpenQueue,
+                        onSeekTo = onSeekTo,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                ViewState.SETTINGS -> {
+                    SettingsView(
+                        prefs = sharedPref,
+                        bgMode = bgMode,
+                        onBgModeChange = onBgModeChange,
+                        fontScale = fontScale,
+                        onFontScaleChange = onFontScaleChange,
+                        hapticEnabled = hapticEnabled,
+                        onHapticChange = onHapticChange,
+                        keepAwake = keepAwake,
+                        onKeepAwakeChange = onKeepAwakeChange,
+                        defaultScreen = defaultScreenStr,
+                        onDefaultScreenChange = onDefaultScreenChange,
+                        accentMode = accentMode,
+                        onAccentModeChange = onAccentModeChange,
+                        accentFixedColorStr = accentFixedColorStr,
+                        onAccentFixedColorChange = onAccentFixedColorChange,
+                        isNotificationGranted = isNotificationGranted,
+                        isStorageGranted = isStorageGranted,
+                        isDndGranted = isDndGranted,
+                        isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
+                        onRequestNotification = onRequestNotification,
+                        onRequestStorage = onRequestStorage,
+                        onRequestDnd = onRequestDnd,
+                        onRequestBatteryOptimization = onRequestBatteryOptimization,
+                        onOpenPermissionDialog = onOpenPermissionDialog,
+                        onOpenHelp = onOpenHelp,
+                        updateCheckState = updateCheckState,
+                        onOpenUpdateDialog = onOpenUpdateDialog,
+                        usbBufferProfile = usbBufferProfile,
+                        onUsbBufferProfileChange = onUsbBufferProfileChange,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
         }
     }
 }

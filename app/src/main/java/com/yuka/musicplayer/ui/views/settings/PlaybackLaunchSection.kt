@@ -88,45 +88,70 @@ fun PlaybackLaunchSection(
                     .fillMaxWidth()
                     .background(Color(0xFF2A1B00), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
                     .border(0.8.dp, Color(0xFFFFB300).copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                    .padding(8.dp),
+                    .padding(10.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "⚠️ SAMSUNG DOLBY ATMOS BYPASS",
-                        color = Color(0xFFFFB300),
-                        fontFamily = TerminalFont,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        com.yuka.musicplayer.ui.components.GlyphWarning(
+                            color = Color(0xFFFFB300),
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "SAMSUNG DOLBY ATMOS BYPASS",
+                            color = Color(0xFFFFB300),
+                            fontFamily = TerminalFont,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Samsung One UI forces Dolby Atmos DSP on USB. For pure bit-perfect imaging & wide soundstage, turn Dolby Atmos and Equalizer OFF.",
                         color = TerminalGray,
                         fontFamily = TerminalFont,
                         fontSize = 8.5.sp,
-                        lineHeight = 12.sp
+                        lineHeight = 13.sp
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                com.yuka.musicplayer.ui.components.RetroButton(
-                    text = "SETTINGS",
+                com.yuka.musicplayer.ui.components.TactileBox(
                     onClick = {
                         com.yuka.musicplayer.util.SamsungAudioEffectHelper.openSoundQualitySettings(context)
                     },
-                    modifier = Modifier.height(28.dp)
-                )
+                    pressedScale = 0.92f,
+                    modifier = Modifier
+                        .background(Color(0xFFFFB300).copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                        .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "SETTINGS",
+                        color = Color(0xFFFFB300),
+                        fontFamily = TerminalFont,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "⚡ USB OTG 5V VBUS HEADROOM & IMPEDANCE ADVISORY",
-            color = Color(0xFFFF9100),
-            fontFamily = TerminalFont,
-            fontSize = 9.5.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            com.yuka.musicplayer.ui.components.GlyphBolt(
+                color = Color(0xFFFF9100),
+                modifier = Modifier.size(11.dp)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(
+                text = "USB OTG 5V VBUS HEADROOM & IMPEDANCE ADVISORY",
+                color = Color(0xFFFF9100),
+                fontFamily = TerminalFont,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
         Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = "Phone USB-C OTG ports deliver at most ~500mA (2.5W). High-current planar or high-impedance headphones can sag the 5V rail during bass transients, causing dynamic compression. For deep bass authority and maximum soundstage, use a dual-plug power injection OTG cable.",

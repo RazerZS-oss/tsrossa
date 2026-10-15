@@ -26,12 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -43,11 +44,17 @@ import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.model.RepeatMode
 import com.yuka.musicplayer.model.TrackInfo
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
 import kotlin.math.roundToInt
+import kotlinx.coroutines.isActive
 
+/**
+ * Precision Scrubber with smooth local time interpolation for 60/120fps glide.
+ * Preserves the exact 500ms engine polling rate while eliminating UI seek jumps.
+ */
 @Composable
 fun PrecisionScrubber(
     playbackPosition: Double,
@@ -60,23 +67,59 @@ fun PrecisionScrubber(
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableStateOf(0f) }
 
+    var interpolatedPosition by remember { mutableStateOf(playbackPosition) }
+    var lastAnchorPosition by remember { mutableStateOf(playbackPosition) }
+    var lastAnchorNanos by remember { mutableStateOf(0L) }
+
+    // Update anchor whenever the 500ms JNI poll pushes a new playbackPosition
+    LaunchedEffect(playbackPosition) {
+        lastAnchorPosition = playbackPosition
+        lastAnchorNanos = System.nanoTime()
+        if (!isDragging) {
+            interpolatedPosition = playbackPosition
+        }
+    }
+
+    // Smooth 60/120fps local visual interpolation between 500ms JNI polls
+    LaunchedEffect(isPlaying, isDragging, durationSeconds) {
+        if (isPlaying && !isDragging && durationSeconds > 0.0) {
+            lastAnchorNanos = System.nanoTime()
+            lastAnchorPosition = interpolatedPosition
+            while (isActive) {
+                withFrameNanos { frameTimeNanos ->
+                    val elapsedSec = ((frameTimeNanos - lastAnchorNanos).coerceAtLeast(0L)) / 1_000_000_000.0
+                    val boundedElapsed = elapsedSec.coerceAtMost(0.65)
+                    interpolatedPosition = (lastAnchorPosition + boundedElapsed).coerceIn(0.0, durationSeconds)
+                }
+            }
+        }
+    }
+
     val currentFraction = if (durationSeconds > 0) {
-        (playbackPosition / durationSeconds).toFloat().coerceIn(0f, 1f)
+        ((if (isDragging) dragProgress.toDouble() * durationSeconds else interpolatedPosition) / durationSeconds)
+            .toFloat().coerceIn(0f, 1f)
     } else 0f
 
     val displayProgress = if (isDragging) dragProgress else currentFraction
     val targetSeconds = displayProgress.toDouble() * durationSeconds
 
-    // Format timestamps
-    val curPosSec = if (isDragging) targetSeconds else playbackPosition
-    val curMin = (curPosSec / 60).toInt()
-    val curSec = (curPosSec % 60).toInt()
-    val posStr = String.format("%02d:%02d", curMin, curSec)
+    // Format timestamps (remembered by integer second to avoid GC churn at 120fps)
+    val curPosSec = if (isDragging) targetSeconds else interpolatedPosition
+    val curSecInt = curPosSec.toInt()
+    val durSecInt = durationSeconds.toInt()
 
-    val remainingSec = (durationSeconds - curPosSec).coerceAtLeast(0.0)
-    val remMin = (remainingSec / 60).toInt()
-    val remSec = (remainingSec % 60).toInt()
-    val durStr = String.format("-%02d:%02d", remMin, remSec)
+    val posStr = remember(curSecInt) {
+        val curMin = curSecInt / 60
+        val curSec = curSecInt % 60
+        String.format(java.util.Locale.US, "%02d:%02d", curMin, curSec)
+    }
+
+    val durStr = remember(curSecInt, durSecInt) {
+        val remainingSec = (durationSeconds - curPosSec).coerceAtLeast(0.0).toInt()
+        val remMin = remainingSec / 60
+        val remSec = remainingSec % 60
+        String.format(java.util.Locale.US, "-%02d:%02d", remMin, remSec)
+    }
 
     val animatedThumbRadius by animateFloatAsState(
         targetValue = if (isDragging) 6.5f else 4.5f,
@@ -86,7 +129,7 @@ fun PrecisionScrubber(
 
     BoxWithConstraints(
         modifier = modifier
-            .fillMaxWidth(0.88f)
+            .fillMaxWidth(0.90f)
             .systemGestureExclusion()
     ) {
         val totalWidthPx = constraints.maxWidth.toFloat()
@@ -94,8 +137,6 @@ fun PrecisionScrubber(
         val trackStart = with(density) { 6.dp.toPx() }
         val trackEnd = totalWidthPx - trackStart
         val trackWidth = (trackEnd - trackStart).coerceAtLeast(1f)
-
-        val thumbXPx = trackStart + displayProgress * trackWidth
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -131,6 +172,8 @@ fun PrecisionScrubber(
             ) {
                 val cy = size.height / 2f
                 val trackStroke = 3.dp.toPx()
+                val thumbXPx = trackStart + displayProgress * trackWidth
+                val thumbR = with(density) { animatedThumbRadius.dp.toPx() }
 
                 // Background track rail (Subtle dark navy groove)
                 drawLine(
@@ -141,14 +184,30 @@ fun PrecisionScrubber(
                     cap = StrokeCap.Round
                 )
 
+                // Calibration Ticks at 25%, 50%, 75% (Studio fader instrument calibration)
+                val tickH = 4.dp.toPx()
+                val tickStroke = 1.dp.toPx()
+                val tickColor = Color(0xFF222B3F)
+                val tickFractions = floatArrayOf(0.25f, 0.50f, 0.75f)
+                for (f in tickFractions) {
+                    val tx = trackStart + f * trackWidth
+                    drawLine(
+                        color = tickColor,
+                        start = Offset(tx, cy - tickH),
+                        end = Offset(tx, cy + tickH),
+                        strokeWidth = tickStroke,
+                        cap = StrokeCap.Round
+                    )
+                }
+
                 // Active Played rail
                 if (thumbXPx > trackStart) {
                     // Outer subtle glow
                     drawLine(
-                        color = dynamicColor.copy(alpha = 0.35f),
+                        color = dynamicColor.copy(alpha = 0.30f),
                         start = Offset(trackStart, cy),
                         end = Offset(thumbXPx, cy),
-                        strokeWidth = trackStroke + 3.dp.toPx(),
+                        strokeWidth = trackStroke + 2.5.dp.toPx(),
                         cap = StrokeCap.Round
                     )
                     // Core line
@@ -162,9 +221,8 @@ fun PrecisionScrubber(
                 }
 
                 // Thumb outer aura glow
-                val thumbR = with(density) { animatedThumbRadius.dp.toPx() }
                 drawCircle(
-                    color = dynamicColor.copy(alpha = if (isDragging) 0.40f else 0.20f),
+                    color = dynamicColor.copy(alpha = if (isDragging) 0.40f else 0.18f),
                     radius = thumbR + 4.dp.toPx(),
                     center = Offset(thumbXPx, cy)
                 )
@@ -194,16 +252,16 @@ fun PrecisionScrubber(
             ) {
                 Text(
                     text = posStr,
-                    color = if (isDragging) dynamicColor else TerminalWhite.copy(alpha = 0.85f),
+                    color = if (isDragging) dynamicColor else TerminalWhite.copy(alpha = 0.90f),
                     fontFamily = TerminalFont,
-                    fontWeight = if (isDragging) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 10.5.sp
+                    fontWeight = if (isDragging) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 10.sp
                 )
                 Text(
                     text = durStr,
-                    color = TerminalGray.copy(alpha = 0.75f),
+                    color = TerminalGray.copy(alpha = 0.70f),
                     fontFamily = TerminalFont,
-                    fontSize = 10.5.sp
+                    fontSize = 10.sp
                 )
             }
         }
@@ -223,7 +281,6 @@ fun TrackView(
     onVolumeChange: (Float) -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrev: () -> Unit,
-    onStop: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
     onOpenQueue: () -> Unit,
@@ -256,31 +313,42 @@ fun TrackView(
         }
 
         val animatedGlowColor by animateColorAsState(
-            targetValue = track.dominantColor.copy(alpha = 0.55f),
-            animationSpec = tween(durationMillis = 600),
+            targetValue = track.dominantColor.copy(alpha = 0.45f),
+            animationSpec = tween(durationMillis = 650),
             label = "coverArtUnderglow"
+        )
+
+        // Album art spring scale on play/pause (RenderThread execution)
+        val albumScale by animateFloatAsState(
+            targetValue = if (isPlaying) 1.0f else 0.95f,
+            animationSpec = spring(dampingRatio = 0.80f, stiffness = 400f),
+            label = "albumArtScale"
         )
 
         // 1. Album Art Hero with Organic Glow Bloom
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.68f)
-                .aspectRatio(1f),
+                .aspectRatio(1f)
+                .graphicsLayer {
+                    scaleX = albumScale
+                    scaleY = albumScale
+                },
             contentAlignment = Alignment.Center
         ) {
             // Ambient organic bloom
             Box(
                 modifier = Modifier
-                    .fillMaxSize(1.18f)
+                    .fillMaxSize(1.15f)
                     .background(
                         Brush.radialGradient(
                             colors = listOf(animatedGlowColor, Color.Transparent)
                         )
                     )
-                    .blur(26.dp)
+                    .blur(28.dp)
             )
 
-            // Album cover container (Clean 12dp rounded corner, layered shadow)
+            // Album cover container
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -313,7 +381,7 @@ fun TrackView(
             }
         }
 
-        // 2. Track Title & Artist
+        // 2. Track Title & Artist (Dual Typography: ModernSansFont for title/artist)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
@@ -322,9 +390,9 @@ fun TrackView(
             Text(
                 text = track.title,
                 color = TerminalWhite,
-                fontSize = 17.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = TerminalFont,
+                fontFamily = ModernSansFont,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 modifier = Modifier
@@ -341,8 +409,9 @@ fun TrackView(
             Text(
                 text = track.artist,
                 color = dynamicColor.copy(alpha = 0.9f),
-                fontSize = 12.5.sp,
-                fontFamily = TerminalFont,
+                fontSize = 13.sp,
+                fontFamily = ModernSansFont,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 modifier = Modifier
@@ -354,14 +423,15 @@ fun TrackView(
             )
         }
 
-        // 3. Audiophile Spec Strip (Minimalist Industrial Badges with Horizontal Scroll)
+        // 3. Unified Audiophile Spec Capsule
+        val isBitPerfect = currentVolume >= 0.999f
         val specScrollState = rememberScrollState()
         Row(
             modifier = Modifier
                 .background(Color(0xFF0A0E1A), RoundedCornerShape(20.dp))
-                .border(0.6.dp, dynamicColor.copy(alpha = 0.20f), RoundedCornerShape(20.dp))
+                .border(0.6.dp, dynamicColor.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
                 .horizontalScroll(specScrollState)
-                .padding(horizontal = 12.dp, vertical = 3.dp),
+                .padding(horizontal = 14.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -373,43 +443,44 @@ fun TrackView(
                 fontFamily = TerminalFont
             )
             if (track.bitrateKbps > 0) {
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(7.dp))
                 Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(7.dp))
                 Text(
                     text = "${track.bitrateKbps} KBPS",
                     color = TerminalWhite.copy(alpha = 0.85f),
                     fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
                     fontFamily = TerminalFont
                 )
             }
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(7.dp))
             Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(7.dp))
             Text(
-                text = "DIRECT USB",
-                color = TerminalWhite.copy(alpha = 0.75f),
+                text = "MLOCK RAM",
+                color = TerminalWhite.copy(alpha = 0.70f),
                 fontSize = 9.sp,
+                fontWeight = FontWeight.Normal,
                 fontFamily = TerminalFont
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(7.dp))
             Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(7.dp))
             Text(
-                text = "BIT-PERFECT",
-                color = dynamicColor.copy(alpha = 0.85f),
+                text = if (isBitPerfect) "BIT-PERFECT" else "USB DAC",
+                color = if (isBitPerfect) dynamicColor else TerminalWhite.copy(alpha = 0.85f),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = TerminalFont
             )
             if (track.isMqa) {
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(7.dp))
                 Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(7.dp))
                 Text(
                     text = "MQA PASSTHROUGH",
-                    color = Color(0xFFFF4081), // Authentic MQA Magenta
+                    color = Color(0xFFFF4081),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = TerminalFont
@@ -421,14 +492,15 @@ fun TrackView(
         PrecisionScrubber(
             playbackPosition = playbackPosition,
             durationSeconds = track.durationSeconds,
-            isPlaying = isPlaying,
             dynamicColor = dynamicColor,
+            isPlaying = isPlaying,
             onSeekTo = onSeekTo
         )
 
         // 5. Tactile Volume Stepper Row with 0 dBFS Bit-Perfect Lock
         val volPercent = (currentVolume * 100).roundToInt()
         val isBitPerfectLocked = currentVolume >= 0.999f
+        val dbAttenuation = if (currentVolume <= 0.0001f) "-∞ dB" else String.format(java.util.Locale.US, "%.1f dB", 20.0 * kotlin.math.log10(currentVolume.toDouble()))
         Row(
             modifier = Modifier.fillMaxWidth(0.92f),
             horizontalArrangement = Arrangement.Center,
@@ -440,7 +512,7 @@ fun TrackView(
                 modifier = Modifier
                     .size(width = 36.dp, height = 28.dp)
                     .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, dynamicColor.copy(alpha = 0.40f), RoundedCornerShape(6.dp))
             ) {
                 Text("-", color = TerminalWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
             }
@@ -456,19 +528,19 @@ fun TrackView(
                     .background(if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.16f) else Color(0xFF0A0E1A), RoundedCornerShape(6.dp))
                     .border(
                         0.8.dp,
-                        if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.75f) else dynamicColor.copy(alpha = 0.40f),
+                        if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.75f) else dynamicColor.copy(alpha = 0.35f),
                         RoundedCornerShape(6.dp)
                     )
                     .padding(horizontal = 10.dp)
             ) {
-                    Text(
-                        text = if (isBitPerfectLocked) "0 dBFS BIT-PERFECT (INT)" else "VOL: $volPercent%",
-                        color = if (isBitPerfectLocked) dynamicColor else TerminalWhite,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = TerminalFont,
-                        fontSize = 9.sp
-                    )
-                }
+                Text(
+                    text = if (isBitPerfectLocked) "0 dBFS BIT-PERFECT" else "VOL: $volPercent% ($dbAttenuation)",
+                    color = if (isBitPerfectLocked) dynamicColor else TerminalWhite,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = TerminalFont,
+                    fontSize = 9.sp
+                )
+            }
 
             Spacer(modifier = Modifier.width(6.dp))
 
@@ -478,7 +550,7 @@ fun TrackView(
                 modifier = Modifier
                     .size(width = 36.dp, height = 28.dp)
                     .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, dynamicColor.copy(alpha = 0.40f), RoundedCornerShape(6.dp))
             ) {
                 Text("+", color = TerminalWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
             }

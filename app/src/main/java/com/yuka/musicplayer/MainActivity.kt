@@ -389,7 +389,7 @@ fun KewApp(audioEngine: AudioEngine) {
 
     val currentAccentColor by animateColorAsState(
         targetValue = targetAccentColor,
-        animationSpec = tween(durationMillis = 350, easing = LinearEasing),
+        animationSpec = tween(durationMillis = 650, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "dynamicAccentCrossfade"
     )
 
@@ -542,7 +542,6 @@ fun KewApp(audioEngine: AudioEngine) {
     }
 
     LaunchedEffect(viewState, isPlaying, keepAwake) {
-        val activity = context as? android.app.Activity
         if (keepAwake && viewState == ViewState.TRACK && isPlaying) {
             activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
@@ -601,7 +600,7 @@ fun KewApp(audioEngine: AudioEngine) {
             // C++ reported surprise removal (hotplug).
             com.yuka.musicplayer.audio.AudioPlayerManager.handleDacDetached()
         }
-        audioEngine.onFormatIncompatibleCallback = { filename, bitDepth, sampleRate, reason ->
+        audioEngine.onFormatIncompatibleCallback = { filename, _, _, reason ->
             coroutineScope.launch(Dispatchers.Main) {
                 formatIncompatibleError = "$filename: $reason"
             }
@@ -1326,12 +1325,6 @@ fun KewApp(audioEngine: AudioEngine) {
 
         AppScreenContent(
             viewState = viewState,
-            context = context,
-            coroutineScope = coroutineScope,
-            audioEngine = audioEngine,
-            audioManager = audioManager,
-            audioFocusRequest = audioFocusRequest,
-            focusChangeListener = focusChangeListener,
             musicRootDirectory = musicRootDirectory,
             scannedItems = scannedLibraryItems,
             isScanningLibrary = isScanningLibrary,
@@ -1429,20 +1422,6 @@ fun KewApp(audioEngine: AudioEngine) {
             },
             onPlayNext = { playNext(false) },
             onPlayPrev = { playPrev() },
-            onStopPlayback = {
-                if (isPlaying) {
-                    audioEngine.pauseAudio()
-                    isPlaying = false
-                    pausedByTransientLoss = false
-                    setDndMode(false)
-                }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    audioManager.abandonAudioFocusRequest(audioFocusRequest!!)
-                } else {
-                    @Suppress("DEPRECATION")
-                    audioManager.abandonAudioFocus(focusChangeListener)
-                }
-            },
             sharedPref = sharedPref,
             bgMode = bgMode,
             onBgModeChange = {
@@ -1490,7 +1469,6 @@ fun KewApp(audioEngine: AudioEngine) {
             onOpenPermissionDialog = { showPermissionDialog = true },
             onOpenHelp = { showHelpPanel = true },
             updateCheckState = updateCheckState,
-            onCheckForUpdate = { triggerCheckUpdate() },
             onOpenUpdateDialog = { showUpdatePanel = true },
             usbBufferProfile = usbBufferProfile,
             onUsbBufferProfileChange = { newProfile ->
@@ -1508,8 +1486,28 @@ fun KewApp(audioEngine: AudioEngine) {
             }
         )
         
+        // Floating Mini-Player Bar (visible on all screens except main Player when track is loaded)
+        androidx.compose.animation.AnimatedVisibility(
+            visible = currentTrack != null && viewState != com.yuka.musicplayer.model.ViewState.TRACK,
+            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
+        ) {
+            currentTrack?.let { track ->
+                com.yuka.musicplayer.ui.components.MiniPlayerView(
+                    track = track,
+                    isPlaying = isPlaying,
+                    playbackPosition = playbackPosition,
+                    durationSeconds = track.durationSeconds,
+                    bgMode = bgMode,
+                    onTogglePlay = sharedOnTogglePlay,
+                    onNavigateToNowPlaying = { viewState = com.yuka.musicplayer.model.ViewState.TRACK }
+                )
+            }
+        }
+
         BottomNavigationBar(
             currentView = viewState,
+            bgMode = bgMode,
             onNavClick = { viewState = it }
         )
 

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.model.Playlist
 import com.yuka.musicplayer.model.RepeatMode
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
@@ -56,6 +57,7 @@ fun PlaylistView(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val accent = LocalAccentColor.current
     val currentPlaylist = remember(playlists, selectedPlaylistId) {
         playlists.firstOrNull { it.id == selectedPlaylistId } ?: playlists.firstOrNull()
     }
@@ -65,7 +67,7 @@ fun PlaylistView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         // --- Playlists Tabs / Selector Bar ---
         Row(
@@ -88,20 +90,20 @@ fun PlaylistView(
                         modifier = Modifier
                             .background(
                                 when {
-                                    isSelected -> LocalAccentColor.current.copy(alpha = 0.20f)
-                                    isPlayingThis -> LocalAccentColor.current.copy(alpha = 0.08f)
+                                    isSelected -> accent.copy(alpha = 0.18f)
+                                    isPlayingThis -> accent.copy(alpha = 0.08f)
                                     else -> Color(0xFF090D18)
                                 },
-                                RoundedCornerShape(4.dp)
+                                RoundedCornerShape(6.dp)
                             )
                             .border(
-                                1.dp,
+                                0.8.dp,
                                 when {
-                                    isSelected -> LocalAccentColor.current
-                                    isPlayingThis -> LocalAccentColor.current.copy(alpha = 0.5f)
+                                    isSelected -> accent
+                                    isPlayingThis -> accent.copy(alpha = 0.5f)
                                     else -> Color.White.copy(alpha = 0.08f)
                                 },
-                                RoundedCornerShape(4.dp)
+                                RoundedCornerShape(6.dp)
                             )
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -112,14 +114,14 @@ fun PlaylistView(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = playlist.name,
-                                color = if (isSelected || isPlayingThis) LocalAccentColor.current else TerminalWhite,
+                                color = if (isSelected || isPlayingThis) accent else TerminalWhite,
                                 fontSize = 10.5.sp,
-                                fontFamily = TerminalFont,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                fontFamily = ModernSansFont,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                             if (isPlayingThis) {
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("▶", color = LocalAccentColor.current, fontSize = 8.sp)
+                                Text("▶", color = accent, fontSize = 8.sp)
                             }
                         }
                     }
@@ -131,8 +133,8 @@ fun PlaylistView(
             // Create New Playlist Button
             Box(
                 modifier = Modifier
-                    .background(LocalAccentColor.current.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-                    .border(1.dp, LocalAccentColor.current.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                    .background(accent.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCreatePlaylistClick()
@@ -141,10 +143,11 @@ fun PlaylistView(
             ) {
                 Text(
                     text = "+ NEW",
-                    color = LocalAccentColor.current,
-                    fontSize = 10.sp,
-                    fontFamily = TerminalFont,
-                    fontWeight = FontWeight.Bold
+                    color = accent,
+                    fontSize = 9.5.sp,
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
                 )
             }
         }
@@ -154,8 +157,8 @@ fun PlaylistView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF090D18), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, LocalAccentColor.current.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                    .background(Color(0xFF090D18), RoundedCornerShape(8.dp))
+                    .border(0.8.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -165,9 +168,9 @@ fun PlaylistView(
                         Text(
                             text = currentPlaylist.name,
                             color = TerminalWhite,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = TerminalFont,
+                            fontFamily = ModernSansFont,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -175,13 +178,13 @@ fun PlaylistView(
                         if (isCurrentPlaying) {
                             Box(
                                 modifier = Modifier
-                                    .background(LocalAccentColor.current.copy(alpha = 0.15f), RoundedCornerShape(3.dp))
-                                    .border(0.5.dp, LocalAccentColor.current, RoundedCornerShape(3.dp))
+                                    .background(accent.copy(alpha = 0.15f), RoundedCornerShape(3.dp))
+                                    .border(0.5.dp, accent, RoundedCornerShape(3.dp))
                                     .padding(horizontal = 4.dp, vertical = 1.dp)
                             ) {
                                 Text(
                                     text = "PLAYING NOW",
-                                    color = LocalAccentColor.current,
+                                    color = accent,
                                     fontSize = 7.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = TerminalFont
@@ -198,22 +201,33 @@ fun PlaylistView(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .border(0.8.dp, LocalAccentColor.current.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                            .clickable { onRenamePlaylistClick(currentPlaylist) }
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                    ) {
-                        Text("RENAME", color = LocalAccentColor.current, fontSize = 8.5.sp, fontFamily = TerminalFont, fontWeight = FontWeight.Bold)
+                    if (currentTracks.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .border(0.8.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
+                                .clickable { onClearPlaylist(currentPlaylist.id) }
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Text("CLEAR", color = accent, fontSize = 8.sp, fontFamily = ModernSansFont, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                        }
                     }
 
                     Box(
                         modifier = Modifier
-                            .border(0.8.dp, Color(0xFFFF5252).copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                            .border(0.8.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(4.dp))
+                            .clickable { onRenamePlaylistClick(currentPlaylist) }
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                        Text("RENAME", color = accent, fontSize = 8.sp, fontFamily = ModernSansFont, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .border(0.8.dp, Color(0xFFFF5252).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                             .clickable { onDeletePlaylistClick(currentPlaylist) }
                             .padding(horizontal = 6.dp, vertical = 3.dp)
                     ) {
-                        Text("DELETE", color = Color(0xFFFF5252), fontSize = 8.5.sp, fontFamily = TerminalFont, fontWeight = FontWeight.Bold)
+                        Text("DELETE", color = Color(0xFFFF5252), fontSize = 8.sp, fontFamily = ModernSansFont, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
                     }
                 }
             }
@@ -232,40 +246,41 @@ fun PlaylistView(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(32.dp)
+                    .height(30.dp)
                     .border(
-                        1.dp,
-                        if (isShuffleEnabled) LocalAccentColor.current else LocalAccentColor.current.copy(alpha = 0.25f),
-                        RoundedCornerShape(4.dp)
+                        0.8.dp,
+                        if (isShuffleEnabled) accent else accent.copy(alpha = 0.25f),
+                        RoundedCornerShape(6.dp)
                     )
                     .background(
-                        if (isShuffleEnabled) LocalAccentColor.current.copy(alpha = 0.15f) else Color.Transparent,
-                        RoundedCornerShape(4.dp)
+                        if (isShuffleEnabled) accent.copy(alpha = 0.14f) else Color.Transparent,
+                        RoundedCornerShape(6.dp)
                     )
                     .clickable { onToggleShuffle() },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (isShuffleEnabled) "⇄ SHUFFLE ON" else "⇄ SHUFFLE OFF",
-                    color = if (isShuffleEnabled) LocalAccentColor.current else TerminalGray,
-                    fontSize = 10.sp,
-                    fontFamily = TerminalFont,
-                    fontWeight = FontWeight.Bold
+                    color = if (isShuffleEnabled) accent else TerminalGray,
+                    fontSize = 8.5.sp,
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
                 )
             }
 
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(32.dp)
+                    .height(30.dp)
                     .border(
-                        1.dp,
-                        if (repeatMode != RepeatMode.OFF) LocalAccentColor.current else LocalAccentColor.current.copy(alpha = 0.25f),
-                        RoundedCornerShape(4.dp)
+                        0.8.dp,
+                        if (repeatMode != RepeatMode.OFF) accent else accent.copy(alpha = 0.25f),
+                        RoundedCornerShape(6.dp)
                     )
                     .background(
-                        if (repeatMode != RepeatMode.OFF) LocalAccentColor.current.copy(alpha = 0.15f) else Color.Transparent,
-                        RoundedCornerShape(4.dp)
+                        if (repeatMode != RepeatMode.OFF) accent.copy(alpha = 0.14f) else Color.Transparent,
+                        RoundedCornerShape(6.dp)
                     )
                     .clickable { onCycleRepeat() },
                 contentAlignment = Alignment.Center
@@ -277,35 +292,37 @@ fun PlaylistView(
                 }
                 Text(
                     text = rText,
-                    color = if (repeatMode != RepeatMode.OFF) LocalAccentColor.current else TerminalGray,
-                    fontSize = 10.sp,
-                    fontFamily = TerminalFont,
-                    fontWeight = FontWeight.Bold
+                    color = if (repeatMode != RepeatMode.OFF) accent else TerminalGray,
+                    fontSize = 8.5.sp,
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
                 )
             }
 
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(32.dp)
+                    .height(30.dp)
                     .border(
-                        1.dp,
-                        if (priorityQueueSize > 0) LocalAccentColor.current else LocalAccentColor.current.copy(alpha = 0.25f),
-                        RoundedCornerShape(4.dp)
+                        0.8.dp,
+                        if (priorityQueueSize > 0) accent else accent.copy(alpha = 0.25f),
+                        RoundedCornerShape(6.dp)
                     )
                     .background(
-                        if (priorityQueueSize > 0) LocalAccentColor.current.copy(alpha = 0.15f) else Color.Transparent,
-                        RoundedCornerShape(4.dp)
+                        if (priorityQueueSize > 0) accent.copy(alpha = 0.14f) else Color.Transparent,
+                        RoundedCornerShape(6.dp)
                     )
                     .clickable { onOpenQueue() },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "☰ QUEUE ($priorityQueueSize)",
-                    color = if (priorityQueueSize > 0) LocalAccentColor.current else TerminalWhite,
-                    fontSize = 10.sp,
-                    fontFamily = TerminalFont,
-                    fontWeight = FontWeight.Bold
+                    color = if (priorityQueueSize > 0) accent else TerminalWhite,
+                    fontSize = 8.5.sp,
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
                 )
             }
         }
@@ -315,17 +332,17 @@ fun PlaylistView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 40.dp)
-                    .border(1.dp, TerminalGray.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, TerminalGray.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("[ NO PLAYLISTS CREATED ]", color = TerminalGray, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("[ NO PLAYLISTS CREATED ]", color = TerminalGray, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Tap '+ NEW' above to create your first playlist,\nor long-press any track in the Library.",
                         color = TerminalGray.copy(alpha = 0.7f),
-                        fontFamily = TerminalFont,
+                        fontFamily = ModernSansFont,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center
                     )
@@ -336,17 +353,17 @@ fun PlaylistView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 40.dp)
-                    .border(1.dp, TerminalGray.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, TerminalGray.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("[ PLAYLIST EMPTY ]", color = TerminalGray, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("[ PLAYLIST EMPTY ]", color = TerminalGray, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Long-press any audio track in Library\nto add it to this playlist.",
                         color = TerminalGray.copy(alpha = 0.7f),
-                        fontFamily = TerminalFont,
+                        fontFamily = ModernSansFont,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center
                     )
@@ -358,18 +375,21 @@ fun PlaylistView(
                     val file = File(path)
                     val isPlaying = isCurrentPlaying && file.absolutePath == playingFile?.absolutePath
                     val displayName = file.nameWithoutExtension.ifEmpty { file.name }
-                    
+                    val (trackTitle, trackArtist) = remember(displayName) {
+                        com.yuka.musicplayer.util.TrackTitleParser.parse(displayName)
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 2.dp)
                             .background(
-                                if (isPlaying) LocalAccentColor.current.copy(alpha = 0.10f) else Color(0xFF090D18),
+                                if (isPlaying) accent.copy(alpha = 0.12f) else Color(0xFF090D18),
                                 RoundedCornerShape(8.dp)
                             )
                             .border(
-                                width = 0.6.dp,
-                                color = if (isPlaying) LocalAccentColor.current.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.05f),
+                                width = if (isPlaying) 1.dp else 0.7.dp,
+                                color = if (isPlaying) accent.copy(alpha = 0.65f) else com.yuka.musicplayer.ui.theme.CardBorderSubtle,
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .combinedClickable(
@@ -381,55 +401,78 @@ fun PlaylistView(
                                     onTrackLongPressed(file)
                                 }
                             )
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (isPlaying) {
+                            // Left vertical accent indicator bar
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .height(22.dp)
+                                    .background(accent, RoundedCornerShape(1.5.dp))
+                            )
+                            Spacer(modifier = Modifier.width(7.dp))
+
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(1.5.dp),
                                 verticalAlignment = Alignment.Bottom,
                                 modifier = Modifier.height(12.dp)
                             ) {
-                                Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.6f).background(LocalAccentColor.current, RoundedCornerShape(1.dp)))
-                                Box(modifier = Modifier.width(2.dp).fillMaxHeight(1.0f).background(LocalAccentColor.current, RoundedCornerShape(1.dp)))
-                                Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.4f).background(LocalAccentColor.current, RoundedCornerShape(1.dp)))
+                                Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.6f).background(accent, RoundedCornerShape(1.dp)))
+                                Box(modifier = Modifier.width(2.dp).fillMaxHeight(1.0f).background(accent, RoundedCornerShape(1.dp)))
+                                Box(modifier = Modifier.width(2.dp).fillMaxHeight(0.4f).background(accent, RoundedCornerShape(1.dp)))
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                         } else {
                             Text(
                                 text = String.format("%02d", index + 1),
-                                color = TerminalGray.copy(alpha = 0.6f),
+                                color = if (isPlaying) accent else Color.White.copy(alpha = 0.50f),
                                 fontFamily = TerminalFont,
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Normal
+                                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                         }
 
-                        Text(
-                            text = displayName,
-                            color = if (isPlaying) LocalAccentColor.current else TerminalWhite,
-                            fontFamily = TerminalFont,
-                            fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        // Two-line Title & Artist
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = trackTitle,
+                                color = if (isPlaying) accent else TerminalWhite,
+                                fontFamily = ModernSansFont,
+                                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (trackArtist.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(1.5.dp))
+                                Text(
+                                    text = trackArtist,
+                                    color = if (isPlaying) accent.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.68f),
+                                    fontSize = 11.5.sp,
+                                    fontFamily = ModernSansFont,
+                                    fontWeight = FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
 
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         val ext = file.extension.uppercase()
                         Box(
                             modifier = Modifier
                                 .background(Color(0xFF101626), RoundedCornerShape(4.dp))
-                                .border(0.5.dp, if (isPlaying) LocalAccentColor.current.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                                .border(0.5.dp, if (isPlaying) accent.copy(alpha = 0.35f) else com.yuka.musicplayer.ui.theme.BadgeBorderSubtle, RoundedCornerShape(4.dp))
                                 .padding(horizontal = 5.dp, vertical = 1.dp)
                         ) {
                             Text(
                                 text = ext,
-                                color = if (isPlaying) LocalAccentColor.current else TerminalGray,
-                                fontSize = 8.5.sp,
+                                color = if (isPlaying) accent else TerminalGray,
+                                fontSize = 8.sp,
                                 fontFamily = TerminalFont,
                                 fontWeight = FontWeight.Bold
                             )

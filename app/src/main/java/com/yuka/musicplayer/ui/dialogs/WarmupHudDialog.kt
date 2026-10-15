@@ -73,17 +73,17 @@ fun WarmupHudDialog(
         Box(
             modifier = Modifier
                 .statusBarsPadding()
-                .padding(top = 10.dp, start = 16.dp, end = 16.dp)
+                .padding(top = 72.dp, start = 16.dp, end = 16.dp)
                 .fillMaxWidth(0.92f)
-                .shadow(elevation = 12.dp, shape = RoundedCornerShape(22.dp))
-                .clip(RoundedCornerShape(22.dp))
+                .shadow(elevation = 16.dp, shape = RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF090D18))
                 .border(
-                    width = 0.9.dp,
-                    color = if (isDone) LocalAccentColor.current else LocalAccentColor.current.copy(alpha = 0.45f),
-                    shape = RoundedCornerShape(22.dp)
+                    width = 1.dp,
+                    color = if (isDone) LocalAccentColor.current else LocalAccentColor.current.copy(alpha = 0.60f),
+                    shape = RoundedCornerShape(10.dp)
                 )
-                .padding(horizontal = 14.dp, vertical = 9.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -95,19 +95,19 @@ fun WarmupHudDialog(
                         // Flashing or solid indicator
                         Box(
                             modifier = Modifier
-                                .size(7.dp)
+                                .size(6.dp)
                                 .background(
                                     color = if (isDone) LocalAccentColor.current else LocalAccentColor.current.copy(alpha = pulseAlpha),
                                     shape = CircleShape
                                 )
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (isDone) "DAC READY · BIT-PERFECT" else "DAC WARMUP · PRIMING FIFO",
                             color = if (isDone) LocalAccentColor.current else TerminalWhite,
                             fontFamily = TerminalFont,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
+                            fontSize = 9.sp
                         )
                     }
 
@@ -116,34 +116,34 @@ fun WarmupHudDialog(
                         color = LocalAccentColor.current,
                         fontFamily = TerminalFont,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Slim Progress Bar Track
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.5.dp)
-                        .background(Color(0xFF141A28), RoundedCornerShape(1.5.dp))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress)
-                            .fillMaxHeight()
-                            .background(LocalAccentColor.current, RoundedCornerShape(1.5.dp))
+                        fontSize = 9.sp
                     )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // Slim Progress Bar Track
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(Color(0xFF141A28), RoundedCornerShape(1.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .background(LocalAccentColor.current, RoundedCornerShape(1.dp))
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
                 Text(
                     text = dacName.ifBlank { "BIT-PERFECT USB DAC" }.uppercase(),
                     color = Color.White.copy(alpha = 0.55f),
                     fontFamily = TerminalFont,
-                    fontSize = 8.5.sp,
+                    fontSize = 8.sp,
                     maxLines = 1
                 )
             }

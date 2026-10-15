@@ -38,7 +38,6 @@ fun SettingsView(
     onOpenPermissionDialog: () -> Unit = {},
     onOpenHelp: () -> Unit = {},
     updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
-    onCheckForUpdate: () -> Unit = {},
     onOpenUpdateDialog: () -> Unit = {},
     usbBufferProfile: Int = 1,
     onUsbBufferProfileChange: (Int) -> Unit = {},
@@ -104,5 +103,8 @@ fun SettingsView(
             updateCheckState = updateCheckState,
             onOpenUpdateDialog = onOpenUpdateDialog
         )
+
+        // Bottom headroom so the last card scrolls comfortably above MiniPlayer & Navigation bar
+        Spacer(modifier = Modifier.height(72.dp))
     }
 }

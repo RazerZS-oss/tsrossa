@@ -1,6 +1,7 @@
 package com.yuka.musicplayer.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,26 +13,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
-import com.yuka.musicplayer.ui.theme.TerminalFont
-import com.yuka.musicplayer.ui.theme.TerminalWhite
 
 /**
  * Modern Ergonomic Bottom Sheet for Dialogs, Panels, and Context Menus.
- * Slides gracefully from bottom, supports backdrop dismiss, top drag-handle, and rounded top corners.
+ * Slides gracefully from bottom with spring physics, animated scrim, and tactile studio borders.
  */
 @Composable
 fun CyberBottomSheet(
@@ -52,7 +48,7 @@ fun CyberBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.70f))
+                    .background(Color.Black.copy(alpha = 0.72f))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -77,7 +73,7 @@ fun CyberBottomSheet(
                     .background(Color(0xFF090D18))
                     .border(
                         width = 0.8.dp,
-                        color = LocalAccentColor.current.copy(alpha = 0.30f),
+                        color = LocalAccentColor.current.copy(alpha = 0.28f),
                         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
                     )
 
