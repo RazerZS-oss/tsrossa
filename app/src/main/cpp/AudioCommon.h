@@ -68,3 +68,14 @@ inline std::string json_escape(const std::string& s) {
   }
   return result;
 }
+
+inline std::string get_file_basename(const std::string &path) {
+  if (path.empty()) return "";
+  size_t lastSlash = path.find_last_of('/');
+  if (lastSlash != std::string::npos && lastSlash + 1 < path.size()) {
+    return path.substr(lastSlash + 1);
+  } else if (lastSlash != std::string::npos) {
+    return "";
+  }
+  return path;
+}

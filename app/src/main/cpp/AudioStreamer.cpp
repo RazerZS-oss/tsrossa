@@ -642,9 +642,7 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
       }
       LOGE("FORMAT REFUSED: %s — File: %s", reason.c_str(), savedPath.c_str());
 
-      std::string filename = savedPath;
-      size_t lastSlash = filename.find_last_of('/');
-      if (lastSlash != std::string::npos) filename = filename.substr(lastSlash + 1);
+      std::string filename = get_file_basename(savedPath);
 
       {
         std::lock_guard<std::mutex> hlock(g_audioState.refusedHistoryMutex);
@@ -1051,7 +1049,6 @@ bool clear_next_track_internal() {
     munlock(g_audioState.pcmBufferNext.data(),
             g_audioState.pcmBufferNext.size() * sizeof(int32_t));
     g_audioState.pcmBufferNext.clear();
-    g_audioState.pcmBufferNext.shrink_to_fit();
   }
   g_audioState.sampleRateNext.store(0);
   g_audioState.channelsNext.store(0);
