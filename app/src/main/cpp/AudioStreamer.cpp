@@ -328,8 +328,8 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
 
     while (bytes_filled < bytes_to_send && g_audioState.isPlaying.load() &&
            !g_audioState.pcmBuffer.empty()) {
-      size_t currentIndex = g_audioState.pcmIndex.load();
-      size_t totalFrames = g_audioState.decodedFrames.load();
+      size_t currentIndex = g_audioState.pcmIndex.load(std::memory_order_relaxed);
+      size_t totalFrames = g_audioState.decodedFrames.load(std::memory_order_acquire);
       size_t src_bytes_per_frame =
           g_audioState.channels.load() * sizeof(int32_t);
       size_t dst_bytes_per_frame =
@@ -340,6 +340,13 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
       size_t frames_avail =
           (totalFrames > currentIndex) ? (totalFrames - currentIndex) : 0;
       size_t frames_to_read = std::min(frames_needed, frames_avail);
+
+      if (frames_to_read == 0 && g_audioState.isDecoding.load()) {
+        // Decoder is lagging behind playback: fill current packet with silence to prevent squeaks/clicks
+        memset(buffer + data_offset + bytes_filled, 0, bytes_needed);
+        bytes_filled += bytes_needed;
+        break;
+      }
 
       if (frames_to_read > 0) {
         size_t num_samples = frames_to_read * g_audioState.channels.load();
@@ -896,7 +903,7 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
             toRead, g_audioState.pcmBuffer.data() + (framesRead * newChannels));
         if (read == 0) break;
         framesRead += read;
-        g_audioState.decodedFrames.store(framesRead);
+        g_audioState.decodedFrames.store(framesRead, std::memory_order_release);
       }
       decoder->close();
       g_audioState.isDecoding.store(false);
