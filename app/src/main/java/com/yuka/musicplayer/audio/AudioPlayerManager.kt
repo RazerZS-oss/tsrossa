@@ -17,6 +17,7 @@ object AudioPlayerManager {
     var isPlaying: Boolean = false
     var isDacConnected: Boolean = false
     var currentPlaybackSource: PlaybackSource = PlaybackSource.LIBRARY
+    var activePlayingPlaylistId: String? = null
     var playlistPaths: List<String> = emptyList()
     var priorityQueue: List<File> = emptyList()
 

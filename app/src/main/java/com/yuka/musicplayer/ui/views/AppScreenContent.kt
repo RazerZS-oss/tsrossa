@@ -15,8 +15,6 @@ import com.yuka.musicplayer.model.PlaybackSource
 import com.yuka.musicplayer.model.RepeatMode
 import com.yuka.musicplayer.model.TrackInfo
 import com.yuka.musicplayer.model.ViewState
-import com.yuka.musicplayer.model.clearPlaylist
-import com.yuka.musicplayer.model.removePlaylist
 import com.yuka.musicplayer.model.sortLibraryFiles
 import com.yuka.musicplayer.update.UpdateCheckState
 import java.io.File
@@ -38,9 +36,10 @@ fun ColumnScope.AppScreenContent(
     audioFocusRequest: AudioFocusRequest?,
     focusChangeListener: AudioManager.OnAudioFocusChangeListener,
     // Library
-    currentDirectory: File,
-    onNavigateDirectory: (File) -> Unit,
-    filesInDir: List<File>,
+    musicRootDirectory: File,
+    scannedItems: List<com.yuka.musicplayer.model.ScannedMusicItem>,
+    isScanningLibrary: Boolean,
+    onChangeDirectory: () -> Unit,
     currentTrack: TrackInfo?,
     playlistSet: Set<String>,
     searchQuery: String,
@@ -49,19 +48,24 @@ fun ColumnScope.AppScreenContent(
     onCycleSort: () -> Unit,
     onRefreshLibrary: () -> Unit,
     onTrackActionTarget: (File) -> Unit,
-    onPlayLibraryFile: (File) -> Unit,
+    onSelectLibraryItem: (com.yuka.musicplayer.model.ScannedMusicItem) -> Unit,
     // Playlist
-    playlistPaths: List<String>,
-    onUpdatePlaylistPaths: (List<String>) -> Unit,
+    playlists: List<com.yuka.musicplayer.model.Playlist>,
+    selectedPlaylistId: String,
+    activePlayingPlaylistId: String?,
+    onSelectPlaylistTab: (String) -> Unit,
+    onCreatePlaylistClick: () -> Unit,
+    onRenamePlaylistClick: (com.yuka.musicplayer.model.Playlist) -> Unit,
+    onDeletePlaylistClick: (com.yuka.musicplayer.model.Playlist) -> Unit,
     isShuffleEnabled: Boolean,
     onToggleShuffle: () -> Unit,
     repeatMode: RepeatMode,
     onCycleRepeat: () -> Unit,
     priorityQueueSize: Int,
     onOpenQueue: () -> Unit,
-    onPlayPlaylistFile: (File) -> Unit,
-    onPlaylistFileRemoved: (String) -> Unit,
-    onClearPlaylistAction: () -> Unit,
+    onPlayPlaylistFile: (File, String) -> Unit,
+    onPlaylistFileRemoved: (String, String) -> Unit,
+    onClearPlaylistAction: (String) -> Unit,
     // Track Player
     playbackPosition: Double,
     onSeekTo: (Double) -> Unit,
@@ -107,31 +111,37 @@ fun ColumnScope.AppScreenContent(
     when (viewState) {
         ViewState.LIBRARY -> {
             LibraryView(
-                currentDirectory = currentDirectory,
-                filesInDir = filesInDir,
+                musicRootDirectory = musicRootDirectory,
+                scannedItems = scannedItems,
+                isScanning = isScanningLibrary,
                 playingFile = currentTrack?.file,
                 playlistSet = playlistSet,
                 searchQuery = searchQuery,
                 sortMode = librarySortMode,
                 onCycleSort = onCycleSort,
                 onRefresh = onRefreshLibrary,
+                onChangeDirectory = onChangeDirectory,
                 onSearchChange = onSearchChange,
-                onFileSelected = onPlayLibraryFile,
-                onFileLongPressed = { file ->
-                    if (!file.isDirectory) {
-                        onTrackActionTarget(file)
-                    }
+                onTrackSelected = onSelectLibraryItem,
+                onTrackLongPressed = { file ->
+                    onTrackActionTarget(file)
                 },
                 modifier = Modifier.weight(1f)
             )
         }
         ViewState.PLAYLIST -> {
             PlaylistView(
-                playlistPaths = playlistPaths,
+                playlists = playlists,
+                selectedPlaylistId = selectedPlaylistId,
+                activePlayingPlaylistId = activePlayingPlaylistId,
                 playingFile = currentTrack?.file,
                 isShuffleEnabled = isShuffleEnabled,
                 repeatMode = repeatMode,
                 priorityQueueSize = priorityQueueSize,
+                onSelectPlaylistTab = onSelectPlaylistTab,
+                onCreatePlaylistClick = onCreatePlaylistClick,
+                onRenamePlaylistClick = onRenamePlaylistClick,
+                onDeletePlaylistClick = onDeletePlaylistClick,
                 onToggleShuffle = onToggleShuffle,
                 onCycleRepeat = onCycleRepeat,
                 onOpenQueue = onOpenQueue,

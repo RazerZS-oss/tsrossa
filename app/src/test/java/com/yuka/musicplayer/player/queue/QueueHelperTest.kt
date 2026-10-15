@@ -123,4 +123,50 @@ class QueueHelperTest {
 
         assertEquals(fileA, result.nextFile)
     }
+
+    @Test
+    fun testEndOfPlaylistLinearStopsWhenRepeatOff() {
+        val track1 = File("/music/p1_track1.flac")
+        val track2 = File("/music/p1_track2.flac")
+        val playlistTracks = listOf(track1, track2)
+        val currentTrack = createTrackInfo(track2)
+
+        val result = QueueHelper.resolveNextTrack(
+            isAutoAdvance = true,
+            consumeQueue = false,
+            priorityQueue = emptyList(),
+            currentTrack = currentTrack,
+            repeatMode = RepeatMode.OFF,
+            activeList = playlistTracks,
+            isShuffleEnabled = false,
+            shuffledList = emptyList(),
+            currentShuffleIndex = -1
+        )
+
+        assertNull(result.nextFile)
+    }
+
+    @Test
+    fun testEndOfPlaylistShuffleStopsWhenRepeatOff() {
+        val track1 = File("/music/p1_track1.flac")
+        val track2 = File("/music/p1_track2.flac")
+        val playlistTracks = listOf(track1, track2)
+        val shuffledDeck = listOf(track2, track1)
+        val currentTrack = createTrackInfo(track1)
+
+        val result = QueueHelper.resolveNextTrack(
+            isAutoAdvance = true,
+            consumeQueue = false,
+            priorityQueue = emptyList(),
+            currentTrack = currentTrack,
+            repeatMode = RepeatMode.OFF,
+            activeList = playlistTracks,
+            isShuffleEnabled = true,
+            shuffledList = shuffledDeck,
+            currentShuffleIndex = 1 // Last index in shuffled deck
+        )
+
+        assertNull(result.nextFile)
+    }
 }
+

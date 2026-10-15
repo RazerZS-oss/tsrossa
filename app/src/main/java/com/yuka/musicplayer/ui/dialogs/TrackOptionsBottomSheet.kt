@@ -38,8 +38,7 @@ fun TrackOptionsBottomSheet(
     onPlayTrack: (File, PlaybackSource) -> Unit,
     onPlayNextInQueue: (File) -> Unit,
     onAddToQueue: (File) -> Unit,
-    onAddToPlaylist: (String) -> Unit,
-    onRemoveFromPlaylist: (String) -> Unit
+    onOpenAddToPlaylist: (File) -> Unit
 ) {
     val inPlaylist = if (target != null) playlistSet.contains(target.absolutePath) else false
 
@@ -113,28 +112,14 @@ fun TrackOptionsBottomSheet(
                     onAddToQueue(target)
                 }
             )
-            if (inPlaylist) {
-                RetroActionItem(
-                    icon = "✕",
-                    label = "REMOVE FROM PLAYLIST",
-                    isDestructive = true,
-                    onClick = {
-                        val pathToRemove = target.absolutePath
-                        onDismissRequest()
-                        onRemoveFromPlaylist(pathToRemove)
-                    }
-                )
-            } else {
-                RetroActionItem(
-                    icon = "★",
-                    label = "ADD TO PLAYLIST",
-                    onClick = {
-                        val pathToAdd = target.absolutePath
-                        onDismissRequest()
-                        onAddToPlaylist(pathToAdd)
-                    }
-                )
-            }
+            RetroActionItem(
+                icon = "★",
+                label = "ADD TO PLAYLIST",
+                onClick = {
+                    onDismissRequest()
+                    onOpenAddToPlaylist(target)
+                }
+            )
         }
     }
 }

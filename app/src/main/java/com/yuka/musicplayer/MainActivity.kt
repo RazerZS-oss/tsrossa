@@ -322,20 +322,41 @@ fun KewApp(audioEngine: AudioEngine) {
         com.yuka.musicplayer.audio.AudioPlayerManager.priorityQueue = priorityQueue
     }
     
-    var playlistPaths by remember { mutableStateOf(com.yuka.musicplayer.audio.AudioPlayerManager.playlistPaths) }
-    val playlistSet = remember(playlistPaths) { playlistPaths.toSet() }
+    var allPlaylists by remember { mutableStateOf<List<com.yuka.musicplayer.model.Playlist>>(emptyList()) }
+    var selectedPlaylistId by remember { mutableStateOf("") }
+    var activePlayingPlaylistId by remember { mutableStateOf<String?>(com.yuka.musicplayer.audio.AudioPlayerManager.activePlayingPlaylistId) }
+    
+    val selectedPlaylist = remember(allPlaylists, selectedPlaylistId) {
+        allPlaylists.firstOrNull { it.id == selectedPlaylistId } ?: allPlaylists.firstOrNull()
+    }
+    
+    val playlistPaths = remember(selectedPlaylist) {
+        selectedPlaylist?.trackPaths ?: emptyList()
+    }
+    val playlistSet = remember(allPlaylists) {
+        allPlaylists.flatMap { it.trackPaths }.toSet()
+    }
+    
     var currentPlaybackSourceStr by rememberSaveable { mutableStateOf(com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource.name) }
     val currentPlaybackSource = PlaybackSource.valueOf(currentPlaybackSourceStr)
 
     LaunchedEffect(currentPlaybackSourceStr) {
         com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource = currentPlaybackSource
     }
+    LaunchedEffect(activePlayingPlaylistId) {
+        com.yuka.musicplayer.audio.AudioPlayerManager.activePlayingPlaylistId = activePlayingPlaylistId
+    }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            val loaded = loadPlaylist(context)
-            playlistPaths = loaded
-            com.yuka.musicplayer.audio.AudioPlayerManager.playlistPaths = loaded
+            com.yuka.musicplayer.util.PlaylistStorageHelper.performOneTimeLegacyReset(context, sharedPref)
+            val loaded = com.yuka.musicplayer.util.PlaylistStorageHelper.loadAllPlaylists(context)
+            withContext(Dispatchers.Main) {
+                allPlaylists = loaded
+                if (loaded.isNotEmpty()) {
+                    selectedPlaylistId = loaded.first().id
+                }
+            }
         }
     }
 
@@ -399,15 +420,24 @@ fun KewApp(audioEngine: AudioEngine) {
         }
     }
 
-        val initialDir = remember { 
-        val savedPath = sharedPref.getString("last_directory", Environment.getExternalStorageDirectory().absolutePath)
-        File(savedPath ?: Environment.getExternalStorageDirectory().absolutePath)
+    val defaultMusicDir = remember {
+        val savedPath = sharedPref.getString("music_root_directory", null)
+        if (savedPath != null && File(savedPath).exists()) {
+            File(savedPath)
+        } else {
+            val standardMusic = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+            if (standardMusic != null && standardMusic.exists()) standardMusic
+            else File(Environment.getExternalStorageDirectory(), "Music")
+        }
     }
 
-    var currentDirectory by remember { mutableStateOf(initialDir) }
+    var musicRootDirectory by remember { mutableStateOf(defaultMusicDir) }
+    var isScanningLibrary by remember { mutableStateOf(false) }
+    var scannedLibraryItems by remember { mutableStateOf<List<com.yuka.musicplayer.model.ScannedMusicItem>>(emptyList()) }
+    var showFolderPickerDialog by remember { mutableStateOf(false) }
     
-    LaunchedEffect(currentDirectory) {
-        sharedPref.edit().putString("last_directory", currentDirectory.absolutePath).apply()
+    LaunchedEffect(musicRootDirectory) {
+        sharedPref.edit().putString("music_root_directory", musicRootDirectory.absolutePath).apply()
     }
 
     var librarySortMode by remember {
@@ -424,6 +454,20 @@ fun KewApp(audioEngine: AudioEngine) {
         sharedPref.edit().putString("library_sort_mode", librarySortMode.name).apply()
     }
     var libraryRefreshTrigger by remember { mutableIntStateOf(0) }
+    
+    LaunchedEffect(musicRootDirectory, isStorageGranted, libraryRefreshTrigger, librarySortMode) {
+        if (isStorageGranted) {
+            isScanningLibrary = true
+            withContext(Dispatchers.IO) {
+                val scanned = com.yuka.musicplayer.util.MusicScannerHelper.scanMusicDirectory(musicRootDirectory)
+                val sorted = sortScannedMusicItems(scanned, librarySortMode)
+                withContext(Dispatchers.Main) {
+                    scannedLibraryItems = sorted
+                    isScanningLibrary = false
+                }
+            }
+        }
+    }
     
     val coroutineScope = rememberCoroutineScope()
 
@@ -633,46 +677,28 @@ fun KewApp(audioEngine: AudioEngine) {
         }
     }
 
-    val filesInDir = remember(currentDirectory, isStorageGranted, librarySortMode, libraryRefreshTrigger) {
-        val files = currentDirectory.listFiles()?.toList() ?: emptyList()
-        val filtered = files.filter {
-            it.isDirectory ||
-            it.extension.equals("flac", ignoreCase = true) ||
-            it.extension.equals("wav", ignoreCase = true) ||
-            it.extension.equals("wave", ignoreCase = true)
-        }
-        sortLibraryFiles(filtered, librarySortMode)
-    }
-
     fun getActiveTrackList(source: PlaybackSource = com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource): List<File> {
         return if (source == PlaybackSource.LIBRARY) {
             val list = if (playbackLibraryFiles.isNotEmpty()) {
                 playbackLibraryFiles
             } else {
-                val currentPlayingDir = currentTrack?.file?.parentFile
-                val targetDir = currentPlayingDir ?: currentDirectory
-                val files = targetDir.listFiles()?.filter {
-                    !it.isDirectory && (
-                        it.extension.equals("flac", ignoreCase = true) ||
-                        it.extension.equals("wav", ignoreCase = true) ||
-                        it.extension.equals("wave", ignoreCase = true)
-                    )
-                } ?: emptyList()
-                val sorted = sortLibraryFiles(files, librarySortMode)
-                playbackLibraryFiles = sorted
-                sorted
+                val playable = com.yuka.musicplayer.util.MusicScannerHelper.filterPlayableFiles(scannedLibraryItems)
+                playbackLibraryFiles = playable
+                playable
             }
-            list.filter { it.exists() }
+            list.filter { it.exists() && com.yuka.musicplayer.util.MusicScannerHelper.isSupportedAudioFile(it) }
         } else {
-            val files = playlistPaths.mapNotNull { path ->
+            val playingPlaylist = allPlaylists.firstOrNull { it.id == activePlayingPlaylistId } ?: selectedPlaylist
+            val tracks = playingPlaylist?.trackPaths ?: emptyList()
+            val files = tracks.mapNotNull { path ->
                 val f = File(path)
-                if (f.exists()) f else null
+                if (f.exists() && com.yuka.musicplayer.util.MusicScannerHelper.isSupportedAudioFile(f)) f else null
             }
             files
         }
     }
 
-    val activeList = remember(currentPlaybackSource, playbackLibraryFiles, filesInDir, playlistPaths) {
+    val activeList = remember(currentPlaybackSource, playbackLibraryFiles, scannedLibraryItems, allPlaylists, activePlayingPlaylistId, selectedPlaylistId) {
         getActiveTrackList(currentPlaybackSource)
     }
 
@@ -736,25 +762,32 @@ fun KewApp(audioEngine: AudioEngine) {
         }
     }
 
-    fun playTrack(file: File, isAutoAdvance: Boolean, recordHistory: Boolean = true, source: PlaybackSource? = null) {
+    fun playTrack(file: File, isAutoAdvance: Boolean, recordHistory: Boolean = true, source: PlaybackSource? = null, playlistId: String? = null) {
         val targetSource = source ?: com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource
         val sourceChanged = targetSource != com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource
+        val playlistChanged = targetSource == PlaybackSource.PLAYLIST && playlistId != null && playlistId != activePlayingPlaylistId
+        
         com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource = targetSource
         currentPlaybackSourceStr = targetSource.name
-        if (sourceChanged) {
+        
+        if (targetSource == PlaybackSource.PLAYLIST) {
+            if (playlistId != null) {
+                activePlayingPlaylistId = playlistId
+                com.yuka.musicplayer.audio.AudioPlayerManager.activePlayingPlaylistId = playlistId
+            }
+        } else {
+            activePlayingPlaylistId = null
+            com.yuka.musicplayer.audio.AudioPlayerManager.activePlayingPlaylistId = null
+        }
+        
+        if (sourceChanged || playlistChanged) {
             shuffledList = emptyList()
             currentShuffleIndex = -1
             audioEngine.clearNextTrack()
         }
 
         if (targetSource == PlaybackSource.LIBRARY && (playbackLibraryFiles.isEmpty() || playbackLibraryFiles.none { it.absolutePath == file.absolutePath })) {
-            playbackLibraryFiles = file.parentFile?.listFiles()?.filter {
-                !it.isDirectory && (
-                    it.extension.equals("flac", ignoreCase = true) ||
-                    it.extension.equals("wav", ignoreCase = true) ||
-                    it.extension.equals("wave", ignoreCase = true)
-                )
-            }?.let { sortLibraryFiles(it, librarySortMode) } ?: emptyList()
+            playbackLibraryFiles = com.yuka.musicplayer.util.MusicScannerHelper.filterPlayableFiles(scannedLibraryItems)
         }
 
         if (recordHistory && currentTrack?.file != null && currentTrack?.file?.absolutePath != file.absolutePath) {
@@ -915,6 +948,7 @@ fun KewApp(audioEngine: AudioEngine) {
     val cycleLibrarySortMode = {
         val nextMode = librarySortMode.next()
         librarySortMode = nextMode
+        scannedLibraryItems = sortScannedMusicItems(scannedLibraryItems, nextMode)
         if (currentPlaybackSourceStr == PlaybackSource.LIBRARY.name && playbackLibraryFiles.isNotEmpty()) {
             playbackLibraryFiles = sortLibraryFiles(playbackLibraryFiles, nextMode)
             syncPreparedNextTrack()
@@ -930,19 +964,7 @@ fun KewApp(audioEngine: AudioEngine) {
 
     val refreshLibrary = {
         libraryRefreshTrigger++
-        val currentScannedFiles = currentDirectory.listFiles()?.filter {
-            it.isDirectory ||
-            it.extension.equals("flac", ignoreCase = true) ||
-            it.extension.equals("wav", ignoreCase = true) ||
-            it.extension.equals("wave", ignoreCase = true)
-        } ?: emptyList()
-        if (currentPlaybackSourceStr == PlaybackSource.LIBRARY.name &&
-            currentDirectory.absolutePath == currentTrack?.file?.parentFile?.absolutePath) {
-            val audioFiles = sortLibraryFiles(currentScannedFiles.filter { !it.isDirectory }, librarySortMode)
-            playbackLibraryFiles = audioFiles
-            syncPreparedNextTrack()
-        }
-        Toast.makeText(context, "Library refreshed (${currentScannedFiles.size} items)", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Scanning music directory...", Toast.LENGTH_SHORT).show()
     }
 
     val currentPlayNext by rememberUpdatedState(::playNext)
@@ -1129,9 +1151,15 @@ fun KewApp(audioEngine: AudioEngine) {
             )
         }
 
+        // Multiple Playlist Dialog States
+        var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+        var playlistToRename by remember { mutableStateOf<com.yuka.musicplayer.model.Playlist?>(null) }
+        var showSelectPlaylistDialog by remember { mutableStateOf(false) }
+        var trackToAddForPlaylist by remember { mutableStateOf<File?>(null) }
+
         val modalActionHandler = remember(
-            context, coroutineScope, sharedPref, priorityQueue, playlistPaths, playlistSet,
-            currentPlaybackSourceStr, isShuffleEnabled, shuffledList, librarySortMode
+            context, coroutineScope, sharedPref, priorityQueue, allPlaylists, selectedPlaylistId,
+            currentPlaybackSourceStr, isShuffleEnabled, shuffledList
         ) {
             com.yuka.musicplayer.ui.dialogs.AppModalActionHandler(
                 context = context,
@@ -1139,20 +1167,24 @@ fun KewApp(audioEngine: AudioEngine) {
                 sharedPref = sharedPref,
                 getPriorityQueue = { priorityQueue },
                 setPriorityQueue = { priorityQueue = it },
+                getAllPlaylists = { allPlaylists },
+                setAllPlaylists = { allPlaylists = it },
+                getSelectedPlaylistId = { selectedPlaylistId },
+                setSelectedPlaylistId = { selectedPlaylistId = it },
                 getPlaylistPaths = { playlistPaths },
-                setPlaylistPaths = { playlistPaths = it },
-                getPlaylistSet = { playlistSet },
                 getCurrentPlaybackSourceStr = { currentPlaybackSourceStr },
                 isShuffleEnabled = { isShuffleEnabled },
                 getShuffledList = { shuffledList },
                 setShuffledList = { shuffledList = it },
-                getLibrarySortMode = { librarySortMode },
-                setPlaybackLibraryFiles = { playbackLibraryFiles = it },
                 syncPreparedNextTrack = ::syncPreparedNextTrack,
-                playTrack = { f, auto, rec, src -> playTrack(f, auto, rec, src) },
+                playTrack = { f, auto, rec, src, pId -> playTrack(f, auto, rec, src, pId) },
                 onDismissPermissionDialog = { showPermissionDialog = false },
                 onDismissQueuePanel = { showQueuePanel = false },
-                onDismissTrackOptions = { trackActionTarget = null }
+                onDismissTrackOptions = { trackActionTarget = null },
+                onShowSelectPlaylistDialog = { file ->
+                    trackToAddForPlaylist = file
+                    showSelectPlaylistDialog = true
+                }
             )
         }
 
@@ -1204,8 +1236,71 @@ fun KewApp(audioEngine: AudioEngine) {
             onPlayTrackAction = modalActionHandler::onPlayTrackAction,
             onPlayNextInQueue = modalActionHandler::onPlayNextInQueue,
             onAddToQueue = modalActionHandler::onAddToQueue,
-            onAddToPlaylist = modalActionHandler::onAddToPlaylist,
-            onRemoveFromPlaylist = modalActionHandler::onRemoveFromPlaylist
+            onOpenAddToPlaylist = modalActionHandler::onOpenAddToPlaylist
+        )
+
+        // Playlist CRUD Dialogs
+        CreatePlaylistDialog(
+            visible = showCreatePlaylistDialog,
+            onDismissRequest = { showCreatePlaylistDialog = false },
+            onConfirmCreate = { name ->
+                showCreatePlaylistDialog = false
+                coroutineScope.launch(Dispatchers.IO) {
+                    val (created, updated) = com.yuka.musicplayer.util.PlaylistStorageHelper.createPlaylist(context, name)
+                    withContext(Dispatchers.Main) {
+                        allPlaylists = updated
+                        selectedPlaylistId = created.id
+                        Toast.makeText(context, "Playlist '${created.name}' created", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+
+        RenamePlaylistDialog(
+            visible = playlistToRename != null,
+            currentName = playlistToRename?.name ?: "",
+            onDismissRequest = { playlistToRename = null },
+            onConfirmRename = { newName ->
+                val p = playlistToRename
+                playlistToRename = null
+                if (p != null) {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        val updated = com.yuka.musicplayer.util.PlaylistStorageHelper.renamePlaylist(context, p.id, newName)
+                        if (updated != null) {
+                            withContext(Dispatchers.Main) {
+                                allPlaylists = updated
+                                Toast.makeText(context, "Playlist renamed to '$newName'", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        SelectPlaylistDialog(
+            visible = showSelectPlaylistDialog,
+            targetTrack = trackToAddForPlaylist,
+            playlists = allPlaylists,
+            onDismissRequest = {
+                showSelectPlaylistDialog = false
+                trackToAddForPlaylist = null
+            },
+            onSelectPlaylist = { playlist ->
+                showSelectPlaylistDialog = false
+                trackToAddForPlaylist?.let { file ->
+                    val isAlreadyIn = playlist.trackPaths.contains(file.absolutePath)
+                    if (isAlreadyIn) {
+                        modalActionHandler.onRemoveFromPlaylist(playlist.id, file.absolutePath)
+                    } else {
+                        modalActionHandler.onAddToPlaylist(playlist.id, file.absolutePath)
+                    }
+                }
+                trackToAddForPlaylist = null
+            },
+            onCreateNewPlaylist = {
+                showSelectPlaylistDialog = false
+                showCreatePlaylistDialog = true
+            }
         )
 
         val sharedOnTogglePlay: () -> Unit = {
@@ -1237,9 +1332,10 @@ fun KewApp(audioEngine: AudioEngine) {
             audioManager = audioManager,
             audioFocusRequest = audioFocusRequest,
             focusChangeListener = focusChangeListener,
-            currentDirectory = currentDirectory,
-            onNavigateDirectory = { currentDirectory = it },
-            filesInDir = filesInDir,
+            musicRootDirectory = musicRootDirectory,
+            scannedItems = scannedLibraryItems,
+            isScanningLibrary = isScanningLibrary,
+            onChangeDirectory = { showFolderPickerDialog = true },
             currentTrack = currentTrack,
             playlistSet = playlistSet,
             searchQuery = searchQuery,
@@ -1248,58 +1344,74 @@ fun KewApp(audioEngine: AudioEngine) {
             onCycleSort = cycleLibrarySortMode,
             onRefreshLibrary = refreshLibrary,
             onTrackActionTarget = { file -> trackActionTarget = file },
-            onPlayLibraryFile = { file ->
-                if (file.name == "..") {
-                    currentDirectory.parentFile?.let { currentDirectory = it }
-                } else if (file.isDirectory) {
-                    currentDirectory = file
-                } else {
+            onSelectLibraryItem = { item ->
+                if (item.isSupported) {
                     currentPlaybackSourceStr = PlaybackSource.LIBRARY.name
-                    playbackLibraryFiles = file.parentFile?.listFiles()?.filter {
-                        !it.isDirectory && (
-                            it.extension.equals("flac", ignoreCase = true) ||
-                            it.extension.equals("wav", ignoreCase = true) ||
-                            it.extension.equals("wave", ignoreCase = true)
-                        )
-                    }?.let { sortLibraryFiles(it, librarySortMode) } ?: emptyList()
-                    playTrack(file, false, source = PlaybackSource.LIBRARY)
+                    playbackLibraryFiles = com.yuka.musicplayer.util.MusicScannerHelper.filterPlayableFiles(scannedLibraryItems)
+                    playTrack(item.file, false, source = PlaybackSource.LIBRARY)
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Format ${item.formatLabel} is not supported by the Bit-Perfect Direct USB Engine (FLAC & WAV only).",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             },
-            playlistPaths = playlistPaths,
-            onUpdatePlaylistPaths = { playlistPaths = it },
+            playlists = allPlaylists,
+            selectedPlaylistId = selectedPlaylistId,
+            activePlayingPlaylistId = activePlayingPlaylistId,
+            onSelectPlaylistTab = { id -> selectedPlaylistId = id },
+            onCreatePlaylistClick = { showCreatePlaylistDialog = true },
+            onRenamePlaylistClick = { playlist -> playlistToRename = playlist },
+            onDeletePlaylistClick = { playlist ->
+                coroutineScope.launch(Dispatchers.IO) {
+                    val updated = com.yuka.musicplayer.util.PlaylistStorageHelper.deletePlaylist(context, playlist.id)
+                    if (updated != null) {
+                        withContext(Dispatchers.Main) {
+                            allPlaylists = updated
+                            if (selectedPlaylistId == playlist.id) {
+                                selectedPlaylistId = updated.firstOrNull()?.id ?: ""
+                            }
+                            if (activePlayingPlaylistId == playlist.id) {
+                                activePlayingPlaylistId = null
+                                com.yuka.musicplayer.audio.AudioPlayerManager.activePlayingPlaylistId = null
+                                if (currentPlaybackSourceStr == PlaybackSource.PLAYLIST.name) {
+                                    audioEngine.stopAudio()
+                                    isPlaying = false
+                                }
+                            }
+                            Toast.makeText(context, "Playlist '${playlist.name}' deleted", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            },
             isShuffleEnabled = isShuffleEnabled,
             onToggleShuffle = toggleShuffle,
             repeatMode = repeatMode,
             onCycleRepeat = cycleRepeat,
             priorityQueueSize = priorityQueue.size,
             onOpenQueue = { showQueuePanel = true },
-            onPlayPlaylistFile = { file ->
+            onPlayPlaylistFile = { file, playlistId ->
                 currentPlaybackSourceStr = PlaybackSource.PLAYLIST.name
-                playTrack(file, false, source = PlaybackSource.PLAYLIST)
+                playTrack(file, false, source = PlaybackSource.PLAYLIST, playlistId = playlistId)
             },
-            onPlaylistFileRemoved = { path ->
+            onPlaylistFileRemoved = { path, playlistId ->
+                modalActionHandler.onRemoveFromPlaylist(playlistId, path)
+            },
+            onClearPlaylistAction = { playlistId ->
                 coroutineScope.launch(Dispatchers.IO) {
-                    val newPaths = removePlaylist(context, path, playlistPaths)
-                    withContext(Dispatchers.Main) {
-                        playlistPaths = newPaths
-                        if (currentPlaybackSourceStr == PlaybackSource.PLAYLIST.name) {
-                            if (isShuffleEnabled) {
-                                shuffledList = shuffledList.filter { it.absolutePath != path }
+                    val updated = com.yuka.musicplayer.util.PlaylistStorageHelper.clearPlaylistTracks(context, playlistId)
+                    if (updated != null) {
+                        withContext(Dispatchers.Main) {
+                            allPlaylists = updated
+                            if (currentPlaybackSourceStr == PlaybackSource.PLAYLIST.name && activePlayingPlaylistId == playlistId) {
+                                shuffledList = emptyList()
+                                currentShuffleIndex = -1
+                                audioEngine.clearNextTrack()
+                                audioEngine.stopAudio()
+                                isPlaying = false
                             }
-                            syncPreparedNextTrack()
-                        }
-                    }
-                }
-            },
-            onClearPlaylistAction = {
-                coroutineScope.launch(Dispatchers.IO) {
-                    clearPlaylist(context)
-                    withContext(Dispatchers.Main) {
-                        playlistPaths = emptyList()
-                        if (currentPlaybackSourceStr == PlaybackSource.PLAYLIST.name) {
-                            shuffledList = emptyList()
-                            currentShuffleIndex = -1
-                            audioEngine.clearNextTrack()
+                            Toast.makeText(context, "Playlist cleared", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -1399,6 +1511,17 @@ fun KewApp(audioEngine: AudioEngine) {
         BottomNavigationBar(
             currentView = viewState,
             onNavClick = { viewState = it }
+        )
+
+        FolderPickerDialog(
+            visible = showFolderPickerDialog,
+            currentPath = musicRootDirectory,
+            onDismissRequest = { showFolderPickerDialog = false },
+            onSelectDirectory = { dir ->
+                showFolderPickerDialog = false
+                musicRootDirectory = dir
+                Toast.makeText(context, "Scanning ${dir.name}...", Toast.LENGTH_SHORT).show()
+            }
         )
     }
         } // End Box wrapper

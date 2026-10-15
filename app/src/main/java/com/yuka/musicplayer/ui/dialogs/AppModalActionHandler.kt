@@ -7,9 +7,6 @@ import com.yuka.musicplayer.audio.AudioPlayerManager
 import com.yuka.musicplayer.model.LibrarySortMode
 import com.yuka.musicplayer.model.PlaybackSource
 import com.yuka.musicplayer.model.sortLibraryFiles
-import com.yuka.musicplayer.model.appendPlaylist
-import com.yuka.musicplayer.model.loadPlaylist
-import com.yuka.musicplayer.model.removePlaylist
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,20 +22,21 @@ class AppModalActionHandler(
     private val sharedPref: SharedPreferences,
     private val getPriorityQueue: () -> List<File>,
     private val setPriorityQueue: (List<File>) -> Unit,
+    private val getAllPlaylists: () -> List<com.yuka.musicplayer.model.Playlist>,
+    private val setAllPlaylists: (List<com.yuka.musicplayer.model.Playlist>) -> Unit,
+    private val getSelectedPlaylistId: () -> String,
+    private val setSelectedPlaylistId: (String) -> Unit,
     private val getPlaylistPaths: () -> List<String>,
-    private val setPlaylistPaths: (List<String>) -> Unit,
-    private val getPlaylistSet: () -> Set<String>,
     private val getCurrentPlaybackSourceStr: () -> String,
     private val isShuffleEnabled: () -> Boolean,
     private val getShuffledList: () -> List<File>,
     private val setShuffledList: (List<File>) -> Unit,
-    private val getLibrarySortMode: () -> LibrarySortMode,
-    private val setPlaybackLibraryFiles: (List<File>) -> Unit,
     private val syncPreparedNextTrack: () -> Unit,
-    private val playTrack: (File, Boolean, Boolean, PlaybackSource) -> Unit,
+    private val playTrack: (File, Boolean, Boolean, PlaybackSource, String?) -> Unit,
     private val onDismissPermissionDialog: () -> Unit,
     private val onDismissQueuePanel: () -> Unit,
-    private val onDismissTrackOptions: () -> Unit
+    private val onDismissTrackOptions: () -> Unit,
+    private val onShowSelectPlaylistDialog: (File) -> Unit
 ) {
 
     fun onCompletePermissions() {
@@ -75,22 +73,13 @@ class AppModalActionHandler(
         } else {
             PlaybackSource.LIBRARY
         }
-        playTrack(file, false, true, targetSource)
+        playTrack(file, false, true, targetSource, null)
     }
 
     fun onPlayTrackAction(target: File, targetSource: PlaybackSource) {
         onDismissTrackOptions()
-        if (targetSource == PlaybackSource.LIBRARY) {
-            val files = target.parentFile?.listFiles()?.filter {
-                !it.isDirectory && (
-                    it.extension.equals("flac", ignoreCase = true) ||
-                    it.extension.equals("wav", ignoreCase = true) ||
-                    it.extension.equals("wave", ignoreCase = true)
-                )
-            }?.let { sortLibraryFiles(it, getLibrarySortMode()) } ?: emptyList()
-            setPlaybackLibraryFiles(files)
-        }
-        playTrack(target, false, true, targetSource)
+        val playlistId = if (targetSource == PlaybackSource.PLAYLIST) getSelectedPlaylistId() else null
+        playTrack(target, false, true, targetSource, playlistId)
     }
 
     fun onPlayNextInQueue(target: File) {
@@ -109,31 +98,37 @@ class AppModalActionHandler(
         Toast.makeText(context, "Added to queue (#${updated.size})", Toast.LENGTH_SHORT).show()
     }
 
-    fun onAddToPlaylist(pathToAdd: String) {
+    fun onOpenAddToPlaylist(target: File) {
+        onDismissTrackOptions()
+        onShowSelectPlaylistDialog(target)
+    }
+
+    fun onAddToPlaylist(playlistId: String, pathToAdd: String) {
         coroutineScope.launch(Dispatchers.IO) {
-            val added = appendPlaylist(context, pathToAdd, getPlaylistSet())
-            if (added) {
-                val newPaths = loadPlaylist(context)
+            val updated = com.yuka.musicplayer.util.PlaylistStorageHelper.addTrackToPlaylist(context, playlistId, pathToAdd)
+            if (updated != null) {
                 withContext(Dispatchers.Main) {
-                    setPlaylistPaths(newPaths)
+                    setAllPlaylists(updated)
                     Toast.makeText(context, "Added to playlist", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    fun onRemoveFromPlaylist(pathToRemove: String) {
+    fun onRemoveFromPlaylist(playlistId: String, pathToRemove: String) {
         coroutineScope.launch(Dispatchers.IO) {
-            val newPaths = removePlaylist(context, pathToRemove, getPlaylistPaths())
-            withContext(Dispatchers.Main) {
-                setPlaylistPaths(newPaths)
-                if (getCurrentPlaybackSourceStr() == PlaybackSource.PLAYLIST.name) {
-                    if (isShuffleEnabled()) {
-                        setShuffledList(getShuffledList().filter { it.absolutePath != pathToRemove })
+            val updated = com.yuka.musicplayer.util.PlaylistStorageHelper.removeTrackFromPlaylist(context, playlistId, pathToRemove)
+            if (updated != null) {
+                withContext(Dispatchers.Main) {
+                    setAllPlaylists(updated)
+                    if (getCurrentPlaybackSourceStr() == PlaybackSource.PLAYLIST.name && AudioPlayerManager.activePlayingPlaylistId == playlistId) {
+                        if (isShuffleEnabled()) {
+                            setShuffledList(getShuffledList().filter { it.absolutePath != pathToRemove })
+                        }
+                        syncPreparedNextTrack()
                     }
-                    syncPreparedNextTrack()
+                    Toast.makeText(context, "Removed from playlist", Toast.LENGTH_SHORT).show()
                 }
-                Toast.makeText(context, "Removed from playlist", Toast.LENGTH_SHORT).show()
             }
         }
     }

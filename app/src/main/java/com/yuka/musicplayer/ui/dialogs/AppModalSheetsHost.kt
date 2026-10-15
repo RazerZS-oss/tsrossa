@@ -77,8 +77,7 @@ fun AppModalSheetsHost(
     onPlayTrackAction: (File, PlaybackSource) -> Unit,
     onPlayNextInQueue: (File) -> Unit,
     onAddToQueue: (File) -> Unit,
-    onAddToPlaylist: (String) -> Unit,
-    onRemoveFromPlaylist: (String) -> Unit
+    onOpenAddToPlaylist: (File) -> Unit
 ) {
     // 1. System Logs Panel
     CyberBottomSheet(
@@ -191,7 +190,6 @@ fun AppModalSheetsHost(
         onPlayTrack = onPlayTrackAction,
         onPlayNextInQueue = onPlayNextInQueue,
         onAddToQueue = onAddToQueue,
-        onAddToPlaylist = onAddToPlaylist,
-        onRemoveFromPlaylist = onRemoveFromPlaylist
+        onOpenAddToPlaylist = onOpenAddToPlaylist
     )
 }

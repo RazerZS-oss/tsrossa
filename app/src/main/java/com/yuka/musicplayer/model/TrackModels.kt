@@ -34,45 +34,12 @@ fun sortLibraryFiles(files: List<File>, mode: LibrarySortMode): List<File> {
     }
 }
 
-fun loadPlaylist(context: Context): List<String> {
-    val file = File(context.filesDir, "playlist.txt")
-    if (!file.exists()) return emptyList()
-    return try {
-        file.readLines().filter { it.isNotBlank() }
-    } catch (e: Exception) {
-        emptyList()
-    }
-}
-
-fun appendPlaylist(context: Context, path: String, currentSet: Set<String>): Boolean {
-    if (currentSet.contains(path)) return false
-    return try {
-        val file = File(context.filesDir, "playlist.txt")
-        file.appendText("$path\n")
-        true
-    } catch (e: Exception) {
-        false
-    }
-}
-
-fun removePlaylist(context: Context, path: String, currentPaths: List<String>): List<String> {
-    val newPaths = currentPaths.filter { it != path }
-    return try {
-        val file = File(context.filesDir, "playlist.txt")
-        file.writeText(newPaths.joinToString("\n") + if (newPaths.isNotEmpty()) "\n" else "")
-        newPaths
-    } catch (e: Exception) {
-        currentPaths
-    }
-}
-
-fun clearPlaylist(context: Context): Boolean {
-    return try {
-        val file = File(context.filesDir, "playlist.txt")
-        file.writeText("")
-        true
-    } catch (e: Exception) {
-        false
+fun sortScannedMusicItems(items: List<com.yuka.musicplayer.model.ScannedMusicItem>, mode: LibrarySortMode): List<com.yuka.musicplayer.model.ScannedMusicItem> {
+    return when (mode) {
+        LibrarySortMode.DATE_DESC -> items.sortedByDescending { it.file.lastModified() }
+        LibrarySortMode.DATE_ASC -> items.sortedBy { it.file.lastModified() }
+        LibrarySortMode.NAME_ASC -> items.sortedBy { it.file.name.lowercase() }
+        LibrarySortMode.NAME_DESC -> items.sortedByDescending { it.file.name.lowercase() }
     }
 }
 
