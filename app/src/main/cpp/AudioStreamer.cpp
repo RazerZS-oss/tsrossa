@@ -121,28 +121,14 @@ bool start_iso_streaming_thread(const char *thread_name) {
       g_audioState.transfers.clear();
     }
 
-    // Safely report USB stall fault on exit without spawning detached threads
+    // Safely report USB stall fault on exit without synchronous JNI / AttachCurrentThread in audio thread
     if (g_audioState.stallFaultReported.load()) {
       g_audioState.stallFaultReported.store(false);
-      if (g_jvm && g_audioState.callbackObj) {
-        JNIEnv *env = nullptr;
-        bool needDetach = false;
-        if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-          if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-            needDetach = true;
-          }
-        }
-        if (env && g_audioState.callbackObj) {
-          jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-          jmethodID methodId = env->GetMethodID(clazz, "onUsbStallFault", "()V");
-          if (methodId) {
-            env->CallVoidMethod(g_audioState.callbackObj, methodId);
-          }
-          if (needDetach) {
-            g_jvm->DetachCurrentThread();
-          }
-        }
-      }
+      std::lock_guard<std::mutex> lock(g_controlMutex);
+      ControlRequest req;
+      req.type = REQ_EVENT_USB_STALL_FAULT;
+      g_controlQueue.push(req);
+      g_controlCv.notify_one();
     }
 
     g_audioState.isoThreadExited.store(true);

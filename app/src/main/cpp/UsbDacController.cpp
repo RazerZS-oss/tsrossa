@@ -32,7 +32,8 @@ void control_thread_func() {
     }
 
     // Asynchronous JNI event dispatcher (dispatched off realtime audio thread)
-    if (req.type == REQ_EVENT_TRACK_FINISHED || req.type == REQ_EVENT_TRACK_TRANSITION) {
+    if (req.type == REQ_EVENT_TRACK_FINISHED || req.type == REQ_EVENT_TRACK_TRANSITION ||
+        req.type == REQ_EVENT_USB_STALL_FAULT) {
       if (g_jvm && g_audioState.callbackObj) {
         JNIEnv *env = nullptr;
         bool needDetach = false;
@@ -54,6 +55,11 @@ void control_thread_func() {
               jstring pathStr = env->NewStringUTF(req.eventArg.c_str());
               env->CallVoidMethod(g_audioState.callbackObj, methodId, pathStr);
               env->DeleteLocalRef(pathStr);
+            }
+          } else if (req.type == REQ_EVENT_USB_STALL_FAULT) {
+            jmethodID methodId = env->GetMethodID(clazz, "onUsbStallFault", "()V");
+            if (methodId) {
+              env->CallVoidMethod(g_audioState.callbackObj, methodId);
             }
           }
           if (needDetach) {
