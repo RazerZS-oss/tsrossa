@@ -695,49 +695,55 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
     }
     stop_and_join_iso_thread("stream parameter change or startup");
 
-    AltSettingInfo *selected_alt = nullptr;
+    bool has_selected_alt = false;
+    AltSettingInfo selected_alt{};
     if (!g_audioState.validAlts.empty()) {
-      for (auto &a : g_audioState.validAlts) {
+      for (const auto &a : g_audioState.validAlts) {
         if (a.subframe_size == target_sf) {
-          selected_alt = &a;
+          selected_alt = a;
+          has_selected_alt = true;
           break;
         }
       }
-      if (!selected_alt) {
-        for (auto &a : g_audioState.validAlts) {
+      if (!has_selected_alt) {
+        for (const auto &a : g_audioState.validAlts) {
           if (a.subframe_size >= target_sf) {
-            selected_alt = &a;
+            selected_alt = a;
+            has_selected_alt = true;
             break;
           }
         }
       }
-      if (!selected_alt) selected_alt = &g_audioState.validAlts[0];
+      if (!has_selected_alt) {
+        selected_alt = g_audioState.validAlts[0];
+        has_selected_alt = true;
+      }
     }
 
-    if (selected_alt && (g_audioState.currentAltSetting.load() != selected_alt->altsetting ||
-                         target_sf != g_audioState.subframeSize.load() ||
-                         stream_was_stopped)) {
+    if (has_selected_alt && (g_audioState.currentAltSetting.load() != selected_alt.altsetting ||
+                             target_sf != g_audioState.subframeSize.load() ||
+                             stream_was_stopped)) {
       LOGI("playAudio: Activating altsetting %d (bit depth %d bytes)...",
-           selected_alt->altsetting, selected_alt->subframe_size);
+           selected_alt.altsetting, selected_alt.subframe_size);
 
-      int claim_res = libusb_claim_interface(g_audioState.usbHandle, selected_alt->interface_num);
+      int claim_res = libusb_claim_interface(g_audioState.usbHandle, selected_alt.interface_num);
       if (claim_res == LIBUSB_ERROR_BUSY && g_audioState.usbFd >= 0) {
-        libusb_detach_kernel_driver(g_audioState.usbHandle, selected_alt->interface_num);
+        libusb_detach_kernel_driver(g_audioState.usbHandle, selected_alt.interface_num);
         struct usbdevfs_disconnect_claim dc;
         memset(&dc, 0, sizeof(dc));
-        dc.interface = (unsigned int)selected_alt->interface_num;
+        dc.interface = (unsigned int)selected_alt.interface_num;
         dc.flags = 0;
         ioctl(g_audioState.usbFd, USBDEVFS_DISCONNECT_CLAIM, &dc);
-        libusb_claim_interface(g_audioState.usbHandle, selected_alt->interface_num);
+        libusb_claim_interface(g_audioState.usbHandle, selected_alt.interface_num);
       }
 
       int r = libusb_set_interface_alt_setting(
-          g_audioState.usbHandle, selected_alt->interface_num, selected_alt->altsetting);
+          g_audioState.usbHandle, selected_alt.interface_num, selected_alt.altsetting);
       if (r != 0 && g_audioState.usbFd >= 0) {
         struct usbdevfs_setinterface setintf;
         memset(&setintf, 0, sizeof(setintf));
-        setintf.interface = (unsigned int)selected_alt->interface_num;
-        setintf.altsetting = (unsigned int)selected_alt->altsetting;
+        setintf.interface = (unsigned int)selected_alt.interface_num;
+        setintf.altsetting = (unsigned int)selected_alt.altsetting;
         ioctl(g_audioState.usbFd, USBDEVFS_SETINTERFACE, &setintf);
       }
       // DWC3 USB host controller DMA endpoint flush settling time
@@ -747,11 +753,11 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
       g_audioState.lastInterfaceSettleUs.store(
           std::chrono::duration_cast<std::chrono::microseconds>(settle_end - settle_start).count());
 
-      g_audioState.usbAudioInterface = selected_alt->interface_num;
-      g_audioState.epAddress = selected_alt->ep_out;
-      g_audioState.maxPacketSize = selected_alt->max_packet_size;
-      g_audioState.subframeSize.store(selected_alt->subframe_size);
-      g_audioState.currentAltSetting.store(selected_alt->altsetting);
+      g_audioState.usbAudioInterface = selected_alt.interface_num;
+      g_audioState.epAddress = selected_alt.ep_out;
+      g_audioState.maxPacketSize = selected_alt.max_packet_size;
+      g_audioState.subframeSize.store(selected_alt.subframe_size);
+      g_audioState.currentAltSetting.store(selected_alt.altsetting);
       altsetting_changed = true;
     }
 
