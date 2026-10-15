@@ -6,7 +6,11 @@ class AudioEngine {
     
     companion object {
         init {
-            System.loadLibrary("kewmobile")
+            try {
+                System.loadLibrary("kewmobile")
+            } catch (e: UnsatisfiedLinkError) {
+                // Ignore in JVM unit test environments where .so is not present
+            }
         }
 
         @JvmStatic
