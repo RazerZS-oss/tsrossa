@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yukaatsu/tsrossa/releases"><img src="https://img.shields.io/badge/Release-v1.3.0--beta-orange.svg" alt="Release v1.3.0-beta"></a>
+  <a href="https://github.com/yukaatsu/tsrossa/releases"><img src="https://img.shields.io/badge/Release-v1.5.0--beta-orange.svg" alt="Release v1.5.0-beta"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Android%208.0%2B-2ea44f.svg" alt="Platform"></a>
   <a href="#"><img src="https://img.shields.io/badge/Engine-Native%20C%2B%2B17%20%2F%20libusb-0052cc.svg" alt="Engine"></a>
   <a href="#"><img src="https://img.shields.io/badge/Audio-Bit--Perfect%20UAC1%20%7C%20UAC2-success.svg" alt="Audio"></a>
@@ -36,19 +36,19 @@ tsrossa eliminates the entire Android audio framework. By querying Android's USB
 <table align="center">
   <tr>
     <td align="center" width="33%">
-      <img src="screenshots/01_now_playing.png" alt="Now Playing HUD" width="100%"/>
-      <br/><b>Now Playing HUD</b><br/>
-      <sub>Terminal interface with Pac-Man seek bar, dynamic album art palette, and hardware volume dial</sub>
+      <img src="screenshots/01_now_playing.png" alt="Now Playing Screen" width="100%"/>
+      <br/><b>Now Playing Screen</b><br/>
+      <sub>Clean Material 3 interface with dynamic album art palette, quick tactile header controls, and hardware volume pill</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/02_library.png" alt="File Library" width="100%"/>
-      <br/><b>File Library</b><br/>
-      <sub>Hierarchical file browser with Date/Name sorting, one-tap directory refresh, and timestamp indexing</sub>
+      <img src="screenshots/02_library.png" alt="Music Library" width="100%"/>
+      <br/><b>Music Library</b><br/>
+      <sub>Ultra-fast cached track browser with live search, folder picking, intelligent title parsing, and sorting options</sub>
     </td>
     <td align="center" width="33%">
       <img src="screenshots/03_system_logs.png" alt="Hardware Telemetry" width="100%"/>
       <br/><b>Hardware Telemetry</b><br/>
-      <sub>Real-time UAC2 endpoint negotiation, hardware clock verification, RAM buffer state, and 1-tap report export</sub>
+      <sub>Real-time UAC2 endpoint audit, hardware clock verification, RAM buffer state, and 1-tap report export</sub>
     </td>
   </tr>
 </table>
