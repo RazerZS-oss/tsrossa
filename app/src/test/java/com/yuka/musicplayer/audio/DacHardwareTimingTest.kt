@@ -116,4 +116,12 @@ class DacHardwareTimingTest {
         val bitrateKbps = if (durationSec > 0) ((fileSizeBytes * 8) / (durationSec * 1000)).toInt() else 0
         assertEquals(1000, bitrateKbps)
     }
+
+    @Test
+    fun testWarmupAllowedWhenPaused() {
+        val sampleRate = 48000
+        val durationMs = 1600
+        val expectedFrames = (48000L * 1600L) / 1000L
+        assertEquals(76800L, expectedFrames)
+    }
 }

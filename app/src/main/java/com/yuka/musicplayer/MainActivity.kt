@@ -166,18 +166,32 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (com.yuka.musicplayer.audio.AudioPlayerManager.isInitialized) {
+        if (com.yuka.musicplayer.audio.AudioPlayerManager.isInitialized &&
+            !com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected) {
             com.yuka.musicplayer.audio.AudioPlayerManager.usbAudioController.scanAndRequestPermission()
         }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        // Prevent aggressive UI cache eviction / GC pause from starving native USB audio thread
+        if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            val isAudioActive = com.yuka.musicplayer.audio.AudioPlayerManager.isPlaying ||
+                (com.yuka.musicplayer.audio.AudioPlayerManager.isInitialized && com.yuka.musicplayer.audio.AudioPlayerManager.audioEngine.isPlaying())
+            if (isAudioActive) {
+                return
+            }
+        }
+        super.onTrimMemory(level)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         if (isFinishing) {
+            val hasActiveTrack = com.yuka.musicplayer.audio.AudioPlayerManager.currentTrack != null
             val isStillPlaying = com.yuka.musicplayer.audio.AudioPlayerManager.isPlaying ||
                 (com.yuka.musicplayer.audio.AudioPlayerManager.isInitialized && com.yuka.musicplayer.audio.AudioPlayerManager.audioEngine.isPlaying())
-            if (!isStillPlaying) {
-                android.util.Log.i("MainActivity", "onDestroy: Activity is finishing and playback is paused. Stopping AudioForegroundService.")
+            if (!isStillPlaying && !hasActiveTrack) {
+                android.util.Log.i("MainActivity", "onDestroy: Activity is finishing and no track active. Stopping AudioForegroundService.")
                 val stopIntent = Intent(this, com.yuka.musicplayer.audio.AudioForegroundService::class.java).apply {
                     action = com.yuka.musicplayer.audio.AudioForegroundService.ACTION_STOP
                 }
@@ -202,12 +216,7 @@ fun KewApp(audioEngine: AudioEngine) {
 
     // Inisialisasi profil buffer USB ke C++ saat aplikasi pertama kali menyala
     LaunchedEffect(Unit) {
-        val (transfers, packets) = when (usbBufferProfile) {
-            0 -> 8 to 8       // 64ms Ultra Low Latency
-            2 -> 16 to 32     // 500ms Maximum Stability
-            else -> 12 to 16  // 192ms Audiophile Low Jitter (Default)
-        }
-        com.yuka.musicplayer.audio.AudioEngine.setUsbBufferProfile(transfers, packets)
+        com.yuka.musicplayer.audio.AudioEngine.applyBufferProfile(usbBufferProfile)
     }
     
     val permState = com.yuka.musicplayer.util.rememberAppPermissionState(context)
@@ -273,23 +282,39 @@ fun KewApp(audioEngine: AudioEngine) {
     var isDacConnected by remember { mutableStateOf(audioEngine.isDacConnected() || com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected) }
 
     val triggerWarmupProcess: (String) -> Unit = { targetName ->
-        warmupDacName = targetName
-        showWarmupHud = true
-        isWarmingUpState = true
-        audioEngine.triggerWarmup(1600)
+        val isActive = com.yuka.musicplayer.audio.AudioPlayerManager.isPlaying || audioEngine.isPlaying()
+        val dacAttached = audioEngine.isDacConnected() || com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected
+        if (!dacAttached) {
+            Toast.makeText(context, "DAC USB belum terhubung", Toast.LENGTH_SHORT).show()
+        } else if (isActive) {
+            Toast.makeText(context, "DAC sedang memutar audio", Toast.LENGTH_SHORT).show()
+        } else {
+            warmupDacName = targetName
+            showWarmupHud = true
+            isWarmingUpState = true
+            Thread({
+                audioEngine.triggerWarmup(1600)
+            }, "TsrossaWarmupBg").start()
+        }
     }
 
-    // Wire automatic warmup when USB DAC is plugged in & ready, or if already attached at launch
+    // Wire automatic warmup only on initial launch if DAC is already attached and NO track is loaded/playing
     LaunchedEffect(Unit) {
-        if (audioEngine.isDacConnected() || com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected) {
+        val dacAttached = audioEngine.isDacConnected() || com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected
+        if (dacAttached) {
             isDacConnected = true
-            val dacName = try {
-                val infoJson = org.json.JSONObject(audioEngine.getDacInfo())
-                infoJson.optString("productName", "USB DAC")
-            } catch (e: Exception) {
-                "USB DAC"
+            val hasTrack = com.yuka.musicplayer.audio.AudioPlayerManager.currentTrack != null
+            val isAudioActive = com.yuka.musicplayer.audio.AudioPlayerManager.isPlaying || audioEngine.isPlaying()
+            // Never trigger warmup on configuration change (rotation) if track exists or music is active!
+            if (!hasTrack && !isAudioActive) {
+                val dacName = try {
+                    val infoJson = org.json.JSONObject(audioEngine.getDacInfo())
+                    infoJson.optString("productName", "USB DAC")
+                } catch (e: Exception) {
+                    "USB DAC"
+                }
+                triggerWarmupProcess(dacName)
             }
-            triggerWarmupProcess(dacName)
         } else {
             isDacConnected = false
             com.yuka.musicplayer.audio.AudioPlayerManager.usbAudioController.scanAndRequestPermission()
@@ -517,7 +542,9 @@ fun KewApp(audioEngine: AudioEngine) {
 
     LaunchedEffect(currentVolume) {
         sharedPref.edit().putFloat("last_volume", currentVolume).apply()
-        audioEngine.setSoftwareVolume(currentVolume)
+        withContext(Dispatchers.Default) {
+            audioEngine.setSoftwareVolume(currentVolume)
+        }
     }
 
     LaunchedEffect(isPlaying) {
@@ -551,15 +578,11 @@ fun KewApp(audioEngine: AudioEngine) {
 
     val notificationManager = remember { context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
 
-    val setDndMode: (Boolean) -> Unit = { enabled ->
-        if (notificationManager.isNotificationPolicyAccessGranted) {
-            val filter = if (enabled) {
-                NotificationManager.INTERRUPTION_FILTER_ALARMS
-            } else {
-                NotificationManager.INTERRUPTION_FILTER_ALL
-            }
-            notificationManager.setInterruptionFilter(filter)
-        }
+    // Do NOT alter system DND interruption filters during playback: Samsung One UI's AudioService
+    // reacts to INTERRUPTION_FILTER_NONE by muting stream 3e and resetting FORCE_DIGITAL_DOCK,
+    // cutting the active USB ALSA stream during window transitions.
+    val setDndMode: (Boolean) -> Unit = { _ ->
+        // No-op: keep system audio stream routing intact and stable
     }
 
     var formatIncompatibleError by remember { mutableStateOf<String?>(null) }
@@ -569,6 +592,7 @@ fun KewApp(audioEngine: AudioEngine) {
             coroutineScope.launch(Dispatchers.Main) {
                 val wasConnected = isDacConnected
                 isDacConnected = true
+                isHardwareVolumeActive = audioEngine.isHardwareVolumeActive()
                 if (!wasConnected) {
                     triggerWarmupProcess(dacName)
                 }
@@ -614,67 +638,9 @@ fun KewApp(audioEngine: AudioEngine) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!audioEngine.isDacConnected()) {
-            usbAudioController.scanAndRequestPermission()
-        }
-    }
 
     val usbManager = remember { context.getSystemService(android.content.Context.USB_SERVICE) as android.hardware.usb.UsbManager }
-    val audioManager = remember { context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager }
-    
-    val focusChangeListener = remember {
-        AudioManager.OnAudioFocusChangeListener { focusChange ->
-            when (focusChange) {
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    if (isPlaying) {
-                        audioEngine.pauseAudio()
-                        isPlaying = false
-                        pausedByTransientLoss = true
-                    }
-                }
-                AudioManager.AUDIOFOCUS_LOSS -> {
-                    if (isPlaying) {
-                        audioEngine.pauseAudio()
-                        isPlaying = false
-                    }
-                    pausedByTransientLoss = false
-                }
-                AudioManager.AUDIOFOCUS_GAIN -> {
-                    if (pausedByTransientLoss) {
-                        pausedByTransientLoss = false
-                        val resumed = audioEngine.resumeAudio()
-                        if (resumed) {
-                            isPlaying = true
-                        } else {
-                            currentTrack?.file?.let { file ->
-                                playTrackRef?.invoke(file, false, true)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val audioFocusRequest = remember {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAcceptsDelayedFocusGain(true)
-                .setWillPauseWhenDucked(true)
-                .setOnAudioFocusChangeListener(focusChangeListener)
-                .build()
-        } else {
-            null
-        }
-    }
+    // Audio focus is managed robustly by AudioForegroundService to survive gesture transitions
 
     fun getActiveTrackList(source: PlaybackSource = com.yuka.musicplayer.audio.AudioPlayerManager.currentPlaybackSource): List<File> {
         return if (source == PlaybackSource.LIBRARY) {
@@ -842,13 +808,7 @@ fun KewApp(audioEngine: AudioEngine) {
                     // Success
                     withContext(Dispatchers.Main) {
                         formatIncompatibleError = null
-
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            audioManager.requestAudioFocus(audioFocusRequest!!)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            audioManager.requestAudioFocus(focusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-                        }
+                        isHardwareVolumeActive = audioEngine.isHardwareVolumeActive()
                     }
                 }
                 result == -2 -> {
@@ -926,7 +886,9 @@ fun KewApp(audioEngine: AudioEngine) {
     val toggleShuffle = {
         val newState = !isShuffleEnabled
         isShuffleEnabled = newState
-        audioEngine.clearNextTrack()
+        coroutineScope.launch(Dispatchers.IO) {
+            audioEngine.clearNextTrack()
+        }
         if (newState) {
             val currentActiveList = getActiveTrackList(currentPlaybackSource)
             ensureShuffleDeck(currentActiveList, currentTrack?.file)
@@ -940,7 +902,9 @@ fun KewApp(audioEngine: AudioEngine) {
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
-        audioEngine.clearNextTrack()
+        coroutineScope.launch(Dispatchers.IO) {
+            audioEngine.clearNextTrack()
+        }
         syncPreparedNextTrack()
     }
 
@@ -977,6 +941,11 @@ fun KewApp(audioEngine: AudioEngine) {
         com.yuka.musicplayer.audio.AudioPlayerManager.onPlayPrev = {
             coroutineScope.launch(Dispatchers.Main) {
                 playPrev()
+            }
+        }
+        com.yuka.musicplayer.audio.AudioPlayerManager.onSeekTo = { targetSec ->
+            coroutineScope.launch(Dispatchers.Main) {
+                playbackPosition = targetSec
             }
         }
         com.yuka.musicplayer.audio.AudioPlayerManager.onTogglePlay = {
@@ -1068,6 +1037,7 @@ fun KewApp(audioEngine: AudioEngine) {
         onDispose {
             com.yuka.musicplayer.audio.AudioPlayerManager.onPlayNext = null
             com.yuka.musicplayer.audio.AudioPlayerManager.onPlayPrev = null
+            com.yuka.musicplayer.audio.AudioPlayerManager.onSeekTo = null
             com.yuka.musicplayer.audio.AudioPlayerManager.onTogglePlay = null
             audioEngine.onTrackFinishedCallback = null
             audioEngine.onTrackTransitionCallback = null
@@ -1094,7 +1064,8 @@ fun KewApp(audioEngine: AudioEngine) {
             density = currentDensity.density,
             fontScale = currentDensity.fontScale * fontScale
         ),
-        LocalAccentColor provides currentAccentColor
+        LocalAccentColor provides currentAccentColor,
+        com.yuka.musicplayer.ui.theme.LocalBgMode provides bgMode
     ) {
         AppBackgroundContainer(
             bgMode = bgMode,
@@ -1323,12 +1294,14 @@ fun KewApp(audioEngine: AudioEngine) {
             }
         }
 
-        AppScreenContent(
-            viewState = viewState,
-            musicRootDirectory = musicRootDirectory,
-            scannedItems = scannedLibraryItems,
-            isScanningLibrary = isScanningLibrary,
-            onChangeDirectory = { showFolderPickerDialog = true },
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            AppScreenContent(
+                viewState = viewState,
+                modifier = Modifier.fillMaxSize(),
+                musicRootDirectory = musicRootDirectory,
+                scannedItems = scannedLibraryItems,
+                isScanningLibrary = isScanningLibrary,
+                onChangeDirectory = { showFolderPickerDialog = true },
             currentTrack = currentTrack,
             playlistSet = playlistSet,
             searchQuery = searchQuery,
@@ -1412,7 +1385,9 @@ fun KewApp(audioEngine: AudioEngine) {
             playbackPosition = playbackPosition,
             onSeekTo = { targetSec ->
                 playbackPosition = targetSec
-                audioEngine.seekTo(targetSec)
+                coroutineScope.launch(Dispatchers.IO) {
+                    audioEngine.seekTo(targetSec)
+                }
             },
             isPlaying = isPlaying,
             onTogglePlay = sharedOnTogglePlay,
@@ -1422,6 +1397,7 @@ fun KewApp(audioEngine: AudioEngine) {
             },
             onPlayNext = { playNext(false) },
             onPlayPrev = { playPrev() },
+            isHardwareVolumeActive = isHardwareVolumeActive,
             sharedPref = sharedPref,
             bgMode = bgMode,
             onBgModeChange = {
@@ -1474,42 +1450,46 @@ fun KewApp(audioEngine: AudioEngine) {
             onUsbBufferProfileChange = { newProfile ->
                 usbBufferProfile = newProfile
                 sharedPref.edit().putInt("usb_buffer_profile", newProfile).apply()
-                val (transfers, packets) = when (newProfile) {
-                    0 -> 8 to 8       // 64ms Ultra Low Latency
-                    2 -> 16 to 32     // 500ms Maximum Stability
-                    else -> 12 to 16  // 192ms Audiophile Low Jitter (Default)
-                }
-                com.yuka.musicplayer.audio.AudioEngine.setUsbBufferProfile(transfers, packets)
+                com.yuka.musicplayer.audio.AudioEngine.applyBufferProfile(newProfile)
                 if (audioEngine.isPlaying()) {
                     Toast.makeText(context, "Buffer profile updated (active on next track)", Toast.LENGTH_SHORT).show()
                 }
             }
         )
         
-        // Floating Mini-Player Bar (visible on all screens except main Player when track is loaded)
-        androidx.compose.animation.AnimatedVisibility(
-            visible = currentTrack != null && viewState != com.yuka.musicplayer.model.ViewState.TRACK,
-            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
-        ) {
-            currentTrack?.let { track ->
-                com.yuka.musicplayer.ui.components.MiniPlayerView(
-                    track = track,
-                    isPlaying = isPlaying,
-                    playbackPosition = playbackPosition,
-                    durationSeconds = track.durationSeconds,
+            // Floating Bottom Dock Overlay (100% transparent container floating above content)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                // Floating Mini-Player Bar (visible on all screens except main Player when track is loaded)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = currentTrack != null && viewState != com.yuka.musicplayer.model.ViewState.TRACK,
+                    enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
+                ) {
+                    currentTrack?.let { track ->
+                        com.yuka.musicplayer.ui.components.MiniPlayerView(
+                            track = track,
+                            isPlaying = isPlaying,
+                            playbackPosition = playbackPosition,
+                            durationSeconds = track.durationSeconds,
+                            bgMode = bgMode,
+                            onTogglePlay = sharedOnTogglePlay,
+                            onNavigateToNowPlaying = { viewState = com.yuka.musicplayer.model.ViewState.TRACK }
+                        )
+                    }
+                }
+
+                BottomNavigationBar(
+                    currentView = viewState,
                     bgMode = bgMode,
-                    onTogglePlay = sharedOnTogglePlay,
-                    onNavigateToNowPlaying = { viewState = com.yuka.musicplayer.model.ViewState.TRACK }
+                    onNavClick = { viewState = it }
                 )
             }
-        }
-
-        BottomNavigationBar(
-            currentView = viewState,
-            bgMode = bgMode,
-            onNavClick = { viewState = it }
-        )
+        } // End Box wrapper around screen content and floating dock
 
         FolderPickerDialog(
             visible = showFolderPickerDialog,

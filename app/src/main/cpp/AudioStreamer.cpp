@@ -1153,11 +1153,9 @@ bool trigger_warmup_internal(int durationMs) {
     return false;
   }
 
-  // Never wipe PCM buffer if audio playback is active, frames are loaded, or a track file is active
-  if (g_audioState.isPlaying.load() || !g_audioState.pcmBuffer.empty() ||
-      g_audioState.decodedFrames.load() > 0 || !g_audioState.currentFilePath.empty()) {
-    LOGI("trigger_warmup: Playback active or track already loaded (%s). Skipping warmup buffer reset.",
-         g_audioState.currentFilePath.c_str());
+  // If playback is actively streaming audio, do not interrupt active stream with manual warmup
+  if (g_audioState.isPlaying.load()) {
+    LOGI("trigger_warmup: Playback active. Skipping warmup trigger.");
     return true;
   }
 
@@ -1198,12 +1196,13 @@ bool trigger_warmup_internal(int durationMs) {
   g_audioState.warmupSilenceFrames.store(silenceFrames);
   g_audioState.isWarmingUp.store(true);
 
-  // Clear stale PCM data to prevent iso_callback from reading old track audio
-  // after warmup silence frames are exhausted within a packet
-  g_audioState.pcmBuffer.clear();
-  g_audioState.pcmIndex.store(0);
-  g_audioState.decodedFrames.store(0);
-  g_audioState.hasNextTrack.store(false);
+  // If no track is currently loaded, clear stale buffers to stream pure silence.
+  // If a track is already paused in memory, preserve pcmBuffer so user can resume seamlessly!
+  if (g_audioState.currentFilePath.empty() && g_audioState.pcmBuffer.empty()) {
+    g_audioState.pcmIndex.store(0);
+    g_audioState.decodedFrames.store(0);
+    g_audioState.hasNextTrack.store(false);
+  }
 
   // If isoThread is not running, spawn it to stream pure silence during warmup
   start_iso_streaming_thread("TsrossaIsoWarm");
