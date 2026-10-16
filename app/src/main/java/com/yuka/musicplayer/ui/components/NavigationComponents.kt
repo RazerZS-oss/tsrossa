@@ -62,6 +62,7 @@ fun AppHeader(
     onToggleLockTask: () -> Unit = {},
     isTaskLocked: Boolean = false
 ) {
+    val accent = LocalAccentColor.current
     val statusColor = when {
         isHardwareVolumeLockedBySystem -> Color(0xFFFF9100)
         isForceSoftwareVolume -> Color(0xFFFF5252)

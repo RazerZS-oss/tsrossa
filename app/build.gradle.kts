@@ -11,8 +11,8 @@ android {
         applicationId = "com.yuka.musicplayer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.4.0-BETA"
+        versionCode = 13
+        versionName = "1.5.0-BETA"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
