@@ -1048,12 +1048,9 @@ fun KewApp(audioEngine: AudioEngine) {
 
 
 
-    val lifecycleOwner = context as LifecycleOwner
     LaunchedEffect(currentTrack, isPlaying) {
         while (isPlaying && currentTrack != null) {
-            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                playbackPosition = audioEngine.getPosition()
-            }
+            playbackPosition = audioEngine.getPosition()
             delay(500)
         }
     }
