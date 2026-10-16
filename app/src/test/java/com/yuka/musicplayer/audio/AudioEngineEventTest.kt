@@ -42,4 +42,15 @@ class AudioEngineEventTest {
         engine.onUsbStallFault()
         assertTrue("onUsbStallFault should invoke onUsbStallFaultCallback", stallCalled)
     }
+
+    @Test
+    fun testOnTrackFinishedMultipleInvocations() {
+        var finishedCount = 0
+        val engine = AudioEngine()
+        engine.onTrackFinishedCallback = { finishedCount++ }
+        engine.onTrackFinished()
+        engine.onTrackFinished()
+        assertEquals(2, finishedCount)
+    }
 }
+
