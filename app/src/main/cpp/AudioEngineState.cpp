@@ -6,6 +6,8 @@ std::mutex g_stateMutex;
 std::queue<ControlRequest> g_controlQueue;
 std::mutex g_controlMutex;
 std::condition_variable g_controlCv;
+std::mutex g_isoStartMutex;
+std::condition_variable g_isoStartCv;
 std::string g_lastUsbDiagnostic;
 std::mutex g_usbDiagMutex;
 
@@ -16,9 +18,9 @@ std::mutex g_apiMutex;
 void record_usb_diag(const std::string &msg) {
   std::lock_guard<std::mutex> lock(g_usbDiagMutex);
   LOGI("USB_DIAG: %s", msg.c_str());
-  if (g_lastUsbDiagnostic.size() > 16000) {
-    g_lastUsbDiagnostic = g_lastUsbDiagnostic.substr(g_lastUsbDiagnostic.size() - 8000);
+  if (g_lastUsbDiagnostic.size() + msg.size() > 8192) {
+    g_lastUsbDiagnostic.clear();
   }
-  g_lastUsbDiagnostic += msg;
-  g_lastUsbDiagnostic += "\n";
+  g_lastUsbDiagnostic.append(msg);
+  g_lastUsbDiagnostic.push_back('\n');
 }

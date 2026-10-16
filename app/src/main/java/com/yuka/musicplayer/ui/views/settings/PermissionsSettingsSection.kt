@@ -1,7 +1,6 @@
 package com.yuka.musicplayer.ui.views.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -16,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.dialogs.PermissionStatusRow
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 
 @Composable
@@ -32,67 +32,66 @@ fun PermissionsSettingsSection(
 ) {
     val accent = LocalAccentColor.current
 
-    SettingsCard(title = "PERMISSIONS & SYSTEM ACCESS", tag = "HARDWARE IO") {
+    SettingsCard(title = "Permissions & Access") {
         PermissionStatusRow(
-            title = "NOTIFICATION PERMISSION",
-            subtitle = "Lockscreen player & MediaStyle controls",
+            title = "Notification Controls",
+            subtitle = "Lockscreen player & background MediaStyle playback",
             isGranted = isNotificationGranted,
-            grantedText = "ACTIVE (GRANTED)",
-            deniedText = "DISABLED / RESTRICTED",
+            grantedText = "Active",
+            deniedText = "Restricted",
             onActionClick = onRequestNotification
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        PermissionStatusRow(
-            title = "AUDIO STORAGE ACCESS",
-            subtitle = "Direct C++ fopen FLAC/WAV file read",
-            isGranted = isStorageGranted,
-            grantedText = "ACTIVE (ALL FILES ACCESS)",
-            deniedText = "RESTRICTED",
-            onActionClick = onRequestStorage
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        PermissionStatusRow(
-            title = "BACKGROUND POWER (ANTI-KILLER)",
-            subtitle = "Prevent OEM kill on Xiaomi/Oppo/Vivo/Samsung",
-            isGranted = isBatteryOptimizationIgnored,
-            grantedText = "UNRESTRICTED (IMMUNE)",
-            deniedText = "OPTIMIZED (RESTRICTED)",
-            onActionClick = onRequestBatteryOptimization
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        PermissionStatusRow(
-            title = "DO NOT DISTURB (DND)",
-            subtitle = "Auto-mute ringtones during playback",
-            isGranted = isDndGranted,
-            grantedText = "ACTIVE (GRANTED)",
-            deniedText = "OPTIONAL (NOT GRANTED)",
-            onActionClick = onRequestDnd
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        PermissionStatusRow(
+            title = "All Audio Files Access",
+            subtitle = "Direct C++ bit-perfect reader for FLAC/DSD/WAV",
+            isGranted = isStorageGranted,
+            grantedText = "Active",
+            deniedText = "Restricted",
+            onActionClick = onRequestStorage
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        PermissionStatusRow(
+            title = "Background Power (Anti-Killer)",
+            subtitle = "Prevents aggressive OEM battery termination",
+            isGranted = isBatteryOptimizationIgnored,
+            grantedText = "Unrestricted",
+            deniedText = "Optimized",
+            onActionClick = onRequestBatteryOptimization
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        PermissionStatusRow(
+            title = "Do Not Disturb (DND)",
+            subtitle = "Auto-mute notification sounds during playback",
+            isGranted = isDndGranted,
+            grantedText = "Active",
+            deniedText = "Optional",
+            onActionClick = onRequestDnd
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         TactileBox(
             onClick = onOpenPermissionDialog,
-            pressedScale = 0.96f,
+            pressedScale = 0.95f,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF070B14))
-                .border(0.8.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
-                .padding(vertical = 9.dp)
+                .clip(RoundedCornerShape(50))
+                .background(accent.copy(alpha = 0.16f))
+                .padding(vertical = 11.dp)
         ) {
             Text(
-                text = "RE-OPEN SETUP WIZARD",
+                text = "Launch Permission Setup Wizard",
                 color = accent,
-                fontFamily = TerminalFont,
-                fontWeight = FontWeight.Bold,
-                fontSize = 10.5.sp,
+                fontFamily = ModernSansFont,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.5.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )

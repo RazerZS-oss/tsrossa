@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,10 +30,15 @@ import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.audio.AudioEngine
 import com.yuka.musicplayer.model.RefusedTrackEntry
 import com.yuka.musicplayer.model.ViewState
+import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
 
 @Composable
 fun LogSectionHeader(title: String) {
@@ -250,62 +256,65 @@ fun SystemLogsPanel(
                         )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "SYSTEM LOGS & DIAGNOSTICS", 
-                    color = TerminalWhite, 
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont,
-                    letterSpacing = 0.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Column {
+                    Text(
+                        text = "System Logs & Diagnostics", 
+                        color = TerminalWhite, 
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = ModernSansFont,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Bit-perfect UAC2 & hardware audit",
+                        color = Color.White.copy(alpha = 0.60f),
+                        fontSize = 11.5.sp,
+                        fontFamily = ModernSansFont
+                    )
+                }
             }
-            Box(
+
+            TactileBox(
+                onClick = onClose,
+                pressedScale = 0.88f,
                 modifier = Modifier
-                    .border(1.dp, androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                    .background(androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                    .clickable { onClose() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(m3SurfaceContainerHigh())
             ) {
-                Text(
-                    text = "✕ CLOSE",
-                    color = androidx.compose.ui.graphics.Color.Red,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont
-                )
+                GlyphClose(color = Color.White.copy(alpha = 0.80f), modifier = Modifier.size(18.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // --- Action Toolbar (Row 2: Copy & Share Report) ---
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            TactileBox(
+                onClick = {
+                    val report = generateDiagnosticReport(
+                        dacName, isDacConnected, isDeviceWedged, uacVersion,
+                        claimedInterfaces, isPlaying, sourceBitDepth, sourceSampleRate,
+                        outputBitDepth, outputSampleRate, negotiatedSampleRate,
+                        isSampleRateUnverified, recentErrorCount, supportedSampleRates,
+                        supportedBitDepths, refusedTrackHistory
+                    )
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("tsrossa_diagnostics", report)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "Diagnostics copied to clipboard!", Toast.LENGTH_SHORT).show()
+                },
+                pressedScale = 0.94f,
                 modifier = Modifier
                     .weight(1f)
-                    .border(1.dp, LocalAccentColor.current.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                    .background(LocalAccentColor.current.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
-                    .clickable {
-                        val report = generateDiagnosticReport(
-                            dacName, isDacConnected, isDeviceWedged, uacVersion,
-                            claimedInterfaces, isPlaying, sourceBitDepth, sourceSampleRate,
-                            outputBitDepth, outputSampleRate, negotiatedSampleRate,
-                            isSampleRateUnverified, recentErrorCount, supportedSampleRates,
-                            supportedBitDepths, refusedTrackHistory
-                        )
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("tsrossa_diagnostics", report)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Diagnostics copied to clipboard!", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(vertical = 6.dp),
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(50))
+                    .background(m3SurfaceContainerHigh())
+                    .padding(vertical = 10.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -313,55 +322,60 @@ fun SystemLogsPanel(
                 ) {
                     com.yuka.musicplayer.ui.components.GlyphClipboard(
                         color = LocalAccentColor.current,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "COPY REPORT",
-                        color = LocalAccentColor.current,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = TerminalFont
+                        text = "Copy Report",
+                        color = TerminalWhite,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = ModernSansFont
                     )
                 }
             }
 
-            Box(
+            TactileBox(
+                onClick = {
+                    val report = generateDiagnosticReport(
+                        dacName, isDacConnected, isDeviceWedged, uacVersion,
+                        claimedInterfaces, isPlaying, sourceBitDepth, sourceSampleRate,
+                        outputBitDepth, outputSampleRate, negotiatedSampleRate,
+                        isSampleRateUnverified, recentErrorCount, supportedSampleRates,
+                        supportedBitDepths, refusedTrackHistory
+                    )
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, report)
+                        type = "text/plain"
+                    }
+                    val shareIntent = Intent.createChooser(sendIntent, "Share tsrossa Diagnostics")
+                    context.startActivity(shareIntent)
+                },
+                pressedScale = 0.94f,
                 modifier = Modifier
                     .weight(1f)
-                    .border(1.dp, LocalAccentColor.current.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                    .background(LocalAccentColor.current.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
-                    .clickable {
-                        val report = generateDiagnosticReport(
-                            dacName, isDacConnected, isDeviceWedged, uacVersion,
-                            claimedInterfaces, isPlaying, sourceBitDepth, sourceSampleRate,
-                            outputBitDepth, outputSampleRate, negotiatedSampleRate,
-                            isSampleRateUnverified, recentErrorCount, supportedSampleRates,
-                            supportedBitDepths, refusedTrackHistory
-                        )
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, report)
-                            type = "text/plain"
-                        }
-                        val shareIntent = Intent.createChooser(sendIntent, "Share tsrossa Diagnostics")
-                        context.startActivity(shareIntent)
-                    }
-                    .padding(vertical = 6.dp),
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(50))
+                    .background(m3SurfaceContainerHigh())
+                    .padding(vertical = 10.dp)
             ) {
-                Text(
-                    text = "↗ SHARE REPORT",
-                    color = LocalAccentColor.current,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Share Report",
+                        color = LocalAccentColor.current,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = ModernSansFont
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-        Divider(color = LocalAccentColor.current.copy(alpha = 0.25f), thickness = 1.dp)
+        Spacer(modifier = Modifier.height(12.dp))
+        Divider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
         
         // --- Scrollable Diagnostics Body ---
         Column(

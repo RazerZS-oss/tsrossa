@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -24,10 +23,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.M3SurfaceContainerLow
+import com.yuka.musicplayer.ui.theme.resolveM3TonalSurface
 
 /**
- * Modern Ergonomic Bottom Sheet for Dialogs, Panels, and Context Menus.
- * Slides gracefully from bottom with spring physics, animated scrim, and tactile studio borders.
+ * Authentic Material 3 Modal Bottom Sheet Container:
+ * - Rounded top corners (28.dp).
+ * - Zero border stroke (clean borderless tonal elevation).
+ * - M3 SurfaceContainerLow tonal surface.
+ * - Standard M3 drag handle pill (32.dp x 4.dp).
  */
 @Composable
 fun CyberBottomSheet(
@@ -40,6 +44,8 @@ fun CyberBottomSheet(
     content: @Composable ColumnScope.() -> Unit
 ) {
     if (visible) {
+        val sheetSurface = com.yuka.musicplayer.ui.theme.m3SurfaceBase()
+
         Popup(
             alignment = Alignment.BottomCenter,
             onDismissRequest = onDismissRequest,
@@ -48,7 +54,7 @@ fun CyberBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.72f))
+                    .background(Color.Black.copy(alpha = 0.65f))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -69,28 +75,23 @@ fun CyberBottomSheet(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {} // consume touch inside sheet
-                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                    .background(Color(0xFF090D18))
-                    .border(
-                        width = 0.8.dp,
-                        color = LocalAccentColor.current.copy(alpha = 0.28f),
-                        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
-                    )
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(sheetSurface)
 
                 Box(modifier = boxMod) {
                     Column(
                         modifier = modifier
                             .fillMaxWidth()
                             .then(if (wrapHeight) Modifier.wrapContentHeight() else Modifier.fillMaxHeight())
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
-                        // Top Drag Handle Pill
+                        // Material 3 Centered Drag Handle Pill
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterHorizontally)
-                                .padding(bottom = 8.dp)
-                                .size(width = 38.dp, height = 4.dp)
-                                .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(2.dp))
+                                .padding(bottom = 12.dp)
+                                .size(width = 32.dp, height = 4.dp)
+                                .background(Color.White.copy(alpha = 0.25f), RoundedCornerShape(50))
                         )
 
                         content()

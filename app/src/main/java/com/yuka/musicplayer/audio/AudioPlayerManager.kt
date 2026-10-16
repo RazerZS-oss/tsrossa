@@ -25,6 +25,7 @@ object AudioPlayerManager {
     var onPlayNext: (() -> Unit)? = null
     var onPlayPrev: (() -> Unit)? = null
     var onTogglePlay: (() -> Unit)? = null
+    var onSeekTo: ((Double) -> Unit)? = null
     var onDacDetached: (() -> Unit)? = null
     var onDacAttached: (() -> Unit)? = null
     var onDacReady: ((String) -> Unit)? = null
@@ -77,6 +78,13 @@ object AudioPlayerManager {
 
     fun requestTogglePlay() {
         onTogglePlay?.invoke()
+    }
+
+    fun requestSeekTo(seconds: Double) {
+        if (isInitialized) {
+            audioEngine.seekTo(seconds)
+        }
+        onSeekTo?.invoke(seconds)
     }
 
     fun handleDacDetached() {

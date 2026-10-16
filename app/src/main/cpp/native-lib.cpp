@@ -79,12 +79,7 @@ Java_com_yuka_musicplayer_audio_AudioEngine_setSoftwareVolume(JNIEnv *env, jobje
     }
   }
 
-  float scaled_vol = vol;
-  if (vol < 0.001f) {
-    scaled_vol = 0.0f;
-  } else {
-    scaled_vol = (std::exp(vol * 4.0f) - 1.0f) / (std::exp(4.0f) - 1.0f);
-  }
+  float scaled_vol = calculate_scaled_volume(vol);
 
   if (!g_audioState.isHardwareVolumeActive.load()) {
     g_audioState.targetVolume.store(scaled_vol);
@@ -301,10 +296,10 @@ Java_com_yuka_musicplayer_audio_AudioEngine_isBitPerfectIntegerPassActive(JNIEnv
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_setUsbBufferProfile(JNIEnv *env, jobject thiz, jint transfers, jint packets) {
-  if (transfers >= 4 && transfers <= 32) {
+  if (transfers >= 4 && transfers <= 64) {
     g_audioState.isoTransfersCount.store(transfers);
   }
-  if (packets >= 4 && packets <= 64) {
+  if (packets >= 4 && packets <= 128) {
     g_audioState.isoPacketsCount.store(packets);
   }
 }

@@ -580,3 +580,575 @@ fun GlyphWarning(
         )
     }
 }
+
+// ==========================================
+// MATERIAL 3 EXPANDED VECTOR GLYPHS (24dp)
+// ==========================================
+
+@Composable
+fun GlyphSearch(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Search" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        drawCircle(
+            color = color,
+            radius = w * 0.30f,
+            center = Offset(w * 0.42f, h * 0.42f),
+            style = Stroke(width = stroke)
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.64f, h * 0.64f),
+            end = Offset(w * 0.86f, h * 0.86f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun GlyphMoreVert(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "More Options" }) {
+        val w = size.width
+        val h = size.height
+        val r = 1.8.dp.toPx()
+
+        drawCircle(color = color, radius = r, center = Offset(w * 0.5f, h * 0.25f))
+        drawCircle(color = color, radius = r, center = Offset(w * 0.5f, h * 0.50f))
+        drawCircle(color = color, radius = r, center = Offset(w * 0.5f, h * 0.75f))
+    }
+}
+
+@Composable
+fun GlyphFolder(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Folder" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        val folderPath = Path().apply {
+            moveTo(w * 0.12f, h * 0.25f)
+            lineTo(w * 0.40f, h * 0.25f)
+            lineTo(w * 0.48f, h * 0.35f)
+            lineTo(w * 0.88f, h * 0.35f)
+            cubicTo(w * 0.92f, h * 0.35f, w * 0.92f, h * 0.40f, w * 0.92f, h * 0.45f)
+            lineTo(w * 0.92f, h * 0.75f)
+            cubicTo(w * 0.92f, h * 0.80f, w * 0.88f, h * 0.82f, w * 0.84f, h * 0.82f)
+            lineTo(w * 0.16f, h * 0.82f)
+            cubicTo(w * 0.12f, h * 0.82f, w * 0.08f, h * 0.80f, w * 0.08f, h * 0.75f)
+            lineTo(w * 0.08f, h * 0.32f)
+            cubicTo(w * 0.08f, h * 0.25f, w * 0.12f, h * 0.25f, w * 0.12f, h * 0.25f)
+            close()
+        }
+        drawPath(folderPath, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun GlyphRefresh(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Refresh" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        val arcRect = androidx.compose.ui.geometry.Rect(w * 0.18f, h * 0.18f, w * 0.82f, h * 0.82f)
+        drawArc(
+            color = color,
+            startAngle = -35f,
+            sweepAngle = 280f,
+            useCenter = false,
+            topLeft = arcRect.topLeft,
+            size = arcRect.size,
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+        // Arrow head
+        val arrow = Path().apply {
+            moveTo(w * 0.80f, h * 0.14f)
+            lineTo(w * 0.88f, h * 0.32f)
+            lineTo(w * 0.68f, h * 0.32f)
+            close()
+        }
+        drawPath(arrow, color = color, style = Fill)
+    }
+}
+
+@Composable
+fun GlyphSort(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Sort" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Down arrow on left
+        drawLine(color = color, start = Offset(w * 0.32f, h * 0.20f), end = Offset(w * 0.32f, h * 0.78f), strokeWidth = stroke, cap = StrokeCap.Round)
+        val downHead = Path().apply {
+            moveTo(w * 0.20f, h * 0.64f)
+            lineTo(w * 0.32f, h * 0.82f)
+            lineTo(w * 0.44f, h * 0.64f)
+        }
+        drawPath(downHead, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Up arrow on right
+        drawLine(color = color, start = Offset(w * 0.68f, h * 0.22f), end = Offset(w * 0.68f, h * 0.80f), strokeWidth = stroke, cap = StrokeCap.Round)
+        val upHead = Path().apply {
+            moveTo(w * 0.56f, h * 0.36f)
+            lineTo(w * 0.68f, h * 0.18f)
+            lineTo(w * 0.80f, h * 0.36f)
+        }
+        drawPath(upHead, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun GlyphQueue(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Queue" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        drawLine(color = color, start = Offset(w * 0.15f, h * 0.26f), end = Offset(w * 0.85f, h * 0.26f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.15f, h * 0.50f), end = Offset(w * 0.55f, h * 0.50f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.15f, h * 0.74f), end = Offset(w * 0.55f, h * 0.74f), strokeWidth = stroke, cap = StrokeCap.Round)
+
+        // Small play triangle on right
+        val tri = Path().apply {
+            moveTo(w * 0.68f, h * 0.48f)
+            lineTo(w * 0.88f, h * 0.62f)
+            lineTo(w * 0.68f, h * 0.76f)
+            close()
+        }
+        drawPath(tri, color = color, style = Fill)
+    }
+}
+
+@Composable
+fun GlyphAdd(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Add" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.0.dp.toPx()
+
+        drawLine(color = color, start = Offset(w * 0.5f, h * 0.20f), end = Offset(w * 0.5f, h * 0.80f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.20f, h * 0.5f), end = Offset(w * 0.80f, h * 0.5f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+fun GlyphDelete(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Delete" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Can body
+        val binPath = Path().apply {
+            moveTo(w * 0.24f, h * 0.34f)
+            lineTo(w * 0.30f, h * 0.82f)
+            cubicTo(w * 0.30f, h * 0.86f, w * 0.34f, h * 0.88f, w * 0.38f, h * 0.88f)
+            lineTo(w * 0.62f, h * 0.88f)
+            cubicTo(w * 0.66f, h * 0.88f, w * 0.70f, h * 0.86f, w * 0.70f, h * 0.82f)
+            lineTo(w * 0.76f, h * 0.34f)
+        }
+        drawPath(binPath, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Lid horizontal
+        drawLine(color = color, start = Offset(w * 0.16f, h * 0.34f), end = Offset(w * 0.84f, h * 0.34f), strokeWidth = stroke, cap = StrokeCap.Round)
+        // Handle
+        val handle = Path().apply {
+            moveTo(w * 0.38f, h * 0.34f)
+            lineTo(w * 0.38f, h * 0.22f)
+            lineTo(w * 0.62f, h * 0.22f)
+            lineTo(w * 0.62f, h * 0.34f)
+        }
+        drawPath(handle, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun GlyphClose(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Close" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.0.dp.toPx()
+
+        drawLine(color = color, start = Offset(w * 0.24f, h * 0.24f), end = Offset(w * 0.76f, h * 0.76f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.76f, h * 0.24f), end = Offset(w * 0.24f, h * 0.76f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+fun GlyphMusicNote(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Music" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Double musical note
+        drawCircle(color = color, radius = w * 0.15f, center = Offset(w * 0.30f, h * 0.72f))
+        drawCircle(color = color, radius = w * 0.15f, center = Offset(w * 0.72f, h * 0.60f))
+
+        drawLine(color = color, start = Offset(w * 0.42f, h * 0.72f), end = Offset(w * 0.42f, h * 0.22f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.84f, h * 0.60f), end = Offset(w * 0.84f, h * 0.14f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.42f, h * 0.22f), end = Offset(w * 0.84f, h * 0.14f), strokeWidth = stroke * 1.8f, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+fun GlyphAlbum(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Album" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        drawCircle(color = color, radius = w * 0.40f, center = Offset(w * 0.5f, h * 0.5f), style = Stroke(width = stroke))
+        drawCircle(color = color, radius = w * 0.18f, center = Offset(w * 0.5f, h * 0.5f), style = Stroke(width = stroke * 0.8f))
+        drawCircle(color = color, radius = w * 0.06f, center = Offset(w * 0.5f, h * 0.5f), style = Fill)
+    }
+}
+
+// Navigation M3 Specific Icons
+@Composable
+fun GlyphLibrary(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Library" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // 3 Books or Shelf storage
+        drawRoundRect(color = color, topLeft = Offset(w * 0.14f, h * 0.22f), size = androidx.compose.ui.geometry.Size(w * 0.18f, h * 0.62f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = Stroke(width = stroke))
+        drawRoundRect(color = color, topLeft = Offset(w * 0.41f, h * 0.16f), size = androidx.compose.ui.geometry.Size(w * 0.18f, h * 0.68f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = Stroke(width = stroke))
+        
+        // Leaning book on right
+        val slant = Path().apply {
+            moveTo(w * 0.68f, h * 0.22f)
+            lineTo(w * 0.84f, h * 0.26f)
+            lineTo(w * 0.72f, h * 0.84f)
+            lineTo(w * 0.56f, h * 0.80f)
+            close()
+        }
+        drawPath(slant, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun GlyphPlaylists(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Playlists" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        drawLine(color = color, start = Offset(w * 0.18f, h * 0.26f), end = Offset(w * 0.82f, h * 0.26f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.18f, h * 0.46f), end = Offset(w * 0.82f, h * 0.46f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.18f, h * 0.66f), end = Offset(w * 0.52f, h * 0.66f), strokeWidth = stroke, cap = StrokeCap.Round)
+
+        // Musical note glyph on bottom right
+        drawCircle(color = color, radius = w * 0.11f, center = Offset(w * 0.70f, h * 0.74f))
+        drawLine(color = color, start = Offset(w * 0.79f, h * 0.74f), end = Offset(w * 0.79f, h * 0.56f), strokeWidth = stroke)
+        drawLine(color = color, start = Offset(w * 0.79f, h * 0.56f), end = Offset(w * 0.88f, h * 0.60f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+fun GlyphNowPlaying(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Now Playing" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.0.dp.toPx()
+
+        // Equalizer sound waves
+        drawLine(color = color, start = Offset(w * 0.20f, h * 0.35f), end = Offset(w * 0.20f, h * 0.75f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.40f, h * 0.16f), end = Offset(w * 0.40f, h * 0.84f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.60f, h * 0.28f), end = Offset(w * 0.60f, h * 0.80f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.80f, h * 0.42f), end = Offset(w * 0.80f, h * 0.68f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+fun GlyphSettings(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Settings" }) {
+        val w = size.width
+        val h = size.height
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        val stroke = 1.8.dp.toPx()
+
+        // Authentic M3 6-tooth Gear Wheel
+        val outerR = w * 0.38f
+        val innerR = w * 0.28f
+        val holeR = w * 0.12f
+
+        // Central hub ring
+        drawCircle(color = color, radius = innerR, center = Offset(cx, cy), style = Stroke(width = stroke))
+        // Center hollow hole
+        drawCircle(color = color, radius = holeR, center = Offset(cx, cy), style = Stroke(width = stroke * 0.9f))
+
+        // 6 Radial Cog Teeth evenly spaced at 60 deg
+        for (i in 0 until 6) {
+            val angleDeg = i * 60.0
+            val rad = Math.toRadians(angleDeg)
+            val cos = Math.cos(rad).toFloat()
+            val sin = Math.sin(rad).toFloat()
+
+            val p1 = Offset(cx + innerR * cos, cy + innerR * sin)
+            val p2 = Offset(cx + outerR * cos, cy + outerR * sin)
+            drawLine(color = color, start = p1, end = p2, strokeWidth = stroke * 1.8f, cap = StrokeCap.Round)
+        }
+    }
+}
+
+@Composable
+fun GlyphDiagnostics(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Diagnostics" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // EKG / Pulse Activity Wave
+        val path = Path().apply {
+            moveTo(w * 0.12f, h * 0.50f)
+            lineTo(w * 0.32f, h * 0.50f)
+            lineTo(w * 0.42f, h * 0.22f)
+            lineTo(w * 0.58f, h * 0.78f)
+            lineTo(w * 0.68f, h * 0.38f)
+            lineTo(w * 0.76f, h * 0.50f)
+            lineTo(w * 0.88f, h * 0.50f)
+        }
+        drawPath(path, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun GlyphUpdate(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Update" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Clean M3 Downward Arrow inside Circular Arc
+        val arcRect = androidx.compose.ui.geometry.Rect(w * 0.14f, h * 0.14f, w * 0.86f, h * 0.86f)
+        drawArc(
+            color = color,
+            startAngle = 30f,
+            sweepAngle = 300f,
+            useCenter = false,
+            topLeft = arcRect.topLeft,
+            size = arcRect.size,
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+
+        // Centered downward arrow shaft & point
+        drawLine(color = color, start = Offset(w * 0.50f, h * 0.28f), end = Offset(w * 0.50f, h * 0.68f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.36f, h * 0.54f), end = Offset(w * 0.50f, h * 0.68f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color = color, start = Offset(w * 0.64f, h * 0.54f), end = Offset(w * 0.50f, h * 0.68f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+fun GlyphVolume(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Volume" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        val speaker = Path().apply {
+            moveTo(w * 0.16f, h * 0.36f)
+            lineTo(w * 0.34f, h * 0.36f)
+            lineTo(w * 0.56f, h * 0.20f)
+            lineTo(w * 0.56f, h * 0.80f)
+            lineTo(w * 0.34f, h * 0.64f)
+            lineTo(w * 0.16f, h * 0.64f)
+            close()
+        }
+        drawPath(speaker, color = color, style = Fill)
+
+        // Arc sound wave
+        val arcRect = androidx.compose.ui.geometry.Rect(w * 0.40f, h * 0.30f, w * 0.85f, h * 0.70f)
+        drawArc(
+            color = color,
+            startAngle = -45f,
+            sweepAngle = 90f,
+            useCenter = false,
+            topLeft = arcRect.topLeft,
+            size = arcRect.size,
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+    }
+}
+
+@Composable
+fun GlyphBitPerfect(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Bit-Perfect" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Shield contour
+        val shield = Path().apply {
+            moveTo(w * 0.50f, h * 0.15f)
+            lineTo(w * 0.82f, h * 0.25f)
+            lineTo(w * 0.82f, h * 0.55f)
+            cubicTo(w * 0.82f, h * 0.75f, w * 0.50f, h * 0.88f, w * 0.50f, h * 0.88f)
+            cubicTo(w * 0.50f, h * 0.88f, w * 0.18f, h * 0.75f, w * 0.18f, h * 0.55f)
+            lineTo(w * 0.18f, h * 0.25f)
+            close()
+        }
+        drawPath(shield, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Checkmark inside
+        val check = Path().apply {
+            moveTo(w * 0.34f, h * 0.50f)
+            lineTo(w * 0.46f, h * 0.62f)
+            lineTo(w * 0.66f, h * 0.38f)
+        }
+        drawPath(check, color = color, style = Stroke(width = stroke * 1.1f, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+fun GlyphCheck(
+    color: Color,
+    modifier: Modifier = Modifier.size(16.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Check" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.0.dp.toPx()
+        val path = Path().apply {
+            moveTo(w * 0.20f, h * 0.52f)
+            lineTo(w * 0.42f, h * 0.74f)
+            lineTo(w * 0.82f, h * 0.28f)
+        }
+        drawPath(path, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+}
+
+@Composable
+fun GlyphNotification(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Notification" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Bell outline
+        val bell = Path().apply {
+            moveTo(w * 0.50f, h * 0.15f)
+            cubicTo(w * 0.38f, h * 0.15f, w * 0.28f, h * 0.28f, w * 0.28f, h * 0.45f)
+            lineTo(w * 0.28f, h * 0.65f)
+            lineTo(w * 0.18f, h * 0.75f)
+            lineTo(w * 0.82f, h * 0.75f)
+            lineTo(w * 0.72f, h * 0.65f)
+            lineTo(w * 0.72f, h * 0.45f)
+            cubicTo(w * 0.72f, h * 0.28f, w * 0.62f, h * 0.15f, w * 0.50f, h * 0.15f)
+            close()
+        }
+        drawPath(bell, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Clapper arc
+        drawArc(
+            color = color,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(w * 0.40f, h * 0.75f),
+            size = androidx.compose.ui.geometry.Size(w * 0.20f, h * 0.14f),
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+    }
+}
+
+@Composable
+fun GlyphDoNotDisturb(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Do Not Disturb" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Bell outline
+        val bell = Path().apply {
+            moveTo(w * 0.50f, h * 0.18f)
+            cubicTo(w * 0.40f, h * 0.18f, w * 0.30f, h * 0.28f, w * 0.30f, h * 0.45f)
+            lineTo(w * 0.30f, h * 0.65f)
+            lineTo(w * 0.22f, h * 0.75f)
+            lineTo(w * 0.78f, h * 0.75f)
+            lineTo(w * 0.70f, h * 0.65f)
+            lineTo(w * 0.70f, h * 0.45f)
+            cubicTo(w * 0.70f, h * 0.28f, w * 0.60f, h * 0.18f, w * 0.50f, h * 0.18f)
+        }
+        drawPath(bell, color = color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+
+        // Slash through bell
+        drawLine(
+            color = color,
+            start = Offset(w * 0.20f, h * 0.20f),
+            end = Offset(w * 0.80f, h * 0.80f),
+            strokeWidth = stroke * 1.1f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+

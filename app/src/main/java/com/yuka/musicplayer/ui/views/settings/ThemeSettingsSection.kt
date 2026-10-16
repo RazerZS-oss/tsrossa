@@ -1,7 +1,6 @@
 package com.yuka.musicplayer.ui.views.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yuka.musicplayer.ui.components.TactileBox
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 
@@ -27,20 +28,20 @@ fun ThemeSettingsSection(
     accentFixedColorStr: String,
     onAccentFixedColorChange: (String) -> Unit
 ) {
-    SettingsCard(title = "THEME & DISPLAY", tag = "VISUAL ENGINE") {
+    SettingsCard(title = "Theme & Display") {
         Text(
-            text = "BACKGROUND CANVAS",
-            color = TerminalGray,
-            fontFamily = TerminalFont,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
+            text = "Background canvas",
+            color = Color.White.copy(alpha = 0.70f),
+            fontFamily = ModernSansFont,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
         )
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         val bgModes = listOf(
-            "BLACK" to "TRUE BLACK",
-            "SIGNATURE" to "NEON BLUE",
-            "BLUR" to "WALLPAPER"
+            "BLACK" to "True Black",
+            "SIGNATURE" to "Tonal M3",
+            "BLUR" to "Wallpaper"
         )
         SettingsSegmentedControl(
             items = bgModes,
@@ -48,20 +49,20 @@ fun ThemeSettingsSection(
             onItemSelected = onBgModeChange
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "ACCENT COLOR MODE",
-            color = TerminalGray,
-            fontFamily = TerminalFont,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
+            text = "Accent color mode",
+            color = Color.White.copy(alpha = 0.70f),
+            fontFamily = ModernSansFont,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
         )
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         val accentModes = listOf(
-            "DYNAMIC" to "DYNAMIC",
-            "FIXED" to "FIXED COLOR"
+            "DYNAMIC" to "Material You",
+            "FIXED" to "Fixed Palette"
         )
         SettingsSegmentedControl(
             items = accentModes,
@@ -70,49 +71,47 @@ fun ThemeSettingsSection(
         )
 
         if (accentMode == "FIXED") {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = "PALETTE SELECTION",
-                color = TerminalGray,
-                fontFamily = TerminalFont,
-                fontSize = 9.5.sp,
+                color = Color.White.copy(alpha = 0.65f),
+                fontFamily = ModernSansFont,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             val fixedColors = listOf(
-                "#00FF00" to "NEON GREEN",
-                "#00E5FF" to "CYAN",
-                "#FFD700" to "AMBER",
-                "#FF4081" to "PINK",
-                "#B388FF" to "PURPLE"
+                "#00FF00" to "Green",
+                "#00E5FF" to "Cyan",
+                "#FFD700" to "Amber",
+                "#FF4081" to "Pink",
+                "#B388FF" to "Purple"
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 fixedColors.forEach { (hex, _) ->
                     val color = Color(android.graphics.Color.parseColor(hex))
                     val isSelected = accentFixedColorStr.equals(hex, ignoreCase = true)
-                    Box(
+                    TactileBox(
+                        onClick = { onAccentFixedColorChange(hex) },
+                        pressedScale = 0.88f,
                         modifier = Modifier
                             .weight(1f)
-                            .height(30.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(color.copy(alpha = 0.25f))
-                            .border(
-                                width = if (isSelected) 1.5.dp else 0.8.dp,
-                                color = if (isSelected) color else Color.White.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(6.dp)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) color.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.06f)
                             )
-                            .clickable { onAccentFixedColorChange(hex) },
-                        contentAlignment = Alignment.Center
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
-                                .background(color, CircleShape)
+                                .size(if (isSelected) 18.dp else 14.dp)
+                                .clip(CircleShape)
+                                .background(color)
                         )
                     }
                 }

@@ -25,8 +25,9 @@ import java.io.File
  * Screen Content Container that switches between LIBRARY, PLAYLIST, TRACK, and SETTINGS views with fluid physics transitions.
  */
 @Composable
-fun ColumnScope.AppScreenContent(
+fun AppScreenContent(
     viewState: ViewState,
+    modifier: Modifier = Modifier,
     // Library
     musicRootDirectory: File,
     scannedItems: List<com.yuka.musicplayer.model.ScannedMusicItem>,
@@ -67,6 +68,7 @@ fun ColumnScope.AppScreenContent(
     onVolumeChange: (Float) -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrev: () -> Unit,
+    isHardwareVolumeActive: Boolean = false,
     // Settings
     sharedPref: SharedPreferences,
     bgMode: String,
@@ -105,7 +107,7 @@ fun ColumnScope.AppScreenContent(
         ViewState.SETTINGS -> 3
     }
 
-    Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = viewState,
             transitionSpec = {
@@ -140,7 +142,7 @@ fun ColumnScope.AppScreenContent(
                         musicRootDirectory = musicRootDirectory,
                         scannedItems = scannedItems,
                         isScanning = isScanningLibrary,
-                        playingFile = currentTrack?.file,
+                        currentTrack = currentTrack,
                         playlistSet = playlistSet,
                         searchQuery = searchQuery,
                         sortMode = librarySortMode,
@@ -160,7 +162,7 @@ fun ColumnScope.AppScreenContent(
                         playlists = playlists,
                         selectedPlaylistId = selectedPlaylistId,
                         activePlayingPlaylistId = activePlayingPlaylistId,
-                        playingFile = currentTrack?.file,
+                        currentTrack = currentTrack,
                         isShuffleEnabled = isShuffleEnabled,
                         repeatMode = repeatMode,
                         priorityQueueSize = priorityQueueSize,
@@ -195,6 +197,7 @@ fun ColumnScope.AppScreenContent(
                         onCycleRepeat = onCycleRepeat,
                         onOpenQueue = onOpenQueue,
                         onSeekTo = onSeekTo,
+                        isHardwareVolumeActive = isHardwareVolumeActive,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

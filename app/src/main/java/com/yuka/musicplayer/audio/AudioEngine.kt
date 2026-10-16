@@ -15,6 +15,17 @@ class AudioEngine {
 
         @JvmStatic
         external fun setUsbBufferProfile(transfers: Int, packets: Int)
+
+        @JvmStatic
+        fun applyBufferProfile(profile: Int): Pair<Int, Int> {
+            val (transfers, packets) = when (profile) {
+                0 -> 16 to 32     // 64ms Low Latency (512 microframes)
+                2 -> 24 to 64     // 192ms Maximum Stability (1536 microframes, strictly <= 2048 FRINDEX)
+                else -> 20 to 64  // 160ms Balanced Robust (1280 microframes, Default)
+            }
+            setUsbBufferProfile(transfers, packets)
+            return transfers to packets
+        }
     }
 
 

@@ -6,6 +6,8 @@
 #include <string>
 #include <unistd.h>
 #include <cstdint>
+#include <cmath>
+#include <algorithm>
 
 #define TAG "KewAudioEngine"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
@@ -33,9 +35,23 @@ struct ApiMutexLock {
 
 // Ultra-fast inline PRNG for TPDF Dithering (thread-local to eliminate data race)
 inline float fast_uniform_rand() {
-  thread_local uint32_t state = 123456789;
-  state = (1103515245 * state + 12345);
-  return (float)(state & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+  thread_local uint32_t state = 0;
+  if (state == 0) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    state = (uint32_t)(ts.tv_nsec ^ (uintptr_t)&state ^ 123456789U);
+    if (state == 0) state = 123456789U;
+  }
+  state = (1103515245U * state + 12345U);
+  return (float)(state & 0x7FFFFFFFU) / (float)0x7FFFFFFFU;
+}
+
+// Perceptual exponential volume curve with hard clipping limits [0.0f, 1.0f]
+inline float calculate_scaled_volume(float vol) {
+  if (vol < 0.001f) return 0.0f;
+  if (vol >= 0.999f) return 1.0f;
+  float scaled = (std::exp(vol * 4.0f) - 1.0f) / (std::exp(4.0f) - 1.0f);
+  return std::min(1.0f, std::max(0.0f, scaled));
 }
 
 inline uint64_t get_time_ms() {

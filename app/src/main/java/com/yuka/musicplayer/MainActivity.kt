@@ -282,11 +282,11 @@ fun KewApp(audioEngine: AudioEngine) {
     var isDacConnected by remember { mutableStateOf(audioEngine.isDacConnected() || com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected) }
 
     val triggerWarmupProcess: (String) -> Unit = { targetName ->
-        val isActive = com.yuka.musicplayer.audio.AudioPlayerManager.isPlaying || audioEngine.isPlaying()
+        val isStreaming = audioEngine.isPlaying()
         val dacAttached = audioEngine.isDacConnected() || com.yuka.musicplayer.audio.AudioPlayerManager.isDacConnected
         if (!dacAttached) {
             Toast.makeText(context, "DAC USB belum terhubung", Toast.LENGTH_SHORT).show()
-        } else if (isActive) {
+        } else if (isStreaming) {
             Toast.makeText(context, "DAC sedang memutar audio", Toast.LENGTH_SHORT).show()
         } else {
             warmupDacName = targetName
@@ -374,7 +374,9 @@ fun KewApp(audioEngine: AudioEngine) {
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            com.yuka.musicplayer.util.PlaylistStorageHelper.performOneTimeLegacyReset(context, sharedPref)
+            if (!sharedPref.getBoolean("playlists_v2_migrated", false)) {
+                com.yuka.musicplayer.util.PlaylistStorageHelper.performOneTimeLegacyReset(context, sharedPref)
+            }
             val loaded = com.yuka.musicplayer.util.PlaylistStorageHelper.loadAllPlaylists(context)
             withContext(Dispatchers.Main) {
                 allPlaylists = loaded
@@ -540,10 +542,13 @@ fun KewApp(audioEngine: AudioEngine) {
         mutableStateOf(sharedPref.getFloat("last_volume", 1.0f)) 
     }
 
+    var volumeSaveJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(currentVolume) {
-        sharedPref.edit().putFloat("last_volume", currentVolume).apply()
-        withContext(Dispatchers.Default) {
-            audioEngine.setSoftwareVolume(currentVolume)
+        audioEngine.setSoftwareVolume(currentVolume)
+        volumeSaveJob?.cancel()
+        volumeSaveJob = coroutineScope.launch {
+            kotlinx.coroutines.delay(500L)
+            sharedPref.edit().putFloat("last_volume", currentVolume).apply()
         }
     }
 
@@ -702,17 +707,20 @@ fun KewApp(audioEngine: AudioEngine) {
     fun peekNextTrackFile(): File? = getNextTrackFile(isAutoAdvance = true, consumeQueue = false)
 
     fun syncPreparedNextTrack() {
-        prepareJob?.cancel()
         if (!isPlaying || currentTrack == null) {
+            prepareJob?.cancel()
             audioEngine.clearNextTrack()
             return
         }
         val nextFile = peekNextTrackFile()
         if (nextFile != null) {
+            // Avoid redundant background preparation if already buffering this track
+            prepareJob?.cancel()
             prepareJob = coroutineScope.launch(Dispatchers.IO) {
                 audioEngine.prepareNextTrack(nextFile.absolutePath)
             }
         } else {
+            prepareJob?.cancel()
             audioEngine.clearNextTrack()
         }
     }
@@ -809,6 +817,7 @@ fun KewApp(audioEngine: AudioEngine) {
                     withContext(Dispatchers.Main) {
                         formatIncompatibleError = null
                         isHardwareVolumeActive = audioEngine.isHardwareVolumeActive()
+                        syncPreparedNextTrack()
                     }
                 }
                 result == -2 -> {
@@ -967,6 +976,7 @@ fun KewApp(audioEngine: AudioEngine) {
             }
         }
         audioEngine.onTrackFinishedCallback = { 
+            android.util.Log.i("MainActivity", "audioEngine.onTrackFinishedCallback received -> playNext(true)")
             coroutineScope.launch(Dispatchers.Main) {
                 currentPlayNext(true) 
             }

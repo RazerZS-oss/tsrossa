@@ -16,8 +16,8 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
-import com.yuka.musicplayer.ui.theme.SignatureDeepNavy
-import com.yuka.musicplayer.ui.theme.SignatureSurfaceNavy
+import com.yuka.musicplayer.ui.theme.M3Surface
+import com.yuka.musicplayer.ui.theme.M3SurfaceContainerLowest
 
 @Composable
 fun AppBackgroundContainer(
@@ -34,12 +34,12 @@ fun AppBackgroundContainer(
                     bitmap = wallpaperBitmap,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(24.dp)
+                    modifier = Modifier.fillMaxSize().blur(28.dp)
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.65f))
+                        .background(Color.Black.copy(alpha = 0.72f))
                 )
             }
             bgMode == "SIGNATURE" -> {
@@ -48,15 +48,15 @@ fun AppBackgroundContainer(
                         .fillMaxSize()
                         .drawWithCache {
                             val radialGlow = Brush.radialGradient(
-                                colors = listOf(accent.copy(alpha = 0.08f), Color.Transparent),
-                                center = Offset(size.width * 0.5f, size.height * 0.28f),
-                                radius = size.width * 0.85f
+                                colors = listOf(accent.copy(alpha = 0.07f), Color.Transparent),
+                                center = Offset(size.width * 0.5f, size.height * 0.22f),
+                                radius = size.width * 0.95f
                             )
                             val vertGradient = Brush.verticalGradient(
                                 colors = listOf(
-                                    SignatureDeepNavy,
-                                    SignatureSurfaceNavy.copy(alpha = 0.90f),
-                                    SignatureDeepNavy
+                                    M3SurfaceContainerLowest,
+                                    M3Surface,
+                                    M3SurfaceContainerLowest
                                 )
                             )
                             onDrawBehind {
@@ -67,14 +67,15 @@ fun AppBackgroundContainer(
                 )
             }
             else -> {
+                // True Black M3 Mode with ultra-subtle tonal ambiance
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .drawWithCache {
                             val radialGlow = Brush.radialGradient(
-                                colors = listOf(accent.copy(alpha = 0.06f), Color.Transparent),
-                                center = Offset(size.width * 0.5f, size.height * 0.26f),
-                                radius = size.width * 0.80f
+                                colors = listOf(accent.copy(alpha = 0.05f), Color.Transparent),
+                                center = Offset(size.width * 0.5f, size.height * 0.22f),
+                                radius = size.width * 0.90f
                             )
                             onDrawBehind {
                                 drawRect(Color.Black)

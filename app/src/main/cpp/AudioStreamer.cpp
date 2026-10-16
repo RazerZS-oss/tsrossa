@@ -12,6 +12,7 @@
 #include <sched.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -37,41 +38,39 @@ bool start_iso_streaming_thread(const char *thread_name) {
   std::string name_copy = thread_name ? thread_name : "TsrossaIso";
   g_audioState.isoThread = new std::thread([name_copy]() {
     pthread_setname_np(pthread_self(), name_copy.c_str());
-    setpriority(PRIO_PROCESS, 0, -19); // Urgent Audio
+
+    // 1. Minimum timer slack (1ns) prevents kernel from coalescing wakeups when Android demotes process to background
+    prctl(PR_SET_TIMERSLACK, 1, 0, 0, 0);
+
+    // 2. Maximum urgent nice priority (-20) ensures immediate preemption of UI/compositor threads under CFS
+    setpriority(PRIO_PROCESS, 0, -20);
     struct sched_param param;
     param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    if (param.sched_priority > 2) param.sched_priority = 2; // Real-time audio priority
     pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
 
-    // CPU Affinity: Dynamically pin USB isochronous pump to Big/Performance cores
-    // Little cores (0-3) aggressively downclock to 576-672 MHz on app blur/swipe gestures.
-    // On 8-core chips (most Android flagships/mid-rangers), cores 4-6 run at sustained 2.3+ GHz.
-    // On devices with <= 4 cores, leave affinity unrestricted to prevent EINVAL.
+    // 3. CPU Affinity: Include ALL online cores (or avoid restrictive mask) so cpuset transitions never strand the thread
     long num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    bool affinity_set = false;
-    if (num_cpus >= 7) {
-      for (int c = 4; c <= std::min(6L, num_cpus - 2); c++) CPU_SET(c, &cpuset);
-      affinity_set = true;
-    } else if (num_cpus >= 5) {
-      for (int c = 4; c < num_cpus; c++) CPU_SET(c, &cpuset);
-      affinity_set = true;
-    }
-    if (affinity_set) {
-      sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
-    }
+    for (int c = 0; c < num_cpus; c++) CPU_SET(c, &cpuset);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
 
-    // Auto-scale queue based on bus speed: 8000 microframes/sec (High-Speed DAC) gets 64x64 (512ms)
-    // to easily survive heavy multi-app launches & SurfaceFlinger/Samsung Launcher gesture blur animations (~250-400ms)
-    // Full-Speed (1000 frames/sec) gets 24x16 (384ms)
+    // Auto-scale queue based on bus speed:
+    // Synopsys DWC3 xHCI hardware Frame Index (FRINDEX) boundary is 2048 microframes (256ms).
+    // Queueing > 2048 microframes causes FRINDEX wrap-around / -EXDEV and burst overruns.
+    // High-Speed UAC2 (8000 microframes/sec = 125us/packet):
+    // 24 transfers x 64 packets (power-of-two) = 1536 microframes = 192ms of hardware runway.
+    // Perfectly fits within the 2048-microframe hardware window without ring underrun or FIFO overflow.
+    // Full-Speed UAC1 (1000 frames/sec = 1ms/packet): 16 transfers x 16 packets = 256ms.
     int num_transfers = g_audioState.isoTransfersCount.load();
     int num_packets = g_audioState.isoPacketsCount.load();
     if (g_audioState.usb_frames_per_sec.load() >= 8000) {
-      if (num_transfers <= 32) num_transfers = 64;
-      if (num_packets <= 16) num_packets = 64;
+      if (num_transfers <= 0 || num_transfers > 32) num_transfers = 24;
+      if (num_packets <= 0 || num_packets > 64) num_packets = 64; // 64 microframes = 8ms per URB; 24 * 8ms = 192ms total runway
     } else {
-      if (num_transfers <= 16) num_transfers = 24;
-      if (num_packets <= 0) num_packets = 16;
+      if (num_transfers <= 0 || num_transfers > 24) num_transfers = 16;
+      if (num_packets <= 0 || num_packets > 16) num_packets = 16;
     }
     int packet_size = g_audioState.maxPacketSize;
     if (packet_size <= 0) packet_size = 1024;
@@ -101,17 +100,24 @@ bool start_iso_streaming_thread(const char *thread_name) {
         g_audioState.activeIsoTransfers.fetch_sub(1);
       }
     }
+
     g_audioState.isoThreadStarted.store(true);
+    {
+      std::lock_guard<std::mutex> lk(g_isoStartMutex);
+      g_isoStartCv.notify_all();
+    }
 
     uint32_t loop_count = 0;
     while (!g_audioState.stopIsoThread.load()) {
       struct timeval tv = {0, 1000}; // 1ms polling avoids CFS scheduler wakeup jitter under compositor load
+      auto poll_start = std::chrono::steady_clock::now();
       libusb_handle_events_timeout_completed(g_audioState.usbContext, &tv, nullptr);
-
-      // Android ActivityManager resets task cpusets to 0-7 or 0-6 during app-switch transitions.
-      // Periodically (every ~500ms) re-anchor iso pump thread to Big cores if dynamic affinity is active.
-      if (affinity_set && (++loop_count & 0x1FF) == 0) {
-        sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+      auto poll_dur_us = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - poll_start).count();
+      if (poll_dur_us > 25000) { // Delayed >25ms
+        __android_log_print(ANDROID_LOG_WARN, "TSROSSA_DIAG",
+                            "STALL in libusb_handle_events: %lld us on CPU %d (activeUrbs=%d)",
+                            (long long)poll_dur_us, sched_getcpu(), g_audioState.activeIsoTransfers.load());
       }
     }
 
@@ -160,16 +166,18 @@ bool start_iso_streaming_thread(const char *thread_name) {
     }
 
     g_audioState.isoThreadExited.store(true);
+    {
+      std::lock_guard<std::mutex> lk(g_isoStartMutex);
+      g_isoStartCv.notify_all();
+    }
   });
 
-  // Synchronous barrier: ensure all initial USB transfers are queued before returning
-  auto barrier_start = std::chrono::steady_clock::now();
-  while (!g_audioState.isoThreadStarted.load() && !g_audioState.isoThreadExited.load()) {
-    std::this_thread::sleep_for(std::chrono::microseconds(500));
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - barrier_start).count() > 100) {
-      break;
-    }
+  // Synchronous barrier: wait for initial USB transfers to queue without busy-polling
+  {
+    std::unique_lock<std::mutex> lk(g_isoStartMutex);
+    g_isoStartCv.wait_for(lk, std::chrono::milliseconds(100), [] {
+      return g_audioState.isoThreadStarted.load() || g_audioState.isoThreadExited.load();
+    });
   }
 
   return true;
@@ -182,6 +190,11 @@ void stop_and_join_decode_thread() {
       g_audioState.decodeThread->join();
     delete g_audioState.decodeThread;
     g_audioState.decodeThread = nullptr;
+  }
+  g_audioState.isDecoding.store(false);
+  // Ensure any incomplete mlock ranges are unpinned if cancelled
+  if (!g_audioState.pcmBuffer.empty()) {
+    munlock(g_audioState.pcmBuffer.data(), g_audioState.pcmBuffer.size() * sizeof(int32_t));
   }
 }
 
@@ -287,6 +300,32 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
     if (jitter > current_max) {
       g_audioState.maxIsoJitterNs.store(jitter);
     }
+    if (delta_ns > 20000000LL) { // Callback gap > 20ms
+      __android_log_print(ANDROID_LOG_WARN, "TSROSSA_DIAG",
+                          "CALLBACK STALL: gap=%lld us (expected %lld us) on CPU %d, activeUrbs=%d",
+                          (long long)(delta_ns / 1000), (long long)(expected_ns / 1000),
+                          sched_getcpu(), g_audioState.activeIsoTransfers.load());
+    }
+  }
+
+  // Check packet statuses with rate-limiting to prevent logcat flooding
+  int bad_packets = 0;
+  int first_bad_status = 0;
+  for (int p = 0; p < num_packets; p++) {
+    int st = transfer->iso_packet_desc[p].status;
+    if (st != LIBUSB_TRANSFER_COMPLETED) {
+      bad_packets++;
+      if (first_bad_status == 0) first_bad_status = st;
+    }
+  }
+  if (bad_packets > 0) {
+    static int64_t last_packet_err_log_ns = 0;
+    if (now_ns - last_packet_err_log_ns > 200000000LL) { // max once every 200ms
+      last_packet_err_log_ns = now_ns;
+      __android_log_print(ANDROID_LOG_WARN, "TSROSSA_DIAG",
+                          "PACKET ERROR: badPackets=%d/%d, firstStatus=%d (activeUrbs=%d)",
+                          bad_packets, num_packets, first_bad_status, g_audioState.activeIsoTransfers.load());
+    }
   }
 
   // Soft swapping check
@@ -336,7 +375,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
 
     // HARDWARE DAC WARMUP / PRE-ROLL ZERO-PADDING
     uint32_t silenceRemaining = g_audioState.warmupSilenceFrames.load();
-    if (silenceRemaining > 0 && g_audioState.isPlaying.load()) {
+    if (silenceRemaining > 0 && (g_audioState.isPlaying.load() || g_audioState.isWarmingUp.load())) {
       int dst_bytes_per_frame = g_audioState.channels.load() * g_audioState.subframeSize.load();
       if (dst_bytes_per_frame > 0) {
         int bytes_needed = bytes_to_send - bytes_filled;
@@ -380,7 +419,10 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
         int sf_size = g_audioState.subframeSize.load();
         float target_vol = g_audioState.targetVolume.load();
         float delta = 0.0f;
-        if (std::abs(target_vol - g_audioState.currentVolume) > 0.0001f) {
+        if (g_audioState.isHardwareVolumeActive.load()) {
+          g_audioState.currentVolume = 1.0f;
+          target_vol = 1.0f;
+        } else if (std::abs(target_vol - g_audioState.currentVolume) > 0.0001f) {
           delta = (target_vol - g_audioState.currentVolume) / (float)std::max((size_t)2048, num_samples);
         }
 
@@ -389,7 +431,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
         uint8_t *dst_bytes = (uint8_t *)(buffer + data_offset + bytes_filled);
 
         // BIT-PERFECT BYPASS
-        if (g_audioState.currentVolume >= 0.999f && delta == 0.0f) {
+        if ((g_audioState.isHardwareVolumeActive.load() || g_audioState.currentVolume >= 0.999f) && delta == 0.0f) {
           g_audioState.bitPerfectDirectPassActive.store(true);
           if (sf_size == 4) {
             // 32-bit subslot container (UAC standard Type I PCM):
@@ -478,6 +520,9 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
           break;
         }
 
+        LOGI("[AudioStreamer] Track reached end of stream (nowIndex=%zu, nowTotal=%zu, hasNext=%d)",
+             nowIndex, nowTotal, g_audioState.hasNextTrack.load() ? 1 : 0);
+
         // Track is fully played to the end: Check Gapless handover
         if (g_audioState.hasNextTrack.load()) {
           bool format_changed = (g_audioState.sampleRate.load() !=
@@ -503,6 +548,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
             break;
           }
 
+          LOGI("[AudioStreamer] Performing seamless gapless transition to: %s", g_audioState.nextFilePath.c_str());
           g_audioState.pcmBufferGarbage = std::move(g_audioState.pcmBuffer);
           g_audioState.pcmBuffer = std::move(g_audioState.pcmBufferNext);
           g_audioState.sampleRate.store(g_audioState.sampleRateNext.load());
@@ -525,6 +571,7 @@ void LIBUSB_CALL iso_callback(struct libusb_transfer *transfer) {
           }
         } else {
           // No next track prepared: mark finished and dispatch REQ_EVENT_TRACK_FINISHED
+          LOGI("[AudioStreamer] No next track pre-buffered. Emitting REQ_EVENT_TRACK_FINISHED.");
           g_audioState.isFinished.store(true);
           g_audioState.isPlaying.store(false);
 
@@ -806,6 +853,8 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
 
       g_audioState.usbAudioInterface = selected_alt.interface_num;
       g_audioState.epAddress = selected_alt.ep_out;
+      g_audioState.epFeedback = selected_alt.ep_feedback;
+      g_audioState.isAsync = selected_alt.is_async;
       g_audioState.maxPacketSize = selected_alt.max_packet_size;
       g_audioState.subframeSize.store(selected_alt.subframe_size);
       g_audioState.currentAltSetting.store(selected_alt.altsetting);
@@ -941,7 +990,8 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
     g_audioState.isDecoding.store(true);
     g_audioState.decodeThread = new std::thread([decoder, totalFrames, newChannels, initialRead]() {
       pthread_setname_np(pthread_self(), "TsrossaDecode");
-      setpriority(PRIO_PROCESS, 0, -10); // Elevated priority to prevent starvation
+      prctl(PR_SET_TIMERSLACK, 1, 0, 0, 0);
+      setpriority(PRIO_PROCESS, 0, -16); // High priority to finish decode quickly without UI starvation
       size_t framesRead = initialRead;
       size_t chunkSize = 131072; // 128k frames per chunk for faster throughput
       while (framesRead < totalFrames && !g_audioState.cancelDecoding.load()) {
@@ -958,6 +1008,7 @@ int play_audio_internal(const std::string &savedPath, jobject thiz, JNIEnv *env)
       size_t total_bytes = framesRead * newChannels * sizeof(int32_t);
       size_t lock_bytes = std::min(total_bytes, (size_t)(128 * 1024 * 1024));
       mlock(g_audioState.pcmBuffer.data(), lock_bytes);
+      g_audioState.isDecoding.store(false);
       LOGI("Background Pure-RAM preload complete: %zu frames loaded, %zu bytes locked in physical RAM.",
            framesRead, lock_bytes);
     });

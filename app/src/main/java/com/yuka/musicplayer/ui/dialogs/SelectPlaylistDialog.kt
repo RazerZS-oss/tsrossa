@@ -1,7 +1,6 @@
 package com.yuka.musicplayer.ui.dialogs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,13 +10,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.model.Playlist
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
+import com.yuka.musicplayer.ui.components.GlyphAdd
+import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.GlyphPlaylists
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
@@ -35,133 +42,172 @@ fun SelectPlaylistDialog(
     CyberBottomSheet(
         visible = visible,
         onDismissRequest = onDismissRequest,
-        maxHeightFraction = 0.55f,
+        maxHeightFraction = 0.60f,
         maxWidth = 420.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "— ADD TO PLAYLIST —",
-                    color = LocalAccentColor.current,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont
-                )
-                Text(
-                    text = "✕",
-                    color = TerminalGray,
-                    fontSize = 12.sp,
-                    fontFamily = TerminalFont,
-                    modifier = Modifier.clickable { onDismissRequest() }.padding(4.dp)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Add to playlist",
+                        color = TerminalWhite,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = ModernSansFont
+                    )
+                    if (targetTrack != null) {
+                        Text(
+                            text = targetTrack.nameWithoutExtension.ifEmpty { targetTrack.name },
+                            color = Color.White.copy(alpha = 0.65f),
+                            fontSize = 12.sp,
+                            fontFamily = ModernSansFont,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable { onDismissRequest() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    GlyphClose(color = TerminalGray, modifier = Modifier.size(18.dp))
+                }
             }
 
-            if (targetTrack != null) {
-                Text(
-                    text = targetTrack.nameWithoutExtension.ifEmpty { targetTrack.name },
-                    color = TerminalWhite,
-                    fontSize = 11.sp,
-                    fontFamily = TerminalFont,
-                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
-                )
-            }
+            Spacer(modifier = Modifier.height(14.dp))
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Quick Create New Playlist row
-            Box(
+            // Quick Create New Playlist Button
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(LocalAccentColor.current.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
-                    .border(1.dp, LocalAccentColor.current.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(m3SurfaceContainerHigh())
                     .clickable {
                         onDismissRequest()
                         onCreateNewPlaylist()
                     }
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                contentAlignment = Alignment.Center
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LocalAccentColor.current.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    GlyphAdd(color = LocalAccentColor.current, modifier = Modifier.size(16.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "+ CREATE NEW PLAYLIST",
+                    text = "New playlist",
                     color = LocalAccentColor.current,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = ModernSansFont
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (playlists.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 20.dp),
+                        .padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "NO PLAYLISTS YET",
-                        color = TerminalGray,
-                        fontSize = 10.sp,
-                        fontFamily = TerminalFont
+                        text = "No custom playlists yet",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 13.sp,
+                        fontFamily = ModernSansFont
                     )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(playlists) { playlist ->
                         val containsTrack = targetTrack != null && playlist.trackPaths.contains(targetTrack.absolutePath)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 3.dp)
-                                .background(Color(0xFF090D18), RoundedCornerShape(6.dp))
-                                .border(
-                                    0.5.dp,
-                                    if (containsTrack) LocalAccentColor.current.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f),
-                                    RoundedCornerShape(6.dp)
-                                )
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (containsTrack) LocalAccentColor.current.copy(alpha = 0.12f) else m3SurfaceContainer())
                                 .clickable {
                                     onSelectPlaylist(playlist)
                                 }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(
-                                    text = playlist.name,
-                                    color = if (containsTrack) LocalAccentColor.current else TerminalWhite,
-                                    fontSize = 12.sp,
-                                    fontFamily = TerminalFont,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${playlist.trackPaths.size} tracks",
-                                    color = TerminalGray,
-                                    fontSize = 9.5.sp,
-                                    fontFamily = TerminalFont
-                                )
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(m3SurfaceContainerHigh()),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    GlyphPlaylists(
+                                        color = if (containsTrack) LocalAccentColor.current else TerminalGray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = playlist.name,
+                                        color = if (containsTrack) LocalAccentColor.current else TerminalWhite,
+                                        fontSize = 14.sp,
+                                        fontFamily = ModernSansFont,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${playlist.trackPaths.size} tracks",
+                                        color = Color.White.copy(alpha = 0.55f),
+                                        fontSize = 11.sp,
+                                        fontFamily = ModernSansFont
+                                    )
+                                }
                             }
                             if (containsTrack) {
-                                Text(
-                                    text = "ADDED ✓",
-                                    color = LocalAccentColor.current,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = TerminalFont
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(LocalAccentColor.current.copy(alpha = 0.18f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Added",
+                                        color = LocalAccentColor.current,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = ModernSansFont
+                                    )
+                                }
                             }
                         }
                     }

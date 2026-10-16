@@ -1,21 +1,25 @@
 package com.yuka.musicplayer.ui.dialogs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
@@ -29,40 +33,62 @@ fun PermissionStatusRow(
     deniedText: String,
     onActionClick: () -> Unit
 ) {
+    val accent = LocalAccentColor.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, if (isGranted) Color(0xFF00E676).copy(alpha = 0.35f) else Color(0xFFFF9100).copy(alpha = 0.35f), RoundedCornerShape(4.dp))
-            .background(Color(0xFF141414), RoundedCornerShape(4.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(title, color = TerminalWhite, fontFamily = TerminalFont, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = TerminalGray, fontFamily = TerminalFont, fontSize = 9.sp)
+        Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
+            Text(
+                text = title,
+                color = TerminalWhite,
+                fontFamily = ModernSansFont,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.55f),
+                fontFamily = ModernSansFont,
+                fontSize = 11.sp
+            )
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = if (isGranted) grantedText else deniedText,
                 color = if (isGranted) Color(0xFF00E676) else Color(0xFFFF9100),
-                fontFamily = TerminalFont,
-                fontSize = 10.sp,
+                fontFamily = ModernSansFont,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold
             )
         }
-        Box(
+        TactileBox(
+            onClick = onActionClick,
+            pressedScale = 0.90f,
             modifier = Modifier
-                .border(1.dp, LocalAccentColor.current.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                .clickable { onActionClick() }
-                .padding(horizontal = 8.dp, vertical = 5.dp)
+                .clip(RoundedCornerShape(50))
+                .background(accent.copy(alpha = 0.16f))
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            Text("MANAGE", color = LocalAccentColor.current, fontFamily = TerminalFont, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = "SETUP",
+                color = accent,
+                fontFamily = ModernSansFont,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
 
 @Composable
 fun PermissionCard(
-    icon: String,
+    icon: @Composable () -> Unit,
     title: String,
     badge: String,
     isGranted: Boolean,
@@ -71,10 +97,6 @@ fun PermissionCard(
     actionLabel: String,
     onAction: () -> Unit
 ) {
-    val borderColor = if (isGranted) Color(0xFF00E676).copy(alpha = 0.4f)
-    else if (isEssential) Color(0xFFFF9100).copy(alpha = 0.5f)
-    else TerminalGray.copy(alpha = 0.3f)
-
     val badgeColor = if (isGranted) Color(0xFF00E676)
     else if (isEssential) Color(0xFFFF9100)
     else TerminalGray
@@ -82,9 +104,9 @@ fun PermissionCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
-            .background(Color(0xFF121212), RoundedCornerShape(6.dp))
-            .padding(10.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(14.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -92,40 +114,81 @@ fun PermissionCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Text(icon, fontSize = 12.sp)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(title, color = TerminalWhite, fontFamily = TerminalFont, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    icon()
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = title,
+                    color = TerminalWhite,
+                    fontFamily = ModernSansFont,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
-            Text(
-                text = "[ $badge ]",
-                color = badgeColor,
-                fontFamily = TerminalFont,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(desc, color = TerminalWhite.copy(alpha = 0.75f), fontFamily = TerminalFont, fontSize = 10.sp, lineHeight = 14.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (!isGranted) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, badgeColor, RoundedCornerShape(4.dp))
-                    .background(badgeColor.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-                    .clickable { onAction() }
-                    .padding(vertical = 7.dp),
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(50))
+                    .background(badgeColor.copy(alpha = 0.16f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text(actionLabel, color = badgeColor, fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = badge,
+                    color = badgeColor,
+                    fontFamily = ModernSansFont,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = desc,
+            color = Color.White.copy(alpha = 0.65f),
+            fontFamily = ModernSansFont,
+            fontSize = 11.5.sp,
+            lineHeight = 16.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (!isGranted) {
+            TactileBox(
+                onClick = onAction,
+                pressedScale = 0.94f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .background(badgeColor.copy(alpha = 0.20f))
+                    .padding(vertical = 9.dp)
+            ) {
+                Text(
+                    text = actionLabel,
+                    color = badgeColor,
+                    fontFamily = ModernSansFont,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("✓", color = Color(0xFF00E676), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                com.yuka.musicplayer.ui.components.GlyphCheck(
+                    color = Color(0xFF00E676),
+                    modifier = Modifier.size(14.dp)
+                )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(actionLabel, color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
+                Text(
+                    text = actionLabel,
+                    color = Color.White.copy(alpha = 0.60f),
+                    fontFamily = ModernSansFont,
+                    fontSize = 11.sp
+                )
             }
         }
     }
@@ -143,6 +206,8 @@ fun PermissionSetupDialog(
     onRequestBatteryOptimization: () -> Unit = {},
     onComplete: () -> Unit
 ) {
+    val accent = LocalAccentColor.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -153,43 +218,41 @@ fun PermissionSetupDialog(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⚡", color = LocalAccentColor.current, fontSize = 14.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "SYSTEM ACCESS SETUP",
-                    color = TerminalWhite,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont,
-                    letterSpacing = 0.5.sp
-                )
-            }
+            Text(
+                text = "System Access Setup",
+                color = TerminalWhite,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = ModernSansFont
+            )
             if (isStorageGranted) {
-                Box(
+                TactileBox(
+                    onClick = onComplete,
+                    pressedScale = 0.85f,
                     modifier = Modifier
-                        .border(1.dp, LocalAccentColor.current.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .clickable { onComplete() }
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
                 ) {
-                    Text("✕", color = LocalAccentColor.current, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
+                    com.yuka.musicplayer.ui.components.GlyphClose(
+                        color = Color.White.copy(alpha = 0.80f),
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(LocalAccentColor.current.copy(alpha = 0.3f)))
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "tsrossa membutuhkan beberapa izin sistem Android agar engine bit-perfect C++ dan kontrol pemutar musik dapat berfungsi optimal:",
-            color = TerminalWhite.copy(alpha = 0.85f),
-            fontSize = 11.sp,
-            fontFamily = TerminalFont,
-            lineHeight = 15.sp
+            text = "tsrossa requires these system permissions so the C++ bit-perfect audio engine and media controls operate uninterrupted.",
+            color = Color.White.copy(alpha = 0.65f),
+            fontSize = 12.sp,
+            fontFamily = ModernSansFont,
+            lineHeight = 16.sp
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -197,80 +260,54 @@ fun PermissionSetupDialog(
         ) {
             item {
                 PermissionCard(
-                    icon = "📁",
-                    title = "AKSES PENYIMPANAN MUSIK",
-                    badge = if (isStorageGranted) "DIIZINKAN ✅" else "WAJIB DIIZINKAN ⚠️",
+                    icon = { com.yuka.musicplayer.ui.components.GlyphFolder(color = accent, modifier = Modifier.size(18.dp)) },
+                    title = "Audio Storage Access",
+                    badge = if (isStorageGranted) "GRANTED" else "REQUIRED",
                     isGranted = isStorageGranted,
                     isEssential = true,
-                    desc = "Dibutuhkan agar engine C++ (dr_flac & dr_wav) dapat membaca file FLAC & WAV secara langsung dari memori internal atau MicroSD.",
-                    actionLabel = if (isStorageGranted) "SUDAH DIIZINKAN" else "BERI IZIN PENYIMPANAN",
+                    desc = "Required for the native engine (dr_flac & dr_wav) to read FLAC & WAV files directly from internal memory or MicroSD.",
+                    actionLabel = if (isStorageGranted) "Already Granted" else "Grant Storage Access",
                     onAction = onRequestStorage
                 )
             }
 
             item {
                 PermissionCard(
-                    icon = "🔔",
-                    title = "IZIN NOTIFIKASI & LOCKSCREEN",
-                    badge = if (isNotificationGranted) "DIIZINKAN ✅" else "DIBUTUHKAN ⚠️",
+                    icon = { com.yuka.musicplayer.ui.components.GlyphNotification(color = accent, modifier = Modifier.size(18.dp)) },
+                    title = "Notification & Lockscreen Controls",
+                    badge = if (isNotificationGranted) "GRANTED" else "REQUIRED",
                     isGranted = isNotificationGranted,
                     isEssential = true,
-                    desc = "Dibutuhkan pada Android 13+ untuk menampilkan kontrol pemutar musik (MediaStyle) di bar notifikasi & lockscreen, serta status DAC Bit-Perfect.",
-                    actionLabel = if (isNotificationGranted) "SUDAH DIIZINKAN" else "IZINKAN NOTIFIKASI",
+                    desc = "Required on Android 13+ to display MediaStyle player controls and bit-perfect DAC status on your notification shade and lockscreen.",
+                    actionLabel = if (isNotificationGranted) "Already Granted" else "Grant Notification Permission",
                     onAction = onRequestNotification
                 )
             }
 
             item {
                 PermissionCard(
-                    icon = "⚡",
-                    title = "MANAJEMEN BATERAI OEM (ANTI-KILL)",
-                    badge = if (isBatteryOptimizationIgnored) "DIIZINKAN (KEBAL) ✅" else "DIREKOMENDASIKAN ⚠️",
+                    icon = { com.yuka.musicplayer.ui.components.GlyphBolt(color = accent, modifier = Modifier.size(18.dp)) },
+                    title = "OEM Background Power (Anti-Kill)",
+                    badge = if (isBatteryOptimizationIgnored) "UNRESTRICTED" else "RECOMMENDED",
                     isGranted = isBatteryOptimizationIgnored,
                     isEssential = false,
-                    desc = "Penting pada Xiaomi (HyperOS/MIUI), OnePlus, Oppo & Vivo agar pemutaran musik USB bit-perfect tidak dihentikan paksa saat layar ponsel terkunci.",
-                    actionLabel = if (isBatteryOptimizationIgnored) "SUDAH DIATUR" else "PENGATURAN BATERAI OEM",
+                    desc = "Important on Xiaomi (HyperOS), OnePlus, Oppo, Vivo, & Samsung so bit-perfect playback isn't terminated when the screen turns off.",
+                    actionLabel = if (isBatteryOptimizationIgnored) "Configured" else "Configure Battery Settings",
                     onAction = onRequestBatteryOptimization
                 )
             }
 
             item {
                 PermissionCard(
-                    icon = "🔕",
-                    title = "MODE JANGAN GANGGU (DND)",
-                    badge = if (isDndGranted) "DIIZINKAN ✅" else "OPSIONAL ℹ️",
+                    icon = { com.yuka.musicplayer.ui.components.GlyphDoNotDisturb(color = accent, modifier = Modifier.size(18.dp)) },
+                    title = "Do Not Disturb (DND)",
+                    badge = if (isDndGranted) "ACTIVE" else "OPTIONAL",
                     isGranted = isDndGranted,
                     isEssential = false,
-                    desc = "Mengheningkan nada dering/notifikasi otomatis saat lagu berputar agar tidak menginterupsi stream bit-perfect dan melindungi telinga saat memakai IEM.",
-                    actionLabel = if (isDndGranted) "SUDAH AKTIF" else "ATUR DND (OPSIONAL)",
+                    desc = "Silences ringtones/notifications automatically during playback so audiophile streams aren't interrupted.",
+                    actionLabel = if (isDndGranted) "Active" else "Configure DND (Optional)",
                     onAction = onRequestDnd
                 )
-            }
-
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, LocalAccentColor.current.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                        .background(Color(0xFF101010), RoundedCornerShape(6.dp))
-                        .padding(10.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🔌", fontSize = 12.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("KONEKSI USB DAC (UAC1/UAC2)", color = TerminalWhite, fontFamily = TerminalFont, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text("[ OTOMATIS ]", color = LocalAccentColor.current, fontFamily = TerminalFont, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Saat USB DAC dicolokkan ke port USB ponsel, Android akan menampilkan prompt izin. Centang 'Selalu izinkan' dan tekan OK untuk akses direct hardware.",
-                        color = TerminalGray,
-                        fontFamily = TerminalFont,
-                        fontSize = 10.sp,
-                        lineHeight = 14.sp
-                    )
-                }
             }
         }
 
@@ -278,10 +315,10 @@ fun PermissionSetupDialog(
 
         if (!isStorageGranted) {
             Text(
-                text = "⚠️ Mohon berikan Izin Penyimpanan agar tsrossa dapat membaca file musik Anda.",
+                text = "Please grant Storage Access to begin scanning and playing music.",
                 color = Color(0xFFFF9100),
-                fontFamily = TerminalFont,
-                fontSize = 10.sp,
+                fontFamily = ModernSansFont,
+                fontSize = 11.5.sp,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
         }
@@ -289,19 +326,19 @@ fun PermissionSetupDialog(
         Button(
             onClick = onComplete,
             enabled = isStorageGranted,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                containerColor = LocalAccentColor.current,
-                disabledContainerColor = Color(0xFF222222)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = accent,
+                disabledContainerColor = Color.White.copy(alpha = 0.08f)
             ),
-            shape = RoundedCornerShape(4.dp),
-            modifier = Modifier.fillMaxWidth().height(44.dp)
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
             Text(
-                text = if (isStorageGranted) "LANJUTKAN KE PEMUTAR MUSIK ▶" else "BERIKAN IZIN DI ATAS UNTUK MELANJUTKAN",
-                fontFamily = TerminalFont,
-                fontSize = 11.sp,
+                text = if (isStorageGranted) "Continue to Player" else "Grant Permissions Above",
+                fontFamily = ModernSansFont,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isStorageGranted) Color.Black else TerminalGray
+                color = if (isStorageGranted) Color(0xFF0E0D13) else Color.White.copy(alpha = 0.45f)
             )
         }
     }

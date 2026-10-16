@@ -2,16 +2,21 @@ package com.yuka.musicplayer.ui.views.settings
 
 import android.content.SharedPreferences
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yuka.musicplayer.ui.components.GlyphBolt
+import com.yuka.musicplayer.ui.components.GlyphWarning
+import com.yuka.musicplayer.ui.components.TactileBox
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 
@@ -28,9 +33,9 @@ fun PlaybackLaunchSection(
     val context = androidx.compose.ui.platform.LocalContext.current
     val isSamsung = remember { com.yuka.musicplayer.util.SamsungAudioEffectHelper.isSamsungDevice() }
 
-    SettingsCard(title = "PLAYBACK & AUDIOPHILE TUNING", tag = "AUDIO ENGINE") {
+    SettingsCard(title = "Playback & Audio Tuning") {
         SettingsToggleRow(
-            title = "Keep Screen Awake",
+            title = "Keep screen awake",
             subtitle = "Prevent display timeout when audio is actively playing",
             isChecked = keepAwake,
             onCheckedChange = { awake ->
@@ -39,14 +44,20 @@ fun PlaybackLaunchSection(
             }
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
-        Text("DEFAULT SCREEN ON LAUNCH", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = "Default screen on launch",
+            color = Color.White.copy(alpha = 0.70f),
+            fontFamily = ModernSansFont,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
 
         val screens = listOf(
-            "LIBRARY" to "LIBRARY",
-            "PLAYLIST" to "PLAYLIST",
-            "TRACK" to "NOW PLAYING"
+            "LIBRARY" to "Library",
+            "PLAYLIST" to "Playlist",
+            "TRACK" to "Now Playing"
         )
         SettingsSegmentedControl(
             items = screens,
@@ -57,14 +68,20 @@ fun PlaybackLaunchSection(
             }
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-        Text("USB BUFFER DEPTH (JITTER PROFILE)", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "USB BUFFER DEPTH (JITTER PROFILE)",
+            color = Color.White.copy(alpha = 0.65f),
+            fontFamily = ModernSansFont,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
 
         val bufferProfiles = listOf(
-            0 to "64ms (LOW LATENCY)",
-            1 to "192ms (LOW JITTER)",
-            2 to "500ms (MAX STABLE)"
+            0 to "64ms Ultra",
+            1 to "192ms Jitter",
+            2 to "500ms Stable"
         )
         SettingsSegmentedControl(
             items = bufferProfiles,
@@ -72,12 +89,7 @@ fun PlaybackLaunchSection(
             onItemSelected = { profile ->
                 onUsbBufferProfileChange(profile)
                 prefs.edit().putInt("usb_buffer_profile", profile).apply()
-                val (transfers, packets) = when (profile) {
-                    0 -> 8 to 8
-                    2 -> 16 to 32
-                    else -> 12 to 16
-                }
-                com.yuka.musicplayer.audio.AudioEngine.setUsbBufferProfile(transfers, packets)
+                com.yuka.musicplayer.audio.AudioEngine.applyBufferProfile(profile)
             }
         )
 
@@ -86,79 +98,81 @@ fun PlaybackLaunchSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF2A1B00), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                    .border(0.8.dp, Color(0xFFFFB300).copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                    .padding(10.dp),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFFFB300).copy(alpha = 0.12f))
+                    .padding(12.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        com.yuka.musicplayer.ui.components.GlyphWarning(
-                            color = Color(0xFFFFB300),
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        GlyphWarning(color = Color(0xFFFFB300), modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "SAMSUNG DOLBY ATMOS BYPASS",
+                            text = "Samsung Dolby Atmos Bypass",
                             color = Color(0xFFFFB300),
-                            fontFamily = TerminalFont,
-                            fontSize = 9.5.sp,
+                            fontFamily = ModernSansFont,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Samsung One UI forces Dolby Atmos DSP on USB. For pure bit-perfect imaging & wide soundstage, turn Dolby Atmos and Equalizer OFF.",
-                        color = TerminalGray,
-                        fontFamily = TerminalFont,
-                        fontSize = 8.5.sp,
-                        lineHeight = 13.sp
+                        color = Color.White.copy(alpha = 0.70f),
+                        fontFamily = ModernSansFont,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                com.yuka.musicplayer.ui.components.TactileBox(
-                    onClick = {
-                        com.yuka.musicplayer.util.SamsungAudioEffectHelper.openSoundQualitySettings(context)
-                    },
-                    pressedScale = 0.92f,
+                TactileBox(
+                    onClick = { com.yuka.musicplayer.util.SamsungAudioEffectHelper.openSoundQualitySettings(context) },
+                    pressedScale = 0.90f,
                     modifier = Modifier
-                        .background(Color(0xFFFFB300).copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                        .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFFFFB300).copy(alpha = 0.25f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "SETTINGS",
+                        text = "SETUP",
                         color = Color(0xFFFFB300),
-                        fontFamily = TerminalFont,
+                        fontFamily = ModernSansFont,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp
+                        fontSize = 10.sp
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            com.yuka.musicplayer.ui.components.GlyphBolt(
-                color = Color(0xFFFF9100),
-                modifier = Modifier.size(11.dp)
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(
-                text = "USB OTG 5V VBUS HEADROOM & IMPEDANCE ADVISORY",
-                color = Color(0xFFFF9100),
-                fontFamily = TerminalFont,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.04f))
+                .padding(12.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    GlyphBolt(color = Color(0xFFFF9100), modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "USB OTG Power Advisory",
+                        color = Color(0xFFFF9100),
+                        fontFamily = ModernSansFont,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Phone USB-C ports deliver max ~500mA. Planar or high-impedance headphones can cause dynamic compression on intense bass transients. For best authority, consider a power injection OTG cable.",
+                    color = Color.White.copy(alpha = 0.60f),
+                    fontFamily = ModernSansFont,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = "Phone USB-C OTG ports deliver at most ~500mA (2.5W). High-current planar or high-impedance headphones can sag the 5V rail during bass transients, causing dynamic compression. For deep bass authority and maximum soundstage, use a dual-plug power injection OTG cable.",
-            color = TerminalGray.copy(alpha = 0.85f),
-            fontFamily = TerminalFont,
-            fontSize = 9.sp,
-            lineHeight = 13.sp
-        )
     }
 }

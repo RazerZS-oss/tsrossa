@@ -1,32 +1,34 @@
 package com.yuka.musicplayer.ui.views
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -43,17 +45,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.model.RepeatMode
 import com.yuka.musicplayer.model.TrackInfo
+import com.yuka.musicplayer.ui.components.*
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
 import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
+import com.yuka.musicplayer.ui.theme.m3ActivePillContainer
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerLow
 import kotlin.math.roundToInt
 import kotlinx.coroutines.isActive
 
 /**
- * Precision Scrubber with smooth local time interpolation for 60/120fps glide.
- * Preserves the exact 500ms engine polling rate while eliminating UI seek jumps.
+ * Material 3 Precision Scrubber with smooth 60/120fps local time interpolation.
+ * Clean, borderless Material You slider track with responsive dragging thumb.
  */
 @Composable
 fun PrecisionScrubber(
@@ -65,48 +72,83 @@ fun PrecisionScrubber(
     modifier: Modifier = Modifier
 ) {
     var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableStateOf(0f) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
 
-    var interpolatedPosition by remember { mutableStateOf(playbackPosition) }
-    var lastAnchorPosition by remember { mutableStateOf(playbackPosition) }
-    var lastAnchorNanos by remember { mutableStateOf(0L) }
+    // Guard against snap-back: holds user's target seek position until JNI confirms playback arrived near it
+    var pendingSeekTargetSec by remember { mutableStateOf<Double?>(null) }
+    var pendingSeekTimeoutNanos by remember { mutableLongStateOf(0L) }
 
-    // Update anchor whenever the 500ms JNI poll pushes a new playbackPosition
+    // Real-time anchor tracking from hardware / JNI updates
+    var anchorPosSec by remember { mutableDoubleStateOf(playbackPosition) }
+    var anchorNanos by remember { mutableLongStateOf(System.nanoTime()) }
+
+    // Synchronize anchor whenever playbackPosition updates from JNI or when seek finishes
     LaunchedEffect(playbackPosition) {
-        lastAnchorPosition = playbackPosition
-        lastAnchorNanos = System.nanoTime()
-        if (!isDragging) {
-            interpolatedPosition = playbackPosition
+        val now = System.nanoTime()
+        val target = pendingSeekTargetSec
+        if (target != null) {
+            // Clear pending seek guard if engine is within 1.5s of target, or if 500ms timeout expired
+            val diff = kotlin.math.abs(playbackPosition - target)
+            val timedOut = now > pendingSeekTimeoutNanos
+            if (diff < 1.5 || timedOut) {
+                pendingSeekTargetSec = null
+                anchorPosSec = playbackPosition
+                anchorNanos = now
+            }
+        } else if (!isDragging) {
+            anchorPosSec = playbackPosition
+            anchorNanos = now
         }
     }
 
-    // Smooth 60/120fps local visual interpolation between 500ms JNI polls
-    LaunchedEffect(isPlaying, isDragging, durationSeconds) {
-        if (isPlaying && !isDragging && durationSeconds > 0.0) {
-            lastAnchorNanos = System.nanoTime()
-            lastAnchorPosition = interpolatedPosition
-            while (isActive) {
-                withFrameNanos { frameTimeNanos ->
-                    val elapsedSec = ((frameTimeNanos - lastAnchorNanos).coerceAtLeast(0L)) / 1_000_000_000.0
-                    val boundedElapsed = elapsedSec.coerceAtMost(0.65)
-                    interpolatedPosition = (lastAnchorPosition + boundedElapsed).coerceIn(0.0, durationSeconds)
+    // Single unified 60/120fps continuous progress float dedicated ONLY for draw phase
+    val smoothProgress = remember { Animatable(0f) }
+    var displayPosSec by remember { mutableIntStateOf(playbackPosition.toInt()) }
+    val durSecInt = remember(durationSeconds) { durationSeconds.toInt() }
+
+    // Continuous glide loop synchronized with display refresh rate, paused when app is not resumed
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    LaunchedEffect(isPlaying, durationSeconds) {
+        if (durationSeconds <= 0.0) return@LaunchedEffect
+        while (isActive) {
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                kotlinx.coroutines.delay(250L)
+                continue
+            }
+            var targetFrac = 0f
+            withFrameNanos { frameNanos ->
+                if (!isDragging) {
+                    val guardTarget = pendingSeekTargetSec
+                    val currentPosSec = if (guardTarget != null) {
+                        guardTarget
+                    } else if (isPlaying) {
+                        val elapsedSec = ((frameNanos - anchorNanos).coerceAtLeast(0L)) / 1_000_000_000.0
+                        (anchorPosSec + elapsedSec).coerceIn(0.0, durationSeconds)
+                    } else {
+                        anchorPosSec.coerceIn(0.0, durationSeconds)
+                    }
+
+                    targetFrac = (currentPosSec / durationSeconds).toFloat().coerceIn(0f, 1f)
+
+                    val secInt = currentPosSec.toInt()
+                    if (secInt != displayPosSec) {
+                        displayPosSec = secInt
+                    }
                 }
+            }
+            if (!isDragging) {
+                smoothProgress.snapTo(targetFrac)
             }
         }
     }
 
-    val currentFraction = if (durationSeconds > 0) {
-        ((if (isDragging) dragProgress.toDouble() * durationSeconds else interpolatedPosition) / durationSeconds)
-            .toFloat().coerceIn(0f, 1f)
-    } else 0f
-
-    val displayProgress = if (isDragging) dragProgress else currentFraction
-    val targetSeconds = displayProgress.toDouble() * durationSeconds
-
-    // Format timestamps (remembered by integer second to avoid GC churn at 120fps)
-    val curPosSec = if (isDragging) targetSeconds else interpolatedPosition
-    val curSecInt = curPosSec.toInt()
-    val durSecInt = durationSeconds.toInt()
+    val curSecInt = if (isDragging) {
+        (dragProgress * durationSeconds).toInt()
+    } else if (pendingSeekTargetSec != null) {
+        pendingSeekTargetSec!!.toInt()
+    } else {
+        displayPosSec
+    }
 
     val posStr = remember(curSecInt) {
         val curMin = curSecInt / 60
@@ -114,22 +156,21 @@ fun PrecisionScrubber(
         String.format(java.util.Locale.US, "%02d:%02d", curMin, curSec)
     }
 
-    val durStr = remember(curSecInt, durSecInt) {
-        val remainingSec = (durationSeconds - curPosSec).coerceAtLeast(0.0).toInt()
-        val remMin = remainingSec / 60
-        val remSec = remainingSec % 60
-        String.format(java.util.Locale.US, "-%02d:%02d", remMin, remSec)
+    val durStr = remember(durSecInt) {
+        val dMin = durSecInt / 60
+        val dSec = durSecInt % 60
+        String.format(java.util.Locale.US, "%02d:%02d", dMin, dSec)
     }
 
     val animatedThumbRadius by animateFloatAsState(
-        targetValue = if (isDragging) 6.5f else 4.5f,
+        targetValue = if (isDragging) 7f else 5.5f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
         label = "thumbRadius"
     )
 
     BoxWithConstraints(
         modifier = modifier
-            .fillMaxWidth(0.90f)
+            .fillMaxWidth()
             .systemGestureExclusion()
     ) {
         val totalWidthPx = constraints.maxWidth.toFloat()
@@ -138,15 +179,11 @@ fun PrecisionScrubber(
         val trackEnd = totalWidthPx - trackStart
         val trackWidth = (trackEnd - trackStart).coerceAtLeast(1f)
 
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Interactive Scrubber Canvas
+        Column(modifier = Modifier.fillMaxWidth()) {
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(26.dp)
+                    .height(28.dp)
                     .pointerInput(durationSeconds) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -165,52 +202,39 @@ fun PrecisionScrubber(
                             }
 
                             val finalSeekSec = dragProgress.toDouble() * durationSeconds
+                            // Engage anti snap-back guard: keep thumb at seek target until JNI catches up
+                            pendingSeekTargetSec = finalSeekSec
+                            pendingSeekTimeoutNanos = System.nanoTime() + 600_000_000L // 600ms safety timeout
+                            anchorPosSec = finalSeekSec
+                            anchorNanos = System.nanoTime()
                             isDragging = false
                             onSeekTo(finalSeekSec)
                         }
                     }
             ) {
                 val cy = size.height / 2f
-                val trackStroke = 3.dp.toPx()
-                val thumbXPx = trackStart + displayProgress * trackWidth
+                val trackStroke = 4.dp.toPx()
+                val currentProgress = if (isDragging) {
+                    dragProgress
+                } else if (pendingSeekTargetSec != null && durationSeconds > 0.0) {
+                    (pendingSeekTargetSec!! / durationSeconds).toFloat().coerceIn(0f, 1f)
+                } else {
+                    smoothProgress.value
+                }
+                val thumbXPx = trackStart + currentProgress * trackWidth
                 val thumbR = with(density) { animatedThumbRadius.dp.toPx() }
 
-                // Background track rail (Subtle dark navy groove)
+                // M3 Inactive track rail
                 drawLine(
-                    color = Color(0xFF141A28),
+                    color = Color.White.copy(alpha = 0.16f),
                     start = Offset(trackStart, cy),
                     end = Offset(trackEnd, cy),
                     strokeWidth = trackStroke,
                     cap = StrokeCap.Round
                 )
 
-                // Calibration Ticks at 25%, 50%, 75% (Studio fader instrument calibration)
-                val tickH = 4.dp.toPx()
-                val tickStroke = 1.dp.toPx()
-                val tickColor = Color(0xFF222B3F)
-                val tickFractions = floatArrayOf(0.25f, 0.50f, 0.75f)
-                for (f in tickFractions) {
-                    val tx = trackStart + f * trackWidth
-                    drawLine(
-                        color = tickColor,
-                        start = Offset(tx, cy - tickH),
-                        end = Offset(tx, cy + tickH),
-                        strokeWidth = tickStroke,
-                        cap = StrokeCap.Round
-                    )
-                }
-
-                // Active Played rail
-                if (thumbXPx > trackStart) {
-                    // Outer subtle glow
-                    drawLine(
-                        color = dynamicColor.copy(alpha = 0.30f),
-                        start = Offset(trackStart, cy),
-                        end = Offset(thumbXPx, cy),
-                        strokeWidth = trackStroke + 2.5.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                    // Core line
+                // M3 Active progress rail
+                if (currentProgress > 0f) {
                     drawLine(
                         color = dynamicColor,
                         start = Offset(trackStart, cy),
@@ -220,24 +244,10 @@ fun PrecisionScrubber(
                     )
                 }
 
-                // Thumb outer aura glow
-                drawCircle(
-                    color = dynamicColor.copy(alpha = if (isDragging) 0.40f else 0.18f),
-                    radius = thumbR + 4.dp.toPx(),
-                    center = Offset(thumbXPx, cy)
-                )
-
-                // Thumb core solid circle
+                // M3 Circular Thumb
                 drawCircle(
                     color = dynamicColor,
                     radius = thumbR,
-                    center = Offset(thumbXPx, cy)
-                )
-
-                // Center tactile dot
-                drawCircle(
-                    color = Color(0xFF070A12),
-                    radius = thumbR * 0.45f,
                     center = Offset(thumbXPx, cy)
                 )
             }
@@ -246,28 +256,31 @@ fun PrecisionScrubber(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp),
+                    .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = posStr,
-                    color = if (isDragging) dynamicColor else TerminalWhite.copy(alpha = 0.90f),
+                    color = if (isDragging) dynamicColor else Color.White.copy(alpha = 0.75f),
                     fontFamily = TerminalFont,
-                    fontWeight = if (isDragging) FontWeight.Bold else FontWeight.Medium,
-                    fontSize = 10.sp
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 11.5.sp
                 )
                 Text(
                     text = durStr,
-                    color = TerminalGray.copy(alpha = 0.70f),
+                    color = Color.White.copy(alpha = 0.60f),
                     fontFamily = TerminalFont,
-                    fontSize = 10.sp
+                    fontSize = 11.5.sp
                 )
             }
         }
     }
 }
 
+/**
+ * Radical Material 3 (Material You) Now Playing Screen.
+ */
 @Composable
 fun TrackView(
     track: TrackInfo?,
@@ -285,50 +298,55 @@ fun TrackView(
     onCycleRepeat: () -> Unit,
     onOpenQueue: () -> Unit,
     onSeekTo: (Double) -> Unit = {},
+    isHardwareVolumeActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val dynamicColor = LocalAccentColor.current
-
     val scrollState = rememberScrollState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceEvenly
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (track == null) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .background(Color(0xFF0C101C), RoundedCornerShape(12.dp))
-                    .border(0.8.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                    .padding(36.dp),
+                    .fillMaxWidth()
+                    .padding(top = 80.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+                    .padding(40.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("NO TRACK SELECTED", color = TerminalGray, style = MaterialTheme.typography.titleMedium, fontFamily = TerminalFont)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    GlyphMusicNote(color = dynamicColor.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "No track selected",
+                        color = Color.White.copy(alpha = 0.70f),
+                        fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 16.sp
+                    )
+                }
             }
             return
         }
 
-        val animatedGlowColor by animateColorAsState(
-            targetValue = track.dominantColor.copy(alpha = 0.45f),
-            animationSpec = tween(durationMillis = 650),
-            label = "coverArtUnderglow"
-        )
-
-        // Album art spring scale on play/pause (RenderThread execution)
+        // 1. Hero Album Art Container (Square with clean 24.dp rounded corners, zero artificial radial glow)
         val albumScale by animateFloatAsState(
             targetValue = if (isPlaying) 1.0f else 0.95f,
             animationSpec = spring(dampingRatio = 0.80f, stiffness = 400f),
             label = "albumArtScale"
         )
 
-        // 1. Album Art Hero with Organic Glow Bloom
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.68f)
+                .fillMaxWidth(0.88f)
                 .aspectRatio(1f)
                 .graphicsLayer {
                     scaleX = albumScale
@@ -336,25 +354,12 @@ fun TrackView(
                 },
             contentAlignment = Alignment.Center
         ) {
-            // Ambient organic bloom
-            Box(
-                modifier = Modifier
-                    .fillMaxSize(1.15f)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(animatedGlowColor, Color.Transparent)
-                        )
-                    )
-                    .blur(28.dp)
-            )
-
-            // Album cover container
+            // Album art squircle surface with container fallback
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF0E1322), RoundedCornerShape(12.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(m3SurfaceContainerLow())
             ) {
                 if (track.coverArt != null) {
                     Image(
@@ -365,299 +370,326 @@ fun TrackView(
                     )
                 } else {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFF0E1322)),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "[ NO COVER ART ]",
-                            color = TerminalGray.copy(alpha = 0.7f),
-                            fontFamily = TerminalFont,
-                            fontSize = 12.sp
+                        GlyphMusicNote(
+                            color = dynamicColor.copy(alpha = 0.6f),
+                            modifier = Modifier.size(64.dp)
                         )
                     }
                 }
             }
         }
 
-        // 2. Track Title & Artist (Dual Typography: ModernSansFont for title/artist)
+        // 2. Left-Aligned Track Metadata (Bold Title & Subtle Artist/Album)
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+            horizontalAlignment = Alignment.Start,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp)
         ) {
             @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
             Text(
                 text = track.title,
                 color = TerminalWhite,
-                fontSize = 18.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = ModernSansFont,
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
                 maxLines = 1,
                 modifier = Modifier
-                    .fillMaxWidth(0.92f)
+                    .fillMaxWidth()
                     .basicMarquee(
                         iterations = Int.MAX_VALUE,
-                        delayMillis = 1500
+                        delayMillis = 1500,
+                        velocity = 28.dp,
+                        spacing = androidx.compose.foundation.MarqueeSpacing(36.dp)
                     )
             )
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val artistText = if (track.album.isNotEmpty() && track.album != "Unknown Album") {
+                "${track.artist}  •  ${track.album}"
+            } else {
+                track.artist
+            }
 
             @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
             Text(
-                text = track.artist,
-                color = dynamicColor.copy(alpha = 0.9f),
-                fontSize = 13.sp,
+                text = artistText,
+                color = Color.White.copy(alpha = 0.72f),
+                fontSize = 15.sp,
                 fontFamily = ModernSansFont,
                 fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
                 maxLines = 1,
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
+                    .fillMaxWidth()
                     .basicMarquee(
                         iterations = Int.MAX_VALUE,
-                        delayMillis = 1500
+                        delayMillis = 1500,
+                        velocity = 24.dp,
+                        spacing = androidx.compose.foundation.MarqueeSpacing(36.dp)
                     )
             )
         }
 
-        // 3. Unified Audiophile Spec Capsule
-        val isBitPerfect = currentVolume >= 0.999f
-        val specScrollState = rememberScrollState()
-        Row(
-            modifier = Modifier
-                .background(Color(0xFF0A0E1A), RoundedCornerShape(20.dp))
-                .border(0.6.dp, dynamicColor.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-                .horizontalScroll(specScrollState)
-                .padding(horizontal = 14.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = track.codec.uppercase(),
-                color = dynamicColor,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = TerminalFont
-            )
-            if (track.bitrateKbps > 0) {
-                Spacer(modifier = Modifier.width(7.dp))
-                Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-                Spacer(modifier = Modifier.width(7.dp))
-                Text(
-                    text = "${track.bitrateKbps} KBPS",
-                    color = TerminalWhite.copy(alpha = 0.85f),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = TerminalFont
-                )
-            }
-            Spacer(modifier = Modifier.width(7.dp))
-            Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-            Spacer(modifier = Modifier.width(7.dp))
-            Text(
-                text = "MLOCK RAM",
-                color = TerminalWhite.copy(alpha = 0.70f),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Normal,
-                fontFamily = TerminalFont
-            )
-            Spacer(modifier = Modifier.width(7.dp))
-            Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-            Spacer(modifier = Modifier.width(7.dp))
-            Text(
-                text = if (isBitPerfect) "BIT-PERFECT" else "USB DAC",
-                color = if (isBitPerfect) dynamicColor else TerminalWhite.copy(alpha = 0.85f),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = TerminalFont
-            )
-            if (track.isMqa) {
-                Spacer(modifier = Modifier.width(7.dp))
-                Box(modifier = Modifier.size(3.dp).background(Color(0xFF445069), CircleShape))
-                Spacer(modifier = Modifier.width(7.dp))
-                Text(
-                    text = "MQA PASSTHROUGH",
-                    color = Color(0xFFFF4081),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont
-                )
-            }
-        }
 
-        // 4. Precision Scrubber
+        // 3. M3 Precision Scrubber & Timecodes (direct beneath title/artist)
         PrecisionScrubber(
             playbackPosition = playbackPosition,
             durationSeconds = track.durationSeconds,
-            dynamicColor = dynamicColor,
             isPlaying = isPlaying,
-            onSeekTo = onSeekTo
+            dynamicColor = dynamicColor,
+            onSeekTo = onSeekTo,
+            modifier = Modifier.fillMaxWidth()
         )
 
-        // 5. Tactile Volume Stepper Row with 0 dBFS Bit-Perfect Lock
-        val volPercent = (currentVolume * 100).roundToInt()
-        val isBitPerfectLocked = currentVolume >= 0.999f
-        val dbAttenuation = if (currentVolume <= 0.0001f) "-∞ dB" else String.format(java.util.Locale.US, "%.1f dB", 20.0 * kotlin.math.log10(currentVolume.toDouble()))
+        // 4. Centered Audiophile Telemetry String (Single-Line Dynamic Engine Readout with Tap-to-Cycle)
+        var telemetryCycleIndex by remember { mutableIntStateOf(0) }
+        val engineArchReadout = if (isHardwareVolumeActive) "32-BIT HARDWARE CHIP" else "64-BIT BIT-PERFECT DSP"
+        val line1 = buildString {
+            append(track.codec.uppercase())
+            if (track.bitrateKbps > 0) append("  •  ${track.bitrateKbps} KBPS")
+            append("  •  $engineArchReadout")
+            if (track.isMqa) append("  •  MQA")
+        }
+        val line2 = buildString {
+            append(engineArchReadout)
+            append("  •  DIRECT USB  •  BIT-PERFECT")
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { telemetryCycleIndex++ }
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = if (telemetryCycleIndex % 2 == 0) line1 else line2,
+                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                label = "telemetryCycle"
+            ) { textToDisplay ->
+                Text(
+                    text = textToDisplay,
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontFamily = TerminalFont,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.05.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        // 5. M3 Horizontal Transport Controls Row (Shuffle, Prev, Play/Pause Hero 68dp, Next, Repeat)
         Row(
-            modifier = Modifier.fillMaxWidth(0.92f),
-            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            com.yuka.musicplayer.ui.components.TactileBox(
-                onClick = { onVolumeChange((currentVolume - 0.05f).coerceAtLeast(0.0f)) },
+            // Shuffle Button
+            TactileBox(
+                onClick = onToggleShuffle,
                 pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(width = 36.dp, height = 28.dp)
-                    .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.40f), RoundedCornerShape(6.dp))
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (isShuffleEnabled) dynamicColor.copy(alpha = 0.22f) else Color.Transparent)
             ) {
-                Text("-", color = TerminalWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
-            }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            // Volume indicator box (Clicking toggles 100% Bit-Perfect)
-            com.yuka.musicplayer.ui.components.TactileBox(
-                onClick = { onVolumeChange(1.0f) },
-                pressedScale = 0.95f,
-                modifier = Modifier
-                    .height(28.dp)
-                    .background(if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.16f) else Color(0xFF0A0E1A), RoundedCornerShape(6.dp))
-                    .border(
-                        0.8.dp,
-                        if (isBitPerfectLocked) dynamicColor.copy(alpha = 0.75f) else dynamicColor.copy(alpha = 0.35f),
-                        RoundedCornerShape(6.dp)
-                    )
-                    .padding(horizontal = 10.dp)
-            ) {
-                Text(
-                    text = if (isBitPerfectLocked) "0 dBFS BIT-PERFECT" else "VOL: $volPercent% ($dbAttenuation)",
-                    color = if (isBitPerfectLocked) dynamicColor else TerminalWhite,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont,
-                    fontSize = 9.sp
+                GlyphShuffle(
+                    color = if (isShuffleEnabled) dynamicColor else Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
-
-            com.yuka.musicplayer.ui.components.TactileBox(
-                onClick = { onVolumeChange((currentVolume + 0.05f).coerceAtMost(1.0f)) },
+            // Prev Button (permanently circular 48dp)
+            TactileBox(
+                onClick = onPlayPrev,
                 pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(width = 36.dp, height = 28.dp)
-                    .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, dynamicColor.copy(alpha = 0.40f), RoundedCornerShape(6.dp))
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(m3SurfaceContainerHigh())
             ) {
-                Text("+", color = TerminalWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
+                GlyphPrev(color = Color.White.copy(alpha = 0.90f), modifier = Modifier.size(20.dp))
             }
 
-            if (!isBitPerfectLocked) {
-                Spacer(modifier = Modifier.width(6.dp))
-                com.yuka.musicplayer.ui.components.TactileBox(
-                    onClick = { onVolumeChange(1.0f) },
-                    pressedScale = 0.90f,
-                    modifier = Modifier
-                        .height(28.dp)
-                        .background(Color(0xFFFF9100).copy(alpha = 0.10f), RoundedCornerShape(6.dp))
-                        .border(0.8.dp, Color(0xFFFF9100).copy(alpha = 0.50f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp)
-                ) {
-                    Text(
-                        text = "MAX",
-                        color = Color(0xFFFF9100),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = TerminalFont
-                    )
-                }
-            }
-        }
-
-        // 6. Hero Transport Controls
-        Row(
-            modifier = Modifier.fillMaxWidth(0.85f),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            com.yuka.musicplayer.ui.components.SecondaryTransportButton(
-                onClick = onPlayPrev,
-                accentColor = dynamicColor,
-                size = 50.dp
-            ) {
-                com.yuka.musicplayer.ui.components.GlyphPrev(color = dynamicColor, modifier = Modifier.size(18.dp))
-            }
-
-            com.yuka.musicplayer.ui.components.HeroPlayButton(
-                isPlaying = isPlaying,
-                accentColor = dynamicColor,
+            // Hero Play/Pause Button (permanently circular 68dp)
+            TactileBox(
                 onClick = onTogglePlay,
-                size = 64.dp
-            )
-
-            com.yuka.musicplayer.ui.components.SecondaryTransportButton(
-                onClick = onPlayNext,
-                accentColor = dynamicColor,
-                size = 50.dp
+                pressedScale = 0.92f,
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(dynamicColor)
             ) {
-                com.yuka.musicplayer.ui.components.GlyphNext(color = dynamicColor, modifier = Modifier.size(18.dp))
+                val iconColor = Color(0xFF0E0D13)
+                if (isPlaying) {
+                    GlyphPause(color = iconColor, modifier = Modifier.size(26.dp))
+                } else {
+                    Box(modifier = Modifier.padding(start = 3.dp)) {
+                        GlyphPlay(color = iconColor, modifier = Modifier.size(26.dp))
+                    }
+                }
+            }
+
+            // Next Button (permanently circular 48dp)
+            TactileBox(
+                onClick = onPlayNext,
+                pressedScale = 0.88f,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(m3SurfaceContainerHigh())
+            ) {
+                GlyphNext(color = Color.White.copy(alpha = 0.90f), modifier = Modifier.size(20.dp))
+            }
+
+            // Repeat Button
+            val isRepeatActive = repeatMode != RepeatMode.OFF
+            TactileBox(
+                onClick = onCycleRepeat,
+                pressedScale = 0.88f,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (isRepeatActive) dynamicColor.copy(alpha = 0.22f) else Color.Transparent)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    GlyphRepeat(
+                        color = if (isRepeatActive) dynamicColor else Color.White.copy(alpha = 0.65f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    if (repeatMode == RepeatMode.ONE) {
+                        Text(
+                            text = "1",
+                            color = dynamicColor,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = TerminalFont,
+                            modifier = Modifier.padding(top = 1.dp)
+                        )
+                    }
+                }
             }
         }
 
-        // 7. Secondary Modes Row (Pill Chips with micro-LED dots)
+        // 6. Symmetrical Bottom Utility Action Row (Interactive Volume Fill Capsule & Queue Button)
         Row(
-            modifier = Modifier.fillMaxWidth(0.90f),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            com.yuka.musicplayer.ui.components.ModePillChip(
-                label = if (isShuffleEnabled) "SHUFFLE" else "SHUF",
-                isActive = isShuffleEnabled,
-                accentColor = dynamicColor,
-                onClick = onToggleShuffle,
-                modifier = Modifier.weight(1f),
-                icon = {
-                    com.yuka.musicplayer.ui.components.GlyphShuffle(
-                        color = if (isShuffleEnabled) dynamicColor else TerminalGray,
-                        modifier = Modifier.size(14.dp)
-                    )
+            // Interactive Volume Pill with dynamic fill bar
+            val isBitPerfect = currentVolume >= 0.999f
+            val volPercent = (currentVolume * 100).roundToInt()
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(25.dp))
+                    .background(m3SurfaceContainer())
+            ) {
+                // Background subtle fill tracking volume level
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(currentVolume.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(dynamicColor.copy(alpha = 0.16f))
+                )
+
+                // Foreground content with Steppers and Center Level
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TactileBox(
+                        onClick = { onVolumeChange((currentVolume - 0.05f).coerceAtLeast(0.0f)) },
+                        pressedScale = 0.85f,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f))
+                    ) {
+                        Text("-", color = TerminalWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = ModernSansFont)
+                    }
+
+                    TactileBox(
+                        onClick = { onVolumeChange(1.0f) },
+                        pressedScale = 0.92f,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            GlyphVolume(color = if (isBitPerfect) dynamicColor else TerminalWhite, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isBitPerfect) "0 dBFS" else "$volPercent%",
+                                color = if (isBitPerfect) dynamicColor else TerminalWhite,
+                                fontFamily = TerminalFont,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    TactileBox(
+                        onClick = { onVolumeChange((currentVolume + 0.05f).coerceAtMost(1.0f)) },
+                        pressedScale = 0.85f,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f))
+                    ) {
+                        Text("+", color = TerminalWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = ModernSansFont)
+                    }
                 }
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            com.yuka.musicplayer.ui.components.ModePillChip(
-                label = "QUEUE ($priorityQueueSize)",
-                isActive = priorityQueueSize > 0,
-                accentColor = dynamicColor,
-                onClick = onOpenQueue,
-                modifier = Modifier.weight(1.15f)
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            val (repLabel, isRepActive) = when (repeatMode) {
-                RepeatMode.OFF -> "REP: OFF" to false
-                RepeatMode.ALL -> "REP: ALL" to true
-                RepeatMode.ONE -> "REP: 1" to true
             }
 
-            com.yuka.musicplayer.ui.components.ModePillChip(
-                label = repLabel,
-                isActive = isRepActive,
-                accentColor = dynamicColor,
-                onClick = onCycleRepeat,
-                modifier = Modifier.weight(1f),
-                icon = {
-                    com.yuka.musicplayer.ui.components.GlyphRepeat(
-                        color = if (isRepActive) dynamicColor else TerminalGray,
-                        modifier = Modifier.size(14.dp)
-                    )
+            // Queue Button (50dp height aligned with Volume Pill)
+            TactileBox(
+                onClick = onOpenQueue,
+                pressedScale = 0.90f,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(25.dp))
+                    .background(m3SurfaceContainer())
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    GlyphQueue(color = dynamicColor, modifier = Modifier.size(20.dp))
+                    if (priorityQueueSize > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .clip(CircleShape)
+                                .background(dynamicColor)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "$priorityQueueSize",
+                                color = Color(0xFF0E0D13),
+                                fontSize = 9.sp,
+                                fontFamily = TerminalFont,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
-            )
+            }
         }
     }
 }

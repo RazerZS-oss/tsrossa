@@ -157,10 +157,14 @@ object QueueHelper {
 
         val currentTrackFile = currentTrack?.file
         val currentIndex = activeList.indexOfFirst {
-            it.absolutePath == currentTrackFile?.absolutePath || it.canonicalPath == currentTrackFile?.canonicalPath
+            it.absolutePath == currentTrackFile?.absolutePath ||
+            it.canonicalPath == currentTrackFile?.canonicalPath ||
+            it.name == currentTrackFile?.name
         }
         val nextFile = if (currentIndex != -1 && currentIndex + 1 < activeList.size) {
             activeList[currentIndex + 1]
+        } else if (currentIndex == -1 && activeList.isNotEmpty()) {
+            activeList[0]
         } else if (repeatMode == RepeatMode.ALL && activeList.isNotEmpty()) {
             activeList[0]
         } else {

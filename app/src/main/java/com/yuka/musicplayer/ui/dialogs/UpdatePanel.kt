@@ -1,7 +1,6 @@
 package com.yuka.musicplayer.ui.dialogs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,15 +11,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.yuka.musicplayer.ui.components.RetroButton
-import com.yuka.musicplayer.ui.diagnostics.LogSectionHeader
+import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.GlyphRefresh
+import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
-import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
 import com.yuka.musicplayer.update.DownloadState
 import com.yuka.musicplayer.update.ReleaseInfo
@@ -41,57 +44,47 @@ fun UpdatePanel(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
     ) {
         // Header
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .border(1.dp, LocalAccentColor.current, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (updateCheckState is UpdateCheckState.UpdateAvailable) "⚡" else "⬆",
-                        color = LocalAccentColor.current,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
+            Column {
                 Text(
-                    text = "SOFTWARE UPDATER",
+                    text = "Software Updates",
                     color = TerminalWhite,
-                    fontSize = 12.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = TerminalFont,
-                    letterSpacing = 0.5.sp
+                    fontFamily = ModernSansFont
+                )
+                Text(
+                    text = "GitHub releases & direct APK updates",
+                    color = Color.White.copy(alpha = 0.60f),
+                    fontSize = 12.sp,
+                    fontFamily = ModernSansFont
                 )
             }
-            Box(
+
+            TactileBox(
+                onClick = onClose,
+                pressedScale = 0.88f,
                 modifier = Modifier
-                    .border(1.dp, Color.Red.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                    .background(Color.Red.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                    .clickable { onClose() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(m3SurfaceContainerHigh())
             ) {
-                Text("✕ CLOSE", color = Color.Red, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = TerminalFont)
+                GlyphClose(color = Color.White.copy(alpha = 0.80f), modifier = Modifier.size(18.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(LocalAccentColor.current.copy(alpha = 0.25f)))
-        Spacer(modifier = Modifier.height(10.dp))
-
         Column(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
         ) {
@@ -99,63 +92,64 @@ fun UpdatePanel(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, LocalAccentColor.current.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-                    .background(Color(0xFF141414), RoundedCornerShape(4.dp))
-                    .padding(10.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(m3SurfaceContainer())
+                    .padding(16.dp)
             ) {
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("INSTALLED VERSION:", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
-                        Text("v$currentVersion", color = TerminalWhite, fontFamily = TerminalFont, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Installed Version", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                        Text("v$currentVersion", color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     when (updateCheckState) {
                         is UpdateCheckState.Checking -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("STATUS: ", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
-                                Text("CHECKING GITHUB RELEASES...", color = Color(0xFFFFD700), fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("Status: ", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                                Text("Checking GitHub releases...", color = Color(0xFFFFD700), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                         is UpdateCheckState.UpToDate -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("STATUS: ", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
-                                Text("[✓] UP TO DATE (${updateCheckState.latestTag})", color = Color(0xFF00E676), fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("Status: ", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                                Text("Up to date (${updateCheckState.latestTag})", color = Color(0xFF00E676), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                         is UpdateCheckState.UpdateAvailable -> {
                             val rel = updateCheckState.release
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("STATUS: ", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
-                                Text("[⚡ NEW UPDATE AVAILABLE!]", color = Color(0xFF00E676), fontFamily = TerminalFont, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Status: ", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                                Text("New version available!", color = Color(0xFF00E676), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Latest Release", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                                Text(rel.tagName, color = Color(0xFF00E676), fontFamily = ModernSansFont, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("LATEST TAG:", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
-                                Text(rel.tagName, color = Color(0xFF00E676), fontFamily = TerminalFont, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("PACKAGE SIZE:", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
-                                Text(String.format("%.1f MB", rel.apkSize / (1024.0 * 1024.0)), color = TerminalWhite, fontFamily = TerminalFont, fontSize = 10.sp)
+                                Text("Package Size", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                                Text(String.format("%.1f MB", rel.apkSize / (1024.0 * 1024.0)), color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 12.sp)
                             }
                         }
                         is UpdateCheckState.Error -> {
-                            Text("STATUS: ERROR", color = Color.Red, fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text(updateCheckState.message, color = Color(0xFFFF8888), fontFamily = TerminalFont, fontSize = 9.sp)
+                            Text("Status: Error", color = Color(0xFFFF5252), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(updateCheckState.message, color = Color.White.copy(alpha = 0.7f), fontFamily = ModernSansFont, fontSize = 12.sp)
                         }
                         is UpdateCheckState.Idle -> {
-                            Text("STATUS: READY TO CHECK", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp)
+                            Text("Status: Ready to check", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
                         }
                     }
                 }
@@ -163,25 +157,28 @@ fun UpdatePanel(
 
             // Permission Warning if cannot install packages
             if (!canInstallPackages) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Color(0xFFFF9100).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .background(Color(0xFF221600), RoundedCornerShape(4.dp))
-                        .padding(8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFFF9100).copy(alpha = 0.12f))
+                        .padding(14.dp)
                 ) {
                     Column {
-                        Text("⚠ PERMISSION REQUIRED: INSTALL UNKNOWN APPS", color = Color(0xFFFF9100), fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text("Android requires permission to install APK updates from this app.", color = TerminalWhite, fontFamily = TerminalFont, fontSize = 9.sp)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Box(
+                        Text("Permission Required: Install Unknown Apps", color = Color(0xFFFF9100), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text("Android requires permission to install APK updates from this app.", color = Color.White.copy(alpha = 0.8f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TactileBox(
+                            onClick = onOpenPermissionSettings,
+                            pressedScale = 0.94f,
                             modifier = Modifier
-                                .border(1.dp, Color(0xFFFF9100), RoundedCornerShape(4.dp))
-                                .clickable { onOpenPermissionSettings() }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFFFF9100))
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
                         ) {
-                            Text("GRANT IN SETTINGS →", color = Color(0xFFFF9100), fontFamily = TerminalFont, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text("Grant in Settings →", color = Color.Black, fontFamily = ModernSansFont, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -191,28 +188,34 @@ fun UpdatePanel(
             if (updateCheckState is UpdateCheckState.UpdateAvailable) {
                 val rel = updateCheckState.release
                 Spacer(modifier = Modifier.height(12.dp))
-                LogSectionHeader("RELEASE NOTES & CHANGELOG")
-                
+                Text(
+                    text = "Release Notes",
+                    color = TerminalWhite,
+                    fontFamily = ModernSansFont,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 100.dp, max = 220.dp)
-                        .border(1.dp, LocalAccentColor.current.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
-                        .background(Color(0xFF0A0A0A), RoundedCornerShape(4.dp))
-                        .padding(8.dp)
+                        .heightIn(min = 80.dp, max = 180.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(m3SurfaceContainer())
+                        .padding(12.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
                         text = if (rel.changelog.isNotBlank()) rel.changelog else "No release notes provided.",
-                        color = TerminalWhite,
-                        fontFamily = TerminalFont,
-                        fontSize = 10.sp,
-                        lineHeight = 14.sp
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontFamily = ModernSansFont,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Download & Progress Section
             when (downloadState) {
@@ -220,81 +223,139 @@ fun UpdatePanel(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, LocalAccentColor.current.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                            .background(Color(0xFF141414), RoundedCornerShape(4.dp))
-                            .padding(10.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(m3SurfaceContainer())
+                            .padding(14.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("DOWNLOADING APK...", color = Color(0xFFFFD700), fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("${(downloadState.progress * 100).toInt()}%", color = Color(0xFF00E676), fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("Downloading update...", color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${(downloadState.progress * 100).toInt()}%", color = LocalAccentColor.current, fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "${String.format("%.1f", downloadState.downloadedBytes / 1048576.0)} MB / ${String.format("%.1f", downloadState.totalBytes / 1048576.0)} MB",
-                            color = TerminalGray,
-                            fontFamily = TerminalFont,
-                            fontSize = 9.sp
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontFamily = ModernSansFont,
+                            fontSize = 11.sp
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(8.dp)
-                                .background(Color(0xFF222222), RoundedCornerShape(4.dp))
-                                .border(1.dp, LocalAccentColor.current.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.White.copy(alpha = 0.1f))
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(downloadState.progress)
                                     .fillMaxHeight()
-                                    .background(LocalAccentColor.current, RoundedCornerShape(4.dp))
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LocalAccentColor.current)
                             )
                         }
                     }
                 }
                 is DownloadState.ReadyToInstall -> {
-                    RetroButton(
-                        text = "[ ⚡ LAUNCH PACKAGE INSTALLER ]",
+                    TactileBox(
                         onClick = { onInstallFile(downloadState.apkFile) },
-                        isSelected = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        pressedScale = 0.94f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(LocalAccentColor.current)
+                    ) {
+                        Text(
+                            text = "Launch Package Installer",
+                            color = Color.Black,
+                            fontFamily = ModernSansFont,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
                 }
                 is DownloadState.Error -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Download failed: ${downloadState.message}", color = Color.Red, fontFamily = TerminalFont, fontSize = 10.sp)
+                        Text("Download failed: ${downloadState.message}", color = Color(0xFFFF5252), fontFamily = ModernSansFont, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(6.dp))
                         if (updateCheckState is UpdateCheckState.UpdateAvailable) {
-                            RetroButton(
-                                text = "RETRY DOWNLOAD",
+                            TactileBox(
                                 onClick = { onDownloadAndInstall(updateCheckState.release) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                                pressedScale = 0.94f,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(m3SurfaceContainerHigh())
+                            ) {
+                                Text(
+                                    text = "Retry Download",
+                                    color = TerminalWhite,
+                                    fontFamily = ModernSansFont,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                            }
                         }
                     }
                 }
                 is DownloadState.Idle -> {
                     if (updateCheckState is UpdateCheckState.UpdateAvailable) {
-                        RetroButton(
-                            text = "[ ⬇ DOWNLOAD & INSTALL APK (${String.format("%.1f MB", updateCheckState.release.apkSize / (1024.0 * 1024.0))}) ]",
+                        TactileBox(
                             onClick = { onDownloadAndInstall(updateCheckState.release) },
-                            isSelected = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            pressedScale = 0.94f,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(LocalAccentColor.current)
+                        ) {
+                            Text(
+                                text = "Download & Install (${String.format("%.1f MB", updateCheckState.release.apkSize / (1024.0 * 1024.0))})",
+                                color = Color.Black,
+                                fontFamily = ModernSansFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            RetroButton(
-                text = if (updateCheckState is UpdateCheckState.Checking) "CHECKING RELEASES..." else "[ ⟳ CHECK GITHUB FOR UPDATES ]",
+            TactileBox(
                 onClick = onCheckForUpdate,
-                modifier = Modifier.fillMaxWidth()
-            )
+                pressedScale = 0.94f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(23.dp))
+                    .background(m3SurfaceContainerHigh())
+            ) {
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlyphRefresh(color = LocalAccentColor.current, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (updateCheckState is UpdateCheckState.Checking) "Checking releases..." else "Check for Updates",
+                        color = TerminalWhite,
+                        fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }

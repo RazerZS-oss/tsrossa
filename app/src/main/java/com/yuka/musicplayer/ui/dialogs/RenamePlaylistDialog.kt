@@ -1,7 +1,6 @@
 package com.yuka.musicplayer.ui.dialogs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
@@ -35,37 +37,38 @@ fun RenamePlaylistDialog(
         visible = visible,
         onDismissRequest = onDismissRequest,
         maxHeightFraction = 0.40f,
-        maxWidth = 400.dp,
+        maxWidth = 420.dp,
         wrapHeight = true
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "— RENAME PLAYLIST —",
-                color = LocalAccentColor.current,
-                fontSize = 12.sp,
+                text = "Rename Playlist",
+                color = TerminalWhite,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = TerminalFont
+                fontFamily = ModernSansFont
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Enter a new name for this playlist.",
-                color = TerminalGray,
-                fontSize = 10.sp,
-                fontFamily = TerminalFont
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                fontFamily = ModernSansFont
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
+            // M3 Tonal Text Field
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp)
-                    .background(Color(0xFF090D18), RoundedCornerShape(4.dp))
-                    .border(0.8.dp, LocalAccentColor.current.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 10.dp),
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(m3SurfaceContainerHigh())
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 BasicTextField(
@@ -74,16 +77,17 @@ fun RenamePlaylistDialog(
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = TextStyle(
                         color = TerminalWhite,
-                        fontFamily = TerminalFont,
-                        fontSize = 11.sp
+                        fontFamily = ModernSansFont,
+                        fontSize = 14.sp
                     ),
                     cursorBrush = SolidColor(LocalAccentColor.current),
                     singleLine = true
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
+            // Action Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -91,39 +95,39 @@ fun RenamePlaylistDialog(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(Color(0xFF141923), RoundedCornerShape(6.dp))
-                        .border(0.8.dp, TerminalGray.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                        .clickable { onDismissRequest() }
-                        .padding(vertical = 10.dp),
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(m3SurfaceContainerHigh())
+                        .clickable { onDismissRequest() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "CANCEL",
-                        color = TerminalGray,
-                        fontSize = 11.sp,
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold
+                        text = "Cancel",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 13.sp,
+                        fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
                 Box(
                     modifier = Modifier
-                        .weight(1.5f)
-                        .background(LocalAccentColor.current.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                        .border(1.dp, LocalAccentColor.current, RoundedCornerShape(6.dp))
+                        .weight(1.2f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(LocalAccentColor.current)
                         .clickable {
                             if (newName.isNotBlank()) {
                                 onConfirmRename(newName.trim())
                             }
-                        }
-                        .padding(vertical = 10.dp),
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "SAVE",
-                        color = LocalAccentColor.current,
-                        fontSize = 11.sp,
-                        fontFamily = TerminalFont,
+                        text = "Save",
+                        color = Color.Black,
+                        fontSize = 13.sp,
+                        fontFamily = ModernSansFont,
                         fontWeight = FontWeight.Bold
                     )
                 }

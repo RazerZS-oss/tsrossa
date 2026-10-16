@@ -15,7 +15,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,11 +33,21 @@ import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.model.TrackInfo
 import com.yuka.musicplayer.model.ViewState
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.M3SurfaceContainer
+import com.yuka.musicplayer.ui.theme.M3SurfaceContainerHigh
 import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
+import com.yuka.musicplayer.ui.theme.getM3ContainerColor
+import com.yuka.musicplayer.ui.theme.resolveM3TonalSurface
 
+/**
+ * Clean Material 3 Top Status & Utility Bar.
+ * - Flat borderless tonal surface.
+ * - Left: Clean app/DAC status pill with active USB DAC state / sample rate.
+ * - Right: Circular/pill tonal action buttons (36dp) for Warmup, Lock, Diagnostics, and Update.
+ */
 @Composable
 fun AppHeader(
     viewState: ViewState,
@@ -53,19 +62,11 @@ fun AppHeader(
     onToggleLockTask: () -> Unit = {},
     isTaskLocked: Boolean = false
 ) {
-    val accent = LocalAccentColor.current
-    val viewLabel = when (viewState) {
-        ViewState.LIBRARY -> "STORAGE MATRIX"
-        ViewState.PLAYLIST -> "ACTIVE SEQUENCE"
-        ViewState.TRACK -> "SIGNAL ENGINE"
-        ViewState.SETTINGS -> "SYSTEM CONFIG"
-    }
-
-    val (hwVolumeText, statusColor) = when {
-        isHardwareVolumeLockedBySystem -> "100% BIT-PERFECT" to Color(0xFFFF9100)
-        isForceSoftwareVolume -> "64-BIT DITHERED SW" to Color(0xFFFF5252)
-        isHardwareVolumeActive -> "32-BIT HARDWARE CHIP" to Color(0xFFFFD700)
-        else -> "BIT-PERFECT" to accent.copy(alpha = 0.9f)
+    val statusColor = when {
+        isHardwareVolumeLockedBySystem -> Color(0xFFFF9100)
+        isForceSoftwareVolume -> Color(0xFFFF5252)
+        isHardwareVolumeActive -> Color(0xFFFFD700)
+        else -> accent
     }
 
     Column(
@@ -73,203 +74,126 @@ fun AppHeader(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        // Row 1: Brand & Current View + Tactile Action Cluster
+        // Row 1: Brand / Screen Title + Action Cluster
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Clean Precision Audiophile Branding
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "TSROSSA",
-                        fontFamily = ModernSansFont,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 17.sp,
-                        letterSpacing = 1.5.sp,
-                        color = TerminalWhite
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "STUDIO",
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 8.5.sp,
-                        color = accent,
-                        modifier = Modifier
-                            .background(accent.copy(alpha = 0.12f), RoundedCornerShape(3.dp))
-                            .border(0.6.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(3.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
+            // Left: Title + subtle status dot + DAC status
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "// $viewLabel",
-                    color = TerminalGray,
-                    fontFamily = TerminalFont,
-                    fontSize = 9.sp,
-                    letterSpacing = 0.6.sp
+                    text = "tsrossa",
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 19.sp,
+                    letterSpacing = (-0.3).sp,
+                    color = TerminalWhite
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(statusColor, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isHardwareVolumeActive) "Bit-Perfect" else "USB Audio",
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.65f)
                 )
             }
 
-            // Right: Unified Tactile Action Bar
+            // Right: M3 Borderless Tonal Icon Action Cluster (36dp buttons)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Button 1: LOGS / TELEMETRY
+                // Button 1: DIAGNOSTICS
                 TactileBox(
                     onClick = onToggleLogs,
-                    pressedScale = 0.92f,
+                    pressedScale = 0.90f,
                     modifier = Modifier
-                        .background(Color(0xFF0F1524), RoundedCornerShape(6.dp))
-                        .border(0.8.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.12f))
                 ) {
-                    Text(
-                        text = "DIAG",
+                    GlyphDiagnostics(
                         color = accent,
-                        fontSize = 9.5.sp,
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.size(17.dp)
                     )
                 }
 
                 // Button 2: UPDATES
                 TactileBox(
                     onClick = onToggleUpdate,
-                    pressedScale = 0.92f,
+                    pressedScale = 0.90f,
                     modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
                         .background(
-                            if (hasUpdateAvailable) Color(0xFF00E676).copy(alpha = 0.15f) else Color(0xFF0F1524),
-                            RoundedCornerShape(6.dp)
+                            if (hasUpdateAvailable) Color(0xFF00E676).copy(alpha = 0.22f)
+                            else accent.copy(alpha = 0.12f)
                         )
-                        .border(
-                            0.8.dp,
-                            if (hasUpdateAvailable) Color(0xFF00E676).copy(alpha = 0.8f) else accent.copy(alpha = 0.25f),
-                            RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 7.dp, vertical = 5.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (hasUpdateAvailable) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .background(Color(0xFF00E676), CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                        Text(
-                            text = if (hasUpdateAvailable) "NEW" else "UPD",
-                            color = if (hasUpdateAvailable) Color(0xFF00E676) else accent,
-                            fontSize = 9.5.sp,
-                            fontFamily = TerminalFont,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    GlyphUpdate(
+                        color = if (hasUpdateAvailable) Color(0xFF00E676) else accent,
+                        modifier = Modifier.size(17.dp)
+                    )
                 }
 
-                // Button 3: WARMUP DAC
+                // Button 3: DAC WARMUP
                 TactileBox(
                     onClick = onWarmupClick,
-                    pressedScale = 0.92f,
+                    pressedScale = 0.90f,
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
                         .background(
-                            if (isWarmingUp) Color(0xFF00E5FF).copy(alpha = 0.20f) else Color(0xFF0F1524),
-                            RoundedCornerShape(6.dp)
+                            if (isWarmingUp) Color(0xFF00E5FF).copy(alpha = 0.25f)
+                            else accent.copy(alpha = 0.12f)
                         )
-                        .border(
-                            0.8.dp,
-                            if (isWarmingUp) Color(0xFF00E5FF) else accent.copy(alpha = 0.25f),
-                            RoundedCornerShape(6.dp)
-                        ),
-                    content = {
-                        GlyphBolt(
-                            color = if (isWarmingUp) Color(0xFF00E5FF) else TerminalWhite.copy(alpha = 0.85f),
-                            modifier = Modifier.size(13.dp).align(Alignment.Center)
-                        )
-                    }
-                )
+                ) {
+                    GlyphBolt(
+                        color = if (isWarmingUp) Color(0xFF00E5FF) else TerminalWhite.copy(alpha = 0.90f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
 
-                // Button 4: SCREEN PINNING / LOCK
+                // Button 4: SCREEN PINNING / LOCK TASK
                 TactileBox(
                     onClick = onToggleLockTask,
-                    pressedScale = 0.92f,
+                    pressedScale = 0.90f,
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
                         .background(
-                            if (isTaskLocked) Color(0xFFFFB300).copy(alpha = 0.20f) else Color(0xFF0F1524),
-                            RoundedCornerShape(6.dp)
+                            if (isTaskLocked) Color(0xFFFFB300).copy(alpha = 0.25f)
+                            else accent.copy(alpha = 0.12f)
                         )
-                        .border(
-                            0.8.dp,
-                            if (isTaskLocked) Color(0xFFFFB300) else accent.copy(alpha = 0.25f),
-                            RoundedCornerShape(6.dp)
-                        ),
-                    content = {
-                        if (isTaskLocked) {
-                            GlyphLock(color = Color(0xFFFFB300), modifier = Modifier.size(13.dp).align(Alignment.Center))
-                        } else {
-                            GlyphUnlock(color = TerminalWhite.copy(alpha = 0.70f), modifier = Modifier.size(13.dp).align(Alignment.Center))
-                        }
+                ) {
+                    if (isTaskLocked) {
+                        GlyphLock(color = Color(0xFFFFB300), modifier = Modifier.size(16.dp))
+                    } else {
+                        GlyphUnlock(color = TerminalWhite.copy(alpha = 0.75f), modifier = Modifier.size(16.dp))
                     }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Row 2: Status Bar (Hardware Bit-Perfect Status Strip)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF0B101D), RoundedCornerShape(6.dp))
-                .border(0.6.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val hintText = when (viewState) {
-                ViewState.LIBRARY -> "TAP: PLAY · HOLD: ACTIONS"
-                ViewState.PLAYLIST -> "TAP: PLAY · QUEUED ORDER"
-                ViewState.TRACK -> "64-BIT BIT-PERFECT DSP"
-                ViewState.SETTINGS -> "DEVICE & AUDIO PARAMS"
-            }
-            Text(
-                text = hintText,
-                fontFamily = TerminalFont,
-                fontSize = 8.5.sp,
-                color = TerminalGray,
-                letterSpacing = 0.3.sp
-            )
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(5.dp)
-                        .background(statusColor, CircleShape)
-                )
-                Spacer(modifier = Modifier.width(5.dp))
-                Text(
-                    text = "DAC: $hwVolumeText",
-                    fontFamily = TerminalFont,
-                    fontSize = 8.5.sp,
-                    color = statusColor,
-                    fontWeight = FontWeight.SemiBold
-                )
+                }
             }
         }
     }
-    Divider(color = accent.copy(alpha = 0.15f), thickness = 0.8.dp)
 }
 
 /**
- * High-End Floating Mini-Bar above the bottom navigation dock.
+ * Authentic Material 3 Tonal Floating Mini-Player.
+ * - Soft borderless tonal surface (RoundedCornerShape(16.dp)).
+ * - 44dp squircle album art / tonal music placeholder.
+ * - Bold Title & Artist subtitle.
+ * - Circular play/pause toggle.
+ * - 2dp M3 linear progress hairline along bottom.
  */
 @Composable
 fun MiniPlayerView(
@@ -284,115 +208,115 @@ fun MiniPlayerView(
 ) {
     val dynamicColor = LocalAccentColor.current
     val progress = if (durationSeconds > 0.0) (playbackPosition / durationSeconds).toFloat().coerceIn(0f, 1f) else 0f
-
-    val (cardBg, cardBorder) = when (bgMode) {
-        "BLACK" -> Color(0xFF101014) to dynamicColor.copy(alpha = 0.25f)
-        "BLUR" -> Color(0xFF090C16).copy(alpha = 0.86f) to dynamicColor.copy(alpha = 0.32f)
-        else -> Color(0xFF0E1322) to dynamicColor.copy(alpha = 0.28f)
-    }
+    val containerColor = com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh()
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(cardBg)
-            .border(0.8.dp, cardBorder, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(28.dp))
+            .background(containerColor)
+            .border(0.8.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(28.dp))
             .clickable { onNavigateToNowPlaying() }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 7.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val modifierImage = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (bgMode == "BLACK") Color(0xFF18181E) else Color(0xFF161C2C))
-                
+            val imageMod = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+
             if (track.coverArt != null) {
                 Image(
                     bitmap = track.coverArt.asImageBitmap(),
                     contentDescription = "Cover",
-                    modifier = modifierImage,
+                    modifier = imageMod,
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
-                    modifier = modifierImage,
+                    modifier = imageMod,
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("♪", color = dynamicColor, fontSize = 16.sp)
+                    GlyphMusicNote(color = dynamicColor, modifier = Modifier.size(20.dp))
                 }
             }
-            
-            Spacer(modifier = Modifier.width(10.dp))
-            
+
+            Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
                     color = TerminalWhite,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontFamily = ModernSansFont,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(1.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = track.artist,
-                        color = TerminalGray,
-                        fontSize = 10.sp,
+                        color = Color(0xFFCAC4D0),
+                        fontSize = 11.5.sp,
                         fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     val badgeText = if (track.bitrateKbps > 0) "${track.codec} · ${track.bitrateKbps}k" else track.codec
-                    Text(
-                        text = badgeText,
-                        color = dynamicColor.copy(alpha = 0.9f),
-                        fontSize = 8.sp,
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold,
+                    Box(
                         modifier = Modifier
-                            .background(dynamicColor.copy(alpha = 0.12f), RoundedCornerShape(3.dp))
-                            .border(0.5.dp, dynamicColor.copy(alpha = 0.35f), RoundedCornerShape(3.dp))
-                            .padding(horizontal = 4.dp, vertical = 0.5.dp)
-                    )
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(dynamicColor.copy(alpha = 0.16f))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            color = dynamicColor,
+                            fontSize = 8.5.sp,
+                            fontFamily = TerminalFont,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
-            
-            Spacer(modifier = Modifier.width(10.dp))
-            
+
+            Spacer(modifier = Modifier.width(12.dp))
+
             TactileBox(
                 onClick = onTogglePlay,
                 pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(34.dp)
-                    .background(dynamicColor, CircleShape)
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(dynamicColor)
             ) {
-                val iconColor = Color(0xFF070A12)
+                val iconColor = Color(0xFF0E0D13)
                 if (isPlaying) {
-                    GlyphPause(color = iconColor, modifier = Modifier.size(15.dp))
+                    GlyphPause(color = iconColor, modifier = Modifier.size(16.dp))
                 } else {
                     Box(modifier = Modifier.padding(start = 2.dp)) {
-                        GlyphPlay(color = iconColor, modifier = Modifier.size(15.dp))
+                        GlyphPlay(color = iconColor, modifier = Modifier.size(16.dp))
                     }
                 }
             }
         }
 
-        // 1.5.dp Progress Hairline along the bottom edge
+        // 2.dp Material 3 Progress Indicator hairline along the bottom
         if (progress > 0f) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth(progress)
-                    .height(1.5.dp)
+                    .height(2.dp)
                     .background(dynamicColor)
             )
         }
@@ -400,7 +324,12 @@ fun MiniPlayerView(
 }
 
 /**
- * Tactile Floating Bottom Navigation Dock with smooth spring animated indicator.
+ * Authentic Material 3 NavigationBar:
+ * - Flat tonal surface (SurfaceContainer).
+ * - 4 navigation items (LIBRARY, PLAYLIST, TRACK, SETTINGS).
+ * - M3 Active Pill Indicator (64dp x 32dp, RoundedCornerShape(50), LocalAccentColor 22% fill)
+ *   behind the icon with smooth animated transition.
+ * - Modern sans-serif label underneath.
  */
 @Composable
 fun BottomNavigationBar(
@@ -409,101 +338,80 @@ fun BottomNavigationBar(
     onNavClick: (ViewState) -> Unit
 ) {
     val items = listOf(
-        ViewState.LIBRARY to "LIBRARY",
-        ViewState.PLAYLIST to "PLAYLIST",
-        ViewState.TRACK to "PLAYER",
-        ViewState.SETTINGS to "CONFIG"
+        ViewState.LIBRARY to "Library",
+        ViewState.PLAYLIST to "Playlist",
+        ViewState.TRACK to "Now Playing",
+        ViewState.SETTINGS to "Settings"
     )
 
     val accent = LocalAccentColor.current
-    val selectedIndex = items.indexOfFirst { it.first == currentView }.coerceAtLeast(0)
+    val navBarBg = com.yuka.musicplayer.ui.theme.m3SurfaceContainer()
 
-    val animatedIndex by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
-        animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
-        label = "navPillSlide"
-    )
-
-    val dockBg = when (bgMode) {
-        "BLACK" -> Color(0xFF08080A)
-        "BLUR" -> Color(0xFF060912).copy(alpha = 0.90f)
-        else -> Color(0xFF070A12)
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 8.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(navBarBg)
+            .border(0.8.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(28.dp))
+    ) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(0.8.dp)
-                .background(Color.White.copy(alpha = 0.08f))
-        )
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(dockBg)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            val totalWidth = maxWidth
-            val itemWidth = totalWidth / items.size
+            items.forEach { (view, label) ->
+                val isSelected = currentView == view
 
-            // Sliding Active Pill Indicator
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .wrapContentSize(Alignment.TopStart)
-                    .offset(x = itemWidth * animatedIndex)
-                    .width(itemWidth)
-                    .fillMaxHeight()
-                    .padding(horizontal = 3.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(accent.copy(alpha = 0.14f))
-                    .border(width = 0.8.dp, color = accent.copy(alpha = 0.45f), shape = RoundedCornerShape(8.dp))
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                items.forEach { (view, label) ->
-                    val isSelected = currentView == view
-
-                    TactileBox(
-                        onClick = { onNavClick(view) },
-                        pressedScale = 0.94f,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 3.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .padding(vertical = 8.dp)
+                TactileBox(
+                    onClick = { onNavClick(view) },
+                    pressedScale = 0.94f,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 2.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(vertical = 4.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                        // Material 3 Active Pill Indicator behind Icon
+                        Box(
+                            modifier = Modifier
+                                .width(56.dp)
+                                .height(30.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    if (isSelected) com.yuka.musicplayer.ui.theme.m3ActivePillContainer() else Color.Transparent
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = label,
-                                color = if (isSelected) accent else TerminalGray.copy(alpha = 0.65f),
-                                fontSize = 9.sp,
-                                fontFamily = ModernSansFont,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                letterSpacing = 0.08.sp * 9f,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 12.dp, height = 2.dp)
-                                    .graphicsLayer {
-                                        alpha = if (isSelected) 1f else 0f
-                                    }
-                                    .background(accent, RoundedCornerShape(1.dp))
-                            )
+                            val iconColor = if (isSelected) accent else Color.White.copy(alpha = 0.65f)
+                            when (view) {
+                                ViewState.LIBRARY -> GlyphLibrary(color = iconColor, modifier = Modifier.size(20.dp))
+                                ViewState.PLAYLIST -> GlyphPlaylists(color = iconColor, modifier = Modifier.size(20.dp))
+                                ViewState.TRACK -> GlyphNowPlaying(color = iconColor, modifier = Modifier.size(20.dp))
+                                ViewState.SETTINGS -> GlyphSettings(color = iconColor, modifier = Modifier.size(20.dp))
+                            }
                         }
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        Text(
+                            text = label,
+                            color = if (isSelected) accent else Color.White.copy(alpha = 0.60f),
+                            fontSize = 11.sp,
+                            fontFamily = ModernSansFont,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
                     }
                 }
             }
         }
     }
 }
+

@@ -108,10 +108,9 @@ class UsbAudioController(context: Context) {
             val hasPerm = usbManager.hasPermission(audioDevice)
             log("Audio Device Selected: ${audioDevice.productName} (${audioDevice.deviceName}), hasPermission=$hasPerm")
             
-            // If connection exists and permission is still valid, verify or re-open cleanly
+            // If connection exists and permission is still valid, keep existing connection active
             if (usbDeviceConnection != null && hasPerm) {
-                log("USB Device already opened (FD=${usbDeviceConnection!!.fileDescriptor}). Re-notifying onDeviceReady.")
-                onDeviceReady?.invoke(usbDeviceConnection!!.fileDescriptor)
+                log("USB Device already opened (FD=${usbDeviceConnection!!.fileDescriptor}). Keeping connection active.")
                 return
             }
 

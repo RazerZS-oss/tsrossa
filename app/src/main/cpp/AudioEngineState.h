@@ -19,6 +19,8 @@ struct AltSettingInfo {
   uint8_t ep_out;
   int max_packet_size;
   int subframe_size;
+  uint8_t ep_feedback = 0;
+  bool is_async = false;
 };
 
 struct RefusedTrackInfo {
@@ -52,6 +54,8 @@ struct AudioEngineState {
   int usbFd = -1;
   int usbAudioInterface = -1;
   uint8_t epAddress = 0;
+  uint8_t epFeedback = 0;
+  bool isAsync = false;
   int maxPacketSize = 0;
   std::atomic<int> currentAltSetting{0};
 
@@ -107,6 +111,7 @@ struct AudioEngineState {
   // ISO Thread
   std::thread *isoThread = nullptr;
   std::atomic<bool> stopIsoThread{false};
+  std::atomic<bool> isoThreadStarted{false};
   std::atomic<bool> isoThreadExited{true};
   std::atomic<bool> stallFaultReported{false};
   std::vector<libusb_transfer *> transfers;
@@ -171,6 +176,8 @@ extern std::mutex g_stateMutex;
 extern std::queue<ControlRequest> g_controlQueue;
 extern std::mutex g_controlMutex;
 extern std::condition_variable g_controlCv;
+extern std::mutex g_isoStartMutex;
+extern std::condition_variable g_isoStartCv;
 extern std::string g_lastUsbDiagnostic;
 extern std::mutex g_usbDiagMutex;
 

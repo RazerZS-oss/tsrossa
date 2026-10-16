@@ -2,8 +2,8 @@ package com.yuka.musicplayer.ui.views.settings
 
 import android.content.SharedPreferences
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,8 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
-import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
 
 @Composable
@@ -30,9 +30,15 @@ fun TypographyHapticsSection(
 ) {
     val accent = LocalAccentColor.current
 
-    SettingsCard(title = "TYPOGRAPHY & HAPTICS", tag = "INTERFACE SCALE") {
-        Text("GLOBAL FONT SCALE", color = TerminalGray, fontFamily = TerminalFont, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(5.dp))
+    SettingsCard(title = "Typography & Haptics") {
+        Text(
+            text = "Global font scale",
+            color = Color.White.copy(alpha = 0.70f),
+            fontFamily = ModernSansFont,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -45,30 +51,29 @@ fun TypographyHapticsSection(
                     onFontScaleChange(newScale)
                     prefs.edit().putFloat("font_scale", newScale).apply()
                 },
-                pressedScale = 0.90f,
+                pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(width = 44.dp, height = 34.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF070B14))
-                    .border(0.8.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.15f))
             ) {
-                Text("-", color = accent, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.align(Alignment.Center))
+                Text("-", color = accent, fontFamily = ModernSansFont, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
 
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(34.dp)
-                    .background(Color(0xFF070B14), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp)),
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "${String.format("%.1f", fontScale)}x SCALE",
+                    text = "${String.format("%.1f", fontScale)}x Scale",
                     color = TerminalWhite,
-                    fontFamily = TerminalFont,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
                 )
             }
 
@@ -78,18 +83,17 @@ fun TypographyHapticsSection(
                     onFontScaleChange(newScale)
                     prefs.edit().putFloat("font_scale", newScale).apply()
                 },
-                pressedScale = 0.90f,
+                pressedScale = 0.88f,
                 modifier = Modifier
-                    .size(width = 44.dp, height = 34.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF070B14))
-                    .border(0.8.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.15f))
             ) {
-                Text("+", color = accent, fontFamily = TerminalFont, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.align(Alignment.Center))
+                Text("+", color = accent, fontFamily = ModernSansFont, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         SettingsToggleRow(
             title = "Haptic Tactile Feedback",

@@ -105,6 +105,6 @@ fun SettingsView(
         )
 
         // Bottom headroom so the last card scrolls comfortably above MiniPlayer & Navigation bar
-        Spacer(modifier = Modifier.height(72.dp))
+        Spacer(modifier = Modifier.height(168.dp))
     }
 }

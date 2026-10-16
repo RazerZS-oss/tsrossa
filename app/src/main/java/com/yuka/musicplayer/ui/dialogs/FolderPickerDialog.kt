@@ -1,7 +1,6 @@
 package com.yuka.musicplayer.ui.dialogs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -19,7 +19,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
+import com.yuka.musicplayer.ui.components.GlyphFolder
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
+import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
@@ -54,47 +57,43 @@ fun FolderPickerDialog(
     CyberBottomSheet(
         visible = visible,
         onDismissRequest = onDismissRequest,
-        maxHeightFraction = 0.85f
+        maxHeightFraction = 0.85f,
+        maxWidth = 440.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "— SELECT ROOT MUSIC DIRECTORY —",
-                color = LocalAccentColor.current,
-                fontSize = 12.sp,
+                text = "Select Root Music Folder",
+                color = TerminalWhite,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = TerminalFont
+                fontFamily = ModernSansFont
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "The player will recursively scan all audio files within this folder and all its subfolders.",
-                color = TerminalGray,
-                fontSize = 10.sp,
-                fontFamily = TerminalFont
+                text = "Recursively scans audio files within this folder and all subfolders.",
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                fontFamily = ModernSansFont
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Manual path entry box
+            // M3 Tonal Path Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp)
-                    .background(Color(0xFF090D18), RoundedCornerShape(4.dp))
-                    .border(0.8.dp, LocalAccentColor.current.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 8.dp),
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(m3SurfaceContainerHigh())
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "DIR: ",
-                    color = LocalAccentColor.current,
-                    fontFamily = TerminalFont,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                GlyphFolder(color = LocalAccentColor.current, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 BasicTextField(
                     value = manualPathInput,
                     onValueChange = { manualPathInput = it },
@@ -102,7 +101,7 @@ fun FolderPickerDialog(
                     textStyle = TextStyle(
                         color = TerminalWhite,
                         fontFamily = TerminalFont,
-                        fontSize = 10.sp
+                        fontSize = 12.sp
                     ),
                     cursorBrush = SolidColor(LocalAccentColor.current),
                     singleLine = true
@@ -110,33 +109,34 @@ fun FolderPickerDialog(
                 Spacer(modifier = Modifier.width(6.dp))
                 Box(
                     modifier = Modifier
-                        .background(LocalAccentColor.current.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                        .border(0.6.dp, LocalAccentColor.current, RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LocalAccentColor.current.copy(alpha = 0.18f))
                         .clickable {
                             val target = File(manualPathInput.trim())
                             if (target.exists() && target.isDirectory && target.canRead()) {
                                 browsingDir = target
                             }
                         }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "GO",
+                        text = "Go",
                         color = LocalAccentColor.current,
-                        fontSize = 9.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = TerminalFont
+                        fontFamily = ModernSansFont
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Subdirectories list
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Parent navigation
                 browsingDir.parentFile?.let { parent ->
@@ -144,16 +144,24 @@ fun FolderPickerDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 3.dp)
-                                .background(Color(0xFF0D1322), RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(m3SurfaceContainerHigh())
                                 .clickable {
                                     browsingDir = parent
                                     manualPathInput = parent.absolutePath
                                 }
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("📁  .. (Parent Folder)", color = LocalAccentColor.current, fontSize = 11.sp, fontFamily = TerminalFont)
+                            GlyphFolder(color = LocalAccentColor.current, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = ".. (Parent Folder)",
+                                color = LocalAccentColor.current,
+                                fontSize = 13.sp,
+                                fontFamily = ModernSansFont,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }
@@ -162,28 +170,29 @@ fun FolderPickerDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 2.dp)
-                            .background(Color(0xFF090D18), RoundedCornerShape(6.dp))
-                            .border(0.5.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(m3SurfaceContainerHigh())
                             .clickable {
                                 browsingDir = dir
                                 manualPathInput = dir.absolutePath
                             }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .padding(horizontal = 14.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        GlyphFolder(color = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "📁  ${dir.name}",
+                            text = dir.name,
                             color = TerminalWhite,
-                            fontSize = 11.5.sp,
-                            fontFamily = TerminalFont,
+                            fontSize = 13.sp,
+                            fontFamily = ModernSansFont,
                             maxLines = 1
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Action Buttons
             Row(
@@ -193,41 +202,41 @@ fun FolderPickerDialog(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(Color(0xFF141923), RoundedCornerShape(6.dp))
-                        .border(0.8.dp, TerminalGray.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                        .clickable { onDismissRequest() }
-                        .padding(vertical = 10.dp),
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(m3SurfaceContainerHigh())
+                        .clickable { onDismissRequest() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "CANCEL",
-                        color = TerminalGray,
-                        fontSize = 11.sp,
-                        fontFamily = TerminalFont,
-                        fontWeight = FontWeight.Bold
+                        text = "Cancel",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 13.sp,
+                        fontFamily = ModernSansFont,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
                 Box(
                     modifier = Modifier
                         .weight(1.5f)
-                        .background(LocalAccentColor.current.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                        .border(1.dp, LocalAccentColor.current, RoundedCornerShape(6.dp))
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(LocalAccentColor.current)
                         .clickable {
                             val chosen = File(manualPathInput.trim())
                             val finalDir = if (chosen.exists() && chosen.isDirectory && chosen.canRead()) chosen else browsingDir
                             if (finalDir.exists() && finalDir.isDirectory && finalDir.canRead()) {
                                 onSelectDirectory(finalDir)
                             }
-                        }
-                        .padding(vertical = 10.dp),
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "SELECT THIS FOLDER",
-                        color = LocalAccentColor.current,
-                        fontSize = 11.sp,
-                        fontFamily = TerminalFont,
+                        text = "Select This Folder",
+                        color = Color.Black,
+                        fontSize = 13.sp,
+                        fontFamily = ModernSansFont,
                         fontWeight = FontWeight.Bold
                     )
                 }

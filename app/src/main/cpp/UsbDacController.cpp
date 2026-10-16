@@ -47,19 +47,41 @@ void control_thread_func() {
           if (req.type == REQ_EVENT_TRACK_FINISHED) {
             jmethodID methodId = env->GetMethodID(clazz, "onTrackFinished", "()V");
             if (methodId) {
+              LOGI("[JNI] Dispatching onTrackFinished to Kotlin callback");
               env->CallVoidMethod(g_audioState.callbackObj, methodId);
+              if (env->ExceptionCheck()) {
+                LOGE("[JNI] Exception occurred during onTrackFinished callback!");
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+              }
+            } else {
+              LOGE("[JNI] Failed to find method onTrackFinished ()V");
             }
           } else if (req.type == REQ_EVENT_TRACK_TRANSITION) {
             jmethodID methodId = env->GetMethodID(clazz, "onTrackTransition", "(Ljava/lang/String;)V");
             if (methodId) {
+              LOGI("[JNI] Dispatching onTrackTransition to Kotlin callback: %s", req.eventArg.c_str());
               jstring pathStr = env->NewStringUTF(req.eventArg.c_str());
               env->CallVoidMethod(g_audioState.callbackObj, methodId, pathStr);
+              if (env->ExceptionCheck()) {
+                LOGE("[JNI] Exception occurred during onTrackTransition callback!");
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+              }
               env->DeleteLocalRef(pathStr);
+            } else {
+              LOGE("[JNI] Failed to find method onTrackTransition (Ljava/lang/String;)V");
             }
           } else if (req.type == REQ_EVENT_USB_STALL_FAULT) {
             jmethodID methodId = env->GetMethodID(clazz, "onUsbStallFault", "()V");
             if (methodId) {
+              LOGI("[JNI] Dispatching onUsbStallFault to Kotlin callback");
               env->CallVoidMethod(g_audioState.callbackObj, methodId);
+              if (env->ExceptionCheck()) {
+                LOGE("[JNI] Exception occurred during onUsbStallFault callback!");
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+              }
             }
           }
           if (needDetach) {
@@ -121,13 +143,7 @@ void control_thread_func() {
       if (r < 0) {
         LOGE("Hardware volume SET_CUR failed! Falling back to software volume.");
         g_audioState.isHardwareVolumeActive.store(false);
-        float vol = g_audioState.rawLinearVolume;
-        float scaled_vol = vol;
-        if (vol < 0.001f) {
-          scaled_vol = 0.0f;
-        } else {
-          scaled_vol = (std::exp(vol * 4.0f) - 1.0f) / (std::exp(4.0f) - 1.0f);
-        }
+        float scaled_vol = calculate_scaled_volume(g_audioState.rawLinearVolume);
         g_audioState.targetVolume.store(scaled_vol);
       }
     } else if (req.type == 2) { // SET_CUR Sample Rate
@@ -541,14 +557,34 @@ bool init_usb_dac_internal(int fd) {
 
         for (int k = 0; k < alt->bNumEndpoints; k++) {
           if ((alt->endpoint[k].bEndpointAddress & 0x80) == 0 &&
-              (alt->endpoint[k].bmAttributes & 0x03) == 1) {
+              (alt->endpoint[k].bmAttributes & 0x03) == 1) { // Isochronous OUT
             int pk_size = libusb_get_max_iso_packet_size(
                 dev, alt->endpoint[k].bEndpointAddress);
             if (pk_size < 0)
               pk_size = alt->endpoint[k].wMaxPacketSize;
+
+            uint8_t ep_out = alt->endpoint[k].bEndpointAddress;
+            uint8_t ep_sync = alt->endpoint[k].bSynchAddress;
+            bool is_async = ((alt->endpoint[k].bmAttributes & 0x0C) == 0x04);
+
+            // Find companion feedback endpoint if explicit or listed in same altsetting
+            uint8_t ep_fb = 0;
+            if (ep_sync != 0) {
+              ep_fb = ep_sync;
+            } else {
+              for (int fb_idx = 0; fb_idx < alt->bNumEndpoints; fb_idx++) {
+                if ((alt->endpoint[fb_idx].bEndpointAddress & 0x80) != 0 &&
+                    ((alt->endpoint[fb_idx].bmAttributes & 0x0C) == 0x10 ||
+                     (alt->endpoint[fb_idx].bmAttributes & 0x03) == 1)) {
+                  ep_fb = alt->endpoint[fb_idx].bEndpointAddress;
+                  break;
+                }
+              }
+            }
+
             g_audioState.validAlts.push_back(
                 {alt->bInterfaceNumber, alt->bAlternateSetting,
-                 alt->endpoint[k].bEndpointAddress, pk_size, subframe_size});
+                 ep_out, pk_size, subframe_size, ep_fb, is_async});
           }
         }
       }
@@ -770,27 +806,33 @@ bool init_usb_dac_internal(int fd) {
                               (unsigned char *)&max_vol, 2, 1000);
       g_audioState.minVolumeDb = (int16_t)min_vol;
       g_audioState.maxVolumeDb = (int16_t)max_vol;
+      LOGI("UAC1 Volume Range: min=%.2fdB, max=%.2fdB",
+           (float)g_audioState.minVolumeDb / 256.0f, (float)g_audioState.maxVolumeDb / 256.0f);
     } else {
-      unsigned char range_buf[256] = {0};
-      int r = libusb_control_transfer(g_audioState.usbHandle, 0xA1, 0x02,
-                                      (0x02 << 8) | g_audioState.volumeChannel,
-                                      (g_audioState.featureUnitId << 8) |
-                                          g_audioState.acInterfaceNum,
-                                      range_buf, sizeof(range_buf), 1000);
-      if (r >= 2) {
-        int num_subranges = range_buf[0] | (range_buf[1] << 8);
-        int min_vol = 32767, max_vol = -32768;
-        for (int s = 0; s < num_subranges; s++) {
-          int offset = 2 + (s * 6);
-          if (offset + 4 <= r) {
-            int16_t sub_min = range_buf[offset] | (range_buf[offset + 1] << 8);
-            int16_t sub_max = range_buf[offset + 2] | (range_buf[offset + 3] << 8);
-            if (sub_min < min_vol) min_vol = sub_min;
-            if (sub_max > max_vol) max_vol = sub_max;
+      for (int ch = 0; ch <= 2; ch++) {
+        unsigned char range_buf[256] = {0};
+        int r = libusb_control_transfer(g_audioState.usbHandle, 0xA1, 0x02,
+                                        (0x02 << 8) | ch,
+                                        (g_audioState.featureUnitId << 8) |
+                                            g_audioState.acInterfaceNum,
+                                        range_buf, sizeof(range_buf), 1000);
+        if (r >= 2) {
+          int num_subranges = range_buf[0] | (range_buf[1] << 8);
+          for (int s = 0; s < num_subranges; s++) {
+            int offset = 2 + (s * 6);
+            if (offset + 6 <= r) {
+              int16_t sub_min = (int16_t)(range_buf[offset] | (range_buf[offset + 1] << 8));
+              int16_t sub_max = (int16_t)(range_buf[offset + 2] | (range_buf[offset + 3] << 8));
+              int16_t sub_res = (int16_t)(range_buf[offset + 4] | (range_buf[offset + 5] << 8));
+              LOGI("UAC2 Volume Range [ch=%d, sub=%d]: min=%d (%.2fdB), max=%d (%.2fdB), res=%d (%.2fdB)",
+                   ch, s, sub_min, (float)sub_min / 256.0f, sub_max, (float)sub_max / 256.0f, sub_res, (float)sub_res / 256.0f);
+              if (ch == g_audioState.volumeChannel || ch == 0) {
+                g_audioState.minVolumeDb = sub_min;
+                g_audioState.maxVolumeDb = sub_max;
+              }
+            }
           }
         }
-        if (min_vol != 32767) g_audioState.minVolumeDb = min_vol;
-        if (max_vol != -32768) g_audioState.maxVolumeDb = max_vol;
       }
 
       if (g_audioState.minVolumeDb >= g_audioState.maxVolumeDb) {
@@ -809,13 +851,7 @@ bool init_usb_dac_internal(int fd) {
     }
   } else {
     g_audioState.isHardwareVolumeActive.store(false);
-    float vol = g_audioState.rawLinearVolume;
-    float scaled_vol = vol;
-    if (vol < 0.001f) {
-      scaled_vol = 0.0f;
-    } else {
-      scaled_vol = (std::exp(vol * 4.0f) - 1.0f) / (std::exp(4.0f) - 1.0f);
-    }
+    float scaled_vol = calculate_scaled_volume(g_audioState.rawLinearVolume);
     g_audioState.targetVolume.store(scaled_vol);
   }
 
