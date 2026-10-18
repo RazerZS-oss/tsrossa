@@ -97,14 +97,6 @@ tsrossa eliminates the entire Android audio framework. By querying Android's USB
 
 ---
 
-## Test Audio Source
-
-For testing bit-perfect playback with high-resolution FLAC files:
-- **SpotiFLAC**: [spotiflac.com](https://spotiflac.com)
-- **SpotiFLAC Mobile**: [GitHub Repository](https://github.com/spotiflacapp/SpotiFLAC-Mobile)
-
----
-
 ## Quick Start
 
 ### Installation
