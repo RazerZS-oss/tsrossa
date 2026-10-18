@@ -89,6 +89,7 @@ public class AudioEngine: ObservableObject {
             self.totalDuration = tsrossa_get_total_duration()
             startProgressTimer()
             updateTelemetry()
+            AppViewModel.shared.updateThemeForTrack(track: track)
         }
     }
     
