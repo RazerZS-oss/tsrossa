@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.5.0-BETA] - 2026-10-18
+## [1.6.0] - 2026-10-18
 
 ### Added
 - **Material 3 (Material You) Glassmorphic UI Overhaul:**
@@ -50,7 +50,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sort Tracks Selector Styling:** Removed unwanted redundant container background around the Ascending / Descending order toggle in `LibrarySortModalSheet`.
 - **Top Bar & Playlist Opacity:** Standardized DAC top-bar pill and playlist card backgrounds to an explicit 0.85 opacity across all surface modes.
 
-### Performance & Engine Stability
-- Optimized USB packet pacing and Bresenham timing in C++ audio streaming engine.
-- Implemented robust hotplug and stall-fault recovery hooks in `UsbAudioController`.
+### Performance & Automated Testing
 - Expanded automated unit test suite covering color contrast luminance calculation, music scanner sorting, queue resolver logic, metadata extraction, album art caching, fuzzy search, and lyrics parsing.
+
+---
+
+## [1.5.0-BETA] - 2026-10-16
+
+### Added
+- **Audio Engine Stability & High-Precision Pacing:**
+  - Host-based Bresenham packet pacing and bit-perfect pass-through eliminating screeching and audio distortion artifacts across asynchronous USB Isochronous endpoints.
+  - Synchronized background playback position tracking with the native audio engine clock.
+  - Allowed hardware DAC warmup execution while music playback is paused.
+  - Guaranteed `REQ_EVENT_TRACK_FINISHED` event emission upon track completion to maintain gapless transitions.
+  - Asynchronous dispatch of JNI callbacks off the real-time ISO streaming thread.
+- **Playlist & Storage:**
+  - Custom multi-playlist creation, management, and storage scanning.
+  - Hardened playlist storage with atomic file writes and in-memory caching (`PlaylistStorageHelper`).
+- **UI & Settings:**
+  - Persistent theme, display, and typography settings in `SharedPreferences`.
+  - Introduced `TrackTitleParser` and optimized hairline border tokens.
+  - Fixed top-bar header accent color resolution.
+
+### Fixed
+- Fixed memory safety issue in USB descriptor parser by copying `AltSettingInfo` by value to eliminate dangling pointers.
+- Eliminated decode buffer race conditions and buffer starvation noise.
+- Fixed Android `libusb_init` SELinux I/O failures.
