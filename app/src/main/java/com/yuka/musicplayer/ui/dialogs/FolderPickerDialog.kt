@@ -20,12 +20,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
 import com.yuka.musicplayer.ui.components.GlyphFolder
+import com.yuka.musicplayer.ui.components.ModalCloseButton
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3OnSurface
+import com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
 import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
-import com.yuka.musicplayer.ui.theme.TerminalWhite
+import com.yuka.musicplayer.util.ColorContrastHelper
 import java.io.File
 
 @Composable
@@ -54,6 +57,9 @@ fun FolderPickerDialog(
         }.getOrDefault(emptyList())
     }
 
+    val accent = LocalAccentColor.current
+    val onAccent = if (ColorContrastHelper.calculateLuminance(accent) > 0.45f) Color.Black else Color.White
+
     CyberBottomSheet(
         visible = visible,
         onDismissRequest = onDismissRequest,
@@ -65,20 +71,30 @@ fun FolderPickerDialog(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            Text(
-                text = "Select Root Music Folder",
-                color = TerminalWhite,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = ModernSansFont
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Recursively scans audio files within this folder and all subfolders.",
-                color = Color.White.copy(alpha = 0.65f),
-                fontSize = 12.sp,
-                fontFamily = ModernSansFont
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Select Root Music Folder",
+                        color = m3OnSurface(),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = ModernSansFont
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Recursively scans audio files within this folder and all subfolders.",
+                        color = m3OnSurfaceVariant(),
+                        fontSize = 12.sp,
+                        fontFamily = ModernSansFont
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                ModalCloseButton(onClick = onDismissRequest)
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -92,25 +108,25 @@ fun FolderPickerDialog(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                GlyphFolder(color = LocalAccentColor.current, modifier = Modifier.size(18.dp))
+                GlyphFolder(color = accent, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 BasicTextField(
                     value = manualPathInput,
                     onValueChange = { manualPathInput = it },
                     modifier = Modifier.weight(1f),
                     textStyle = TextStyle(
-                        color = TerminalWhite,
+                        color = m3OnSurface(),
                         fontFamily = TerminalFont,
                         fontSize = 12.sp
                     ),
-                    cursorBrush = SolidColor(LocalAccentColor.current),
+                    cursorBrush = SolidColor(accent),
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(LocalAccentColor.current.copy(alpha = 0.18f))
+                        .background(accent.copy(alpha = 0.18f))
                         .clickable {
                             val target = File(manualPathInput.trim())
                             if (target.exists() && target.isDirectory && target.canRead()) {
@@ -121,7 +137,7 @@ fun FolderPickerDialog(
                 ) {
                     Text(
                         text = "Go",
-                        color = LocalAccentColor.current,
+                        color = accent,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = ModernSansFont
@@ -153,11 +169,11 @@ fun FolderPickerDialog(
                                 .padding(horizontal = 14.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            GlyphFolder(color = LocalAccentColor.current, modifier = Modifier.size(18.dp))
+                            GlyphFolder(color = accent, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = ".. (Parent Folder)",
-                                color = LocalAccentColor.current,
+                                color = accent,
                                 fontSize = 13.sp,
                                 fontFamily = ModernSansFont,
                                 fontWeight = FontWeight.Medium
@@ -179,11 +195,11 @@ fun FolderPickerDialog(
                             .padding(horizontal = 14.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        GlyphFolder(color = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                        GlyphFolder(color = m3OnSurfaceVariant().copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = dir.name,
-                            color = TerminalWhite,
+                            color = m3OnSurface(),
                             fontSize = 13.sp,
                             fontFamily = ModernSansFont,
                             maxLines = 1
@@ -210,7 +226,7 @@ fun FolderPickerDialog(
                 ) {
                     Text(
                         text = "Cancel",
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = m3OnSurfaceVariant(),
                         fontSize = 13.sp,
                         fontFamily = ModernSansFont,
                         fontWeight = FontWeight.Medium
@@ -222,7 +238,7 @@ fun FolderPickerDialog(
                         .weight(1.5f)
                         .height(44.dp)
                         .clip(RoundedCornerShape(22.dp))
-                        .background(LocalAccentColor.current)
+                        .background(accent)
                         .clickable {
                             val chosen = File(manualPathInput.trim())
                             val finalDir = if (chosen.exists() && chosen.isDirectory && chosen.canRead()) chosen else browsingDir
@@ -234,7 +250,7 @@ fun FolderPickerDialog(
                 ) {
                     Text(
                         text = "Select This Folder",
-                        color = Color.Black,
+                        color = onAccent,
                         fontSize = 13.sp,
                         fontFamily = ModernSansFont,
                         fontWeight = FontWeight.Bold

@@ -17,17 +17,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.ModalCloseButton
 import com.yuka.musicplayer.ui.components.GlyphRefresh
 import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3OnSurface
+import com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
 import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
-import com.yuka.musicplayer.ui.theme.TerminalWhite
 import com.yuka.musicplayer.update.DownloadState
 import com.yuka.musicplayer.update.ReleaseInfo
 import com.yuka.musicplayer.update.UpdateCheckState
+import com.yuka.musicplayer.util.ColorContrastHelper
 import java.io.File
 
 @Composable
@@ -42,6 +45,9 @@ fun UpdatePanel(
     canInstallPackages: Boolean,
     onClose: () -> Unit
 ) {
+    val accent = LocalAccentColor.current
+    val onAccent = if (ColorContrastHelper.calculateLuminance(accent) > 0.45f) Color.Black else Color.White
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -58,29 +64,20 @@ fun UpdatePanel(
             Column {
                 Text(
                     text = "Software Updates",
-                    color = TerminalWhite,
+                    color = m3OnSurface(),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = ModernSansFont
                 )
                 Text(
                     text = "GitHub releases & direct APK updates",
-                    color = Color.White.copy(alpha = 0.60f),
+                    color = m3OnSurfaceVariant(),
                     fontSize = 12.sp,
                     fontFamily = ModernSansFont
                 )
             }
 
-            TactileBox(
-                onClick = onClose,
-                pressedScale = 0.88f,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(m3SurfaceContainerHigh())
-            ) {
-                GlyphClose(color = Color.White.copy(alpha = 0.80f), modifier = Modifier.size(18.dp))
-            }
+            ModalCloseButton(onClick = onClose)
         }
 
         Column(
@@ -101,8 +98,8 @@ fun UpdatePanel(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Installed Version", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
-                        Text("v$currentVersion", color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Installed Version", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 13.sp)
+                        Text("v$currentVersion", color = m3OnSurface(), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -110,20 +107,20 @@ fun UpdatePanel(
                     when (updateCheckState) {
                         is UpdateCheckState.Checking -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Status: ", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                                Text("Status: ", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 13.sp)
                                 Text("Checking GitHub releases...", color = Color(0xFFFFD700), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                         is UpdateCheckState.UpToDate -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Status: ", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                                Text("Status: ", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 13.sp)
                                 Text("Up to date (${updateCheckState.latestTag})", color = Color(0xFF00E676), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                         is UpdateCheckState.UpdateAvailable -> {
                             val rel = updateCheckState.release
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Status: ", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                                Text("Status: ", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 13.sp)
                                 Text("New version available!", color = Color(0xFF00E676), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                             Spacer(modifier = Modifier.height(6.dp))
@@ -131,7 +128,7 @@ fun UpdatePanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Latest Release", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                                Text("Latest Release", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 12.sp)
                                 Text(rel.tagName, color = Color(0xFF00E676), fontFamily = ModernSansFont, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
@@ -139,17 +136,17 @@ fun UpdatePanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Package Size", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 12.sp)
-                                Text(String.format("%.1f MB", rel.apkSize / (1024.0 * 1024.0)), color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 12.sp)
+                                Text("Package Size", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 12.sp)
+                                Text(String.format("%.1f MB", rel.apkSize / (1024.0 * 1024.0)), color = m3OnSurface(), fontFamily = ModernSansFont, fontSize = 12.sp)
                             }
                         }
                         is UpdateCheckState.Error -> {
                             Text("Status: Error", color = Color(0xFFFF5252), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(updateCheckState.message, color = Color.White.copy(alpha = 0.7f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                            Text(updateCheckState.message, color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 12.sp)
                         }
                         is UpdateCheckState.Idle -> {
-                            Text("Status: Ready to check", color = Color.White.copy(alpha = 0.65f), fontFamily = ModernSansFont, fontSize = 13.sp)
+                            Text("Status: Ready to check", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 13.sp)
                         }
                     }
                 }
@@ -168,7 +165,7 @@ fun UpdatePanel(
                     Column {
                         Text("Permission Required: Install Unknown Apps", color = Color(0xFFFF9100), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(3.dp))
-                        Text("Android requires permission to install APK updates from this app.", color = Color.White.copy(alpha = 0.8f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                        Text("Android requires permission to install APK updates from this app.", color = m3OnSurfaceVariant(), fontFamily = ModernSansFont, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         TactileBox(
                             onClick = onOpenPermissionSettings,
@@ -184,13 +181,17 @@ fun UpdatePanel(
                 }
             }
 
-            // Changelog Section if Update is Available
-            if (updateCheckState is UpdateCheckState.UpdateAvailable) {
-                val rel = updateCheckState.release
+            // Changelog Section if Release info is Available
+            val activeRelease = when (updateCheckState) {
+                is UpdateCheckState.UpdateAvailable -> updateCheckState.release
+                is UpdateCheckState.UpToDate -> updateCheckState.release
+                else -> null
+            }
+            if (activeRelease != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Release Notes",
-                    color = TerminalWhite,
+                    color = m3OnSurface(),
                     fontFamily = ModernSansFont,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
@@ -206,8 +207,8 @@ fun UpdatePanel(
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
-                        text = if (rel.changelog.isNotBlank()) rel.changelog else "No release notes provided.",
-                        color = Color.White.copy(alpha = 0.85f),
+                        text = if (activeRelease.changelog.isNotBlank()) activeRelease.changelog else "No release notes provided.",
+                        color = m3OnSurfaceVariant(),
                         fontFamily = ModernSansFont,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
@@ -231,13 +232,13 @@ fun UpdatePanel(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Downloading update...", color = TerminalWhite, fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Downloading update...", color = m3OnSurface(), fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             Text("${(downloadState.progress * 100).toInt()}%", color = LocalAccentColor.current, fontFamily = ModernSansFont, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "${String.format("%.1f", downloadState.downloadedBytes / 1048576.0)} MB / ${String.format("%.1f", downloadState.totalBytes / 1048576.0)} MB",
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = m3OnSurfaceVariant(),
                             fontFamily = ModernSansFont,
                             fontSize = 11.sp
                         )
@@ -247,7 +248,7 @@ fun UpdatePanel(
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp))
-                                .background(Color.White.copy(alpha = 0.1f))
+                                .background(m3OnSurfaceVariant().copy(alpha = 0.2f))
                         ) {
                             Box(
                                 modifier = Modifier
@@ -271,7 +272,7 @@ fun UpdatePanel(
                     ) {
                         Text(
                             text = "Launch Package Installer",
-                            color = Color.Black,
+                            color = onAccent,
                             fontFamily = ModernSansFont,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
@@ -295,7 +296,7 @@ fun UpdatePanel(
                             ) {
                                 Text(
                                     text = "Retry Download",
-                                    color = TerminalWhite,
+                                    color = m3OnSurface(),
                                     fontFamily = ModernSansFont,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.sp,
@@ -318,7 +319,7 @@ fun UpdatePanel(
                         ) {
                             Text(
                                 text = "Download & Install (${String.format("%.1f MB", updateCheckState.release.apkSize / (1024.0 * 1024.0))})",
-                                color = Color.Black,
+                                color = onAccent,
                                 fontFamily = ModernSansFont,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
@@ -348,7 +349,7 @@ fun UpdatePanel(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (updateCheckState is UpdateCheckState.Checking) "Checking releases..." else "Check for Updates",
-                        color = TerminalWhite,
+                        color = m3OnSurface(),
                         fontFamily = ModernSansFont,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp

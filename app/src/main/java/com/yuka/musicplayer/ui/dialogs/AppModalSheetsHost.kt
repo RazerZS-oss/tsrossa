@@ -10,6 +10,7 @@ import com.yuka.musicplayer.audio.AudioPlayerManager
 import com.yuka.musicplayer.model.PlaybackSource
 import com.yuka.musicplayer.model.RefusedTrackEntry
 import com.yuka.musicplayer.model.RepeatMode
+import com.yuka.musicplayer.model.ScannedMusicItem
 import com.yuka.musicplayer.model.TrackInfo
 import com.yuka.musicplayer.model.ViewState
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
@@ -77,7 +78,17 @@ fun AppModalSheetsHost(
     onPlayTrackAction: (File, PlaybackSource) -> Unit,
     onPlayNextInQueue: (File) -> Unit,
     onAddToQueue: (File) -> Unit,
-    onOpenAddToPlaylist: (File) -> Unit
+    onOpenAddToPlaylist: (File) -> Unit,
+    onShowDetails: (File) -> Unit = {},
+    onDeleteTrack: (File) -> Unit = {},
+    // Track Details Modal
+    trackDetailsTarget: File? = null,
+    onDismissTrackDetails: () -> Unit = {},
+    // Confirm Delete Dialog
+    tracksToDelete: List<File> = emptyList(),
+    onDismissConfirmDelete: () -> Unit = {},
+    onConfirmDeleteTracks: (List<File>) -> Unit = {},
+    scannedItemsMap: Map<String, ScannedMusicItem> = emptyMap()
 ) {
     // 1. System Logs Panel
     CyberBottomSheet(
@@ -163,11 +174,11 @@ fun AppModalSheetsHost(
         }
     }
 
-    // 5. Queue Panel
+    // 5. Queue Panel (Items 9.1, 9.2, 9.3)
     CyberBottomSheet(
         visible = showQueuePanel,
         onDismissRequest = onDismissQueuePanel,
-        maxHeightFraction = 0.65f,
+        maxHeightFraction = 0.84f,
         maxWidth = 420.dp
     ) {
         QueuePanel(
@@ -177,7 +188,8 @@ fun AppModalSheetsHost(
             onRemoveFromQueue = onRemoveFromQueue,
             onClearQueue = onClearQueue,
             onSelectTrack = onSelectQueueTrack,
-            onClose = onDismissQueuePanel
+            onClose = onDismissQueuePanel,
+            scannedItemsMap = scannedItemsMap
         )
     }
 
@@ -190,6 +202,22 @@ fun AppModalSheetsHost(
         onPlayTrack = onPlayTrackAction,
         onPlayNextInQueue = onPlayNextInQueue,
         onAddToQueue = onAddToQueue,
-        onOpenAddToPlaylist = onOpenAddToPlaylist
+        onOpenAddToPlaylist = onOpenAddToPlaylist,
+        onShowDetails = onShowDetails,
+        onDeleteTrack = onDeleteTrack
+    )
+
+    // 7. Track Details Modal Sheet
+    TrackDetailsModalSheet(
+        target = trackDetailsTarget,
+        onDismissRequest = onDismissTrackDetails
+    )
+
+    // 8. Confirm Delete Dialog
+    ConfirmDeleteDialog(
+        visible = tracksToDelete.isNotEmpty(),
+        tracksToDelete = tracksToDelete,
+        onDismissRequest = onDismissConfirmDelete,
+        onConfirmDelete = onConfirmDeleteTracks
     )
 }

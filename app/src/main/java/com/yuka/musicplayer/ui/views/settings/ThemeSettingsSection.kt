@@ -26,12 +26,37 @@ fun ThemeSettingsSection(
     accentMode: String,
     onAccentModeChange: (String) -> Unit,
     accentFixedColorStr: String,
-    onAccentFixedColorChange: (String) -> Unit
+    onAccentFixedColorChange: (String) -> Unit,
+    themeMode: String = "DARK",
+    onThemeModeChange: (String) -> Unit = {},
+    surfaceStyle: String = "BLUR_OPACITY",
+    onSurfaceStyleChange: (String) -> Unit = {}
 ) {
     SettingsCard(title = "Theme & Display") {
         Text(
+            text = "Theme mode",
+            color = com.yuka.musicplayer.ui.theme.m3OnSurface().copy(alpha = 0.70f),
+            fontFamily = ModernSansFont,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val themeModes = listOf(
+            "DARK" to "Dark Mode",
+            "LIGHT" to "Light Mode"
+        )
+        SettingsSegmentedControl(
+            items = themeModes,
+            selectedItem = themeMode,
+            onItemSelected = onThemeModeChange
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
             text = "Background canvas",
-            color = Color.White.copy(alpha = 0.70f),
+            color = com.yuka.musicplayer.ui.theme.m3OnSurface().copy(alpha = 0.70f),
             fontFamily = ModernSansFont,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold
@@ -39,13 +64,14 @@ fun ThemeSettingsSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         val bgModes = listOf(
-            "BLACK" to "True Black",
+            "BLACK" to "OLED",
             "SIGNATURE" to "Tonal M3",
-            "BLUR" to "Wallpaper"
+            "ARTWORK" to "Album Artwork"
         )
+        val currentBgKey = if (bgMode == "BLUR" || bgMode == "ARTWORK") "ARTWORK" else bgMode
         SettingsSegmentedControl(
             items = bgModes,
-            selectedItem = bgMode,
+            selectedItem = currentBgKey,
             onItemSelected = onBgModeChange
         )
 
@@ -53,7 +79,7 @@ fun ThemeSettingsSection(
 
         Text(
             text = "Accent color mode",
-            color = Color.White.copy(alpha = 0.70f),
+            color = com.yuka.musicplayer.ui.theme.m3OnSurface().copy(alpha = 0.70f),
             fontFamily = ModernSansFont,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold
@@ -61,8 +87,9 @@ fun ThemeSettingsSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         val accentModes = listOf(
-            "DYNAMIC" to "Material You",
-            "FIXED" to "Fixed Palette"
+            "WALLPAPER" to "Wallpaper",
+            "DYNAMIC" to "Album Art",
+            "FIXED" to "Fixed"
         )
         SettingsSegmentedControl(
             items = accentModes,
@@ -74,7 +101,7 @@ fun ThemeSettingsSection(
             Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = "PALETTE SELECTION",
-                color = Color.White.copy(alpha = 0.65f),
+                color = com.yuka.musicplayer.ui.theme.m3OnSurface().copy(alpha = 0.70f),
                 fontFamily = ModernSansFont,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold
@@ -82,6 +109,7 @@ fun ThemeSettingsSection(
             Spacer(modifier = Modifier.height(8.dp))
 
             val fixedColors = listOf(
+                "#FFFFFF" to "White",
                 "#00FF00" to "Green",
                 "#00E5FF" to "Cyan",
                 "#FFD700" to "Amber",
@@ -104,7 +132,7 @@ fun ThemeSettingsSection(
                             .height(38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
-                                if (isSelected) color.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.06f)
+                                if (isSelected) color.copy(alpha = 0.35f) else com.yuka.musicplayer.ui.theme.m3SubtleFill(alpha = 0.08f)
                             )
                     ) {
                         Box(

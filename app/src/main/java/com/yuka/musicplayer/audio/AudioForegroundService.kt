@@ -119,40 +119,63 @@ class AudioForegroundService : Service() {
     }
 
     private var cachedCoverTrackPath: String? = null
-    private var cachedSafeCover: Bitmap? = null
+    private var cachedSafeCover1024: Bitmap? = null
+    private var cachedSafeCover512: Bitmap? = null
 
-    private fun getSafeCoverArt(rawBitmap: Bitmap?, trackPath: String?): Bitmap? {
+    private fun getSafeCoverArt(rawBitmap: Bitmap?, trackPath: String?, maxDimension: Int = 1024): Bitmap? {
         if (rawBitmap == null) {
             cachedCoverTrackPath = null
-            cachedSafeCover = null
+            cachedSafeCover1024 = null
+            cachedSafeCover512 = null
             return null
         }
-        if (cachedCoverTrackPath == trackPath && cachedSafeCover != null) {
-            return cachedSafeCover
+        if (cachedCoverTrackPath == trackPath) {
+            if (maxDimension >= 1024 && cachedSafeCover1024 != null) return cachedSafeCover1024
+            if (maxDimension <= 512 && cachedSafeCover512 != null) return cachedSafeCover512
         }
-        val scaled = if (rawBitmap.width > 256 || rawBitmap.height > 256) {
+
+        val width = rawBitmap.width
+        val height = rawBitmap.height
+        val scaled = if (width > maxDimension || height > maxDimension) {
             try {
-                Bitmap.createScaledBitmap(rawBitmap, 256, 256, true)
+                val ratio = width.toFloat() / height.toFloat()
+                val targetW: Int
+                val targetH: Int
+                if (ratio >= 1f) {
+                    targetW = maxDimension
+                    targetH = (maxDimension / ratio).toInt().coerceAtLeast(1)
+                } else {
+                    targetH = maxDimension
+                    targetW = (maxDimension * ratio).toInt().coerceAtLeast(1)
+                }
+                Bitmap.createScaledBitmap(rawBitmap, targetW, targetH, true)
             } catch (_: Exception) {
                 rawBitmap
             }
         } else {
             rawBitmap
         }
+
         cachedCoverTrackPath = trackPath
-        cachedSafeCover = scaled
+        if (maxDimension >= 1024) {
+            cachedSafeCover1024 = scaled
+        } else {
+            cachedSafeCover512 = scaled
+        }
         return scaled
     }
 
     private val mediaSessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
             cachedSeekPosSec = null
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession: onPlay received")
             if (!AudioPlayerManager.isPlaying) {
                 AudioPlayerManager.requestTogglePlay()
             }
         }
 
         override fun onPause() {
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession: onPause received")
             if (AudioPlayerManager.isPlaying) {
                 AudioPlayerManager.requestTogglePlay()
             }
@@ -160,22 +183,26 @@ class AudioForegroundService : Service() {
 
         override fun onSkipToNext() {
             cachedSeekPosSec = null
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession: onSkipToNext received")
             AudioPlayerManager.requestPlayNext()
         }
 
         override fun onSkipToPrevious() {
             cachedSeekPosSec = null
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession: onSkipToPrevious received")
             AudioPlayerManager.requestPlayPrev()
         }
 
         override fun onStop() {
             cachedSeekPosSec = null
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession: onStop received")
             handleStopRequest()
         }
 
         override fun onSeekTo(pos: Long) {
             val targetSec = (pos.coerceAtLeast(0L)) / 1000.0
             cachedSeekPosSec = targetSec
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession: onSeekTo pos=${targetSec}s")
             AudioPlayerManager.requestSeekTo(targetSec)
             syncPlaybackState(AudioPlayerManager.isPlaying, targetSec)
         }
@@ -183,6 +210,7 @@ class AudioForegroundService : Service() {
         override fun onCustomAction(action: String?, extras: Bundle?) {
             if (action == CUSTOM_ACTION_CLOSE || action == ACTION_STOP) {
                 cachedSeekPosSec = null
+                com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "MediaSession custom action: $action")
                 handleStopRequest()
             }
         }
@@ -195,6 +223,7 @@ class AudioForegroundService : Service() {
                 android.util.Log.d("AudioForegroundService", "AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: Ignoring to prevent gesture stutter.")
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                com.yuka.musicplayer.utils.AppLogger.w("AUDIO", "AudioFocus: AUDIOFOCUS_LOSS_TRANSIENT")
                 if (AudioPlayerManager.isPlaying) {
                     AudioPlayerManager.audioEngine.pauseAudio()
                     AudioPlayerManager.isPlaying = false
@@ -203,6 +232,7 @@ class AudioForegroundService : Service() {
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
+                com.yuka.musicplayer.utils.AppLogger.w("AUDIO", "AudioFocus: AUDIOFOCUS_LOSS")
                 if (AudioPlayerManager.isPlaying) {
                     AudioPlayerManager.audioEngine.pauseAudio()
                     AudioPlayerManager.isPlaying = false
@@ -211,6 +241,7 @@ class AudioForegroundService : Service() {
                 }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
+                com.yuka.musicplayer.utils.AppLogger.i("AUDIO", "AudioFocus: AUDIOFOCUS_GAIN (pausedByTransient=$pausedByTransientLoss)")
                 if (pausedByTransientLoss) {
                     pausedByTransientLoss = false
                     val resumed = AudioPlayerManager.audioEngine.resumeAudio()
@@ -317,7 +348,7 @@ class AudioForegroundService : Service() {
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
 
-        getSafeCoverArt(track?.coverArt, track?.file?.absolutePath)?.let { safeArt ->
+        getSafeCoverArt(track?.coverArt, track?.file?.absolutePath, maxDimension = 1024)?.let { safeArt ->
             metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, safeArt)
             metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, safeArt)
         }
@@ -424,7 +455,7 @@ class AudioForegroundService : Service() {
             .setMediaSession(mediaSession?.sessionToken)
             .setShowActionsInCompactView(0, 1, 2)
 
-        val scaledCover = getSafeCoverArt(track?.coverArt, track?.file?.absolutePath)
+        val scaledCover = getSafeCoverArt(track?.coverArt, track?.file?.absolutePath, maxDimension = 512)
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
@@ -511,6 +542,10 @@ class AudioForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val act = intent?.action
+        if (act != null) {
+            com.yuka.musicplayer.utils.AppLogger.i("PLAYBACK", "Service onStartCommand action: $act")
+        }
         when (intent?.action) {
             ACTION_PREV -> {
                 AudioPlayerManager.requestPlayPrev()

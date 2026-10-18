@@ -20,7 +20,14 @@ import com.yuka.musicplayer.model.PlaybackSource
 import com.yuka.musicplayer.model.ViewState
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
 import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.ModalCloseButton
 import com.yuka.musicplayer.ui.components.GlyphMusicNote
+import com.yuka.musicplayer.ui.components.GlyphPlay
+import com.yuka.musicplayer.ui.components.GlyphNext
+import com.yuka.musicplayer.ui.components.GlyphQueue
+import com.yuka.musicplayer.ui.components.GlyphPlaylists
+import com.yuka.musicplayer.ui.components.GlyphInfo
+import com.yuka.musicplayer.ui.components.GlyphDelete
 import com.yuka.musicplayer.ui.components.RetroActionItem
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
@@ -28,11 +35,13 @@ import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
+import com.yuka.musicplayer.util.TrackAlbumThumbnail
+import com.yuka.musicplayer.util.TrackTitleParser
 import java.io.File
 
 /**
  * Bottom Sheet menu for individual audio track actions:
- * Play Now, Play Next, Add to Queue, Add/Remove from Playlist.
+ * Play Now, Play Next, Add to Queue, Add/Remove from Playlist, Detail Lagu, Delete Lagu.
  */
 @Composable
 fun TrackOptionsBottomSheet(
@@ -43,49 +52,61 @@ fun TrackOptionsBottomSheet(
     onPlayTrack: (File, PlaybackSource) -> Unit,
     onPlayNextInQueue: (File) -> Unit,
     onAddToQueue: (File) -> Unit,
-    onOpenAddToPlaylist: (File) -> Unit
+    onOpenAddToPlaylist: (File) -> Unit,
+    onShowDetails: (File) -> Unit = {},
+    onDeleteTrack: (File) -> Unit = {}
 ) {
     val inPlaylist = if (target != null) playlistSet.contains(target.absolutePath) else false
 
     CyberBottomSheet(
         visible = target != null,
         onDismissRequest = onDismissRequest,
-        maxHeightFraction = 0.50f,
+        maxHeightFraction = 0.65f,
         maxWidth = 420.dp,
         wrapHeight = true
     ) {
         if (target != null) {
+            val displayName = target.nameWithoutExtension.ifEmpty { target.name }
+            val (parsedTitle, parsedArtist) = TrackTitleParser.parse(displayName)
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                // Header with squircle art & close button
+                // Header with real artwork thumbnail & close button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(m3SurfaceContainerHigh()),
-                        contentAlignment = Alignment.Center
+                    TrackAlbumThumbnail(
+                        filePath = target.absolutePath,
+                        isCurrentTrack = false,
+                        currentTrackArt = null,
+                        modifier = Modifier.size(46.dp),
+                        cornerRadius = 12.dp
                     ) {
-                        GlyphMusicNote(
-                            color = LocalAccentColor.current,
-                            modifier = Modifier.size(22.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(m3SurfaceContainerHigh()),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            GlyphMusicNote(
+                                color = LocalAccentColor.current,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = target.nameWithoutExtension.ifEmpty { target.name },
-                            color = TerminalWhite,
+                            text = parsedTitle,
+                            color = com.yuka.musicplayer.ui.theme.m3OnSurface(),
                             fontSize = 14.sp,
                             fontFamily = ModernSansFont,
                             fontWeight = FontWeight.SemiBold,
@@ -94,28 +115,21 @@ fun TrackOptionsBottomSheet(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = target.extension.uppercase().ifEmpty { "AUDIO" },
+                            text = if (parsedArtist.isNotEmpty()) "$parsedArtist • ${target.extension.uppercase()}" else target.extension.uppercase(),
                             color = LocalAccentColor.current,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontFamily = ModernSansFont,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.06.sp
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.04.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable { onDismissRequest() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        GlyphClose(color = TerminalGray, modifier = Modifier.size(18.dp))
                     }
                 }
 
+                val accent = LocalAccentColor.current
                 RetroActionItem(
-                    icon = "▶",
+                    iconContent = { GlyphPlay(color = accent, modifier = Modifier.size(16.dp)) },
                     label = "Play now",
                     onClick = {
                         val targetSource = if (viewState == ViewState.PLAYLIST) {
@@ -130,7 +144,7 @@ fun TrackOptionsBottomSheet(
                     }
                 )
                 RetroActionItem(
-                    icon = "⏩",
+                    iconContent = { GlyphNext(color = accent, modifier = Modifier.size(16.dp)) },
                     label = "Play next (Top of queue)",
                     onClick = {
                         onDismissRequest()
@@ -138,7 +152,7 @@ fun TrackOptionsBottomSheet(
                     }
                 )
                 RetroActionItem(
-                    icon = "☰",
+                    iconContent = { GlyphQueue(color = accent, modifier = Modifier.size(16.dp)) },
                     label = "Add to queue",
                     onClick = {
                         onDismissRequest()
@@ -146,11 +160,27 @@ fun TrackOptionsBottomSheet(
                     }
                 )
                 RetroActionItem(
-                    icon = "★",
+                    iconContent = { GlyphPlaylists(color = accent, modifier = Modifier.size(16.dp)) },
                     label = if (inPlaylist) "Manage in playlist" else "Add to playlist",
                     onClick = {
                         onDismissRequest()
                         onOpenAddToPlaylist(target)
+                    }
+                )
+                RetroActionItem(
+                    iconContent = { GlyphInfo(color = accent, modifier = Modifier.size(16.dp)) },
+                    label = "Track details",
+                    onClick = {
+                        onDismissRequest()
+                        onShowDetails(target)
+                    }
+                )
+                RetroActionItem(
+                    iconContent = { GlyphDelete(color = Color(0xFFFF5252), modifier = Modifier.size(16.dp)) },
+                    label = "Delete track",
+                    onClick = {
+                        onDismissRequest()
+                        onDeleteTrack(target)
                     }
                 )
             }

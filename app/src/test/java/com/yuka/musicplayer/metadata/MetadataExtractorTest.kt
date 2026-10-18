@@ -55,4 +55,17 @@ class MetadataExtractorTest {
         val trackStandard = extractMetadata(standardFlac)
         assertEquals(false, trackStandard.isMqa)
     }
+
+    @Test
+    fun testCorruptFileHandling() {
+        val tempCorruptFile = File.createTempFile("corrupt_test", ".flac")
+        try {
+            tempCorruptFile.writeBytes(byteArrayOf(0x66, 0x4C, 0x61, 0x43, -1, -1, -1, -1))
+            val track = extractMetadata(tempCorruptFile)
+            assertNotNull(track)
+            assertNotNull(track.dominantColor)
+        } finally {
+            tempCorruptFile.delete()
+        }
+    }
 }

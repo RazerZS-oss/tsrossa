@@ -267,48 +267,32 @@ std::vector<uint32_t> get_uac1_sample_rates(const struct libusb_interface_descri
   return rates;
 }
 
-int LIBUSB_CALL hotplug_callback(libusb_context *ctx,
-                                libusb_device *device,
-                                libusb_hotplug_event event,
-                                void *user_data) {
-  if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
-    if (g_audioState.usbHandle != nullptr) {
-      libusb_device* current_dev = libusb_get_device(g_audioState.usbHandle);
-      if (current_dev != device) {
-        LOGW("Ignored stale hotplug DEVICE_LEFT event for old device!");
-        return 0;
-      }
-    }
-    LOGE("USB Device Disconnected (Surprise Removal)!");
-    g_audioState.stopIsoThread.store(true);
-    std::thread([]() {
-      if (g_jvm && g_audioState.callbackObj) {
-        JNIEnv *env;
-        if (g_jvm->AttachCurrentThread(&env, NULL) == 0) {
-          jclass clazz = env->GetObjectClass(g_audioState.callbackObj);
-          jmethodID methodId =
-              env->GetMethodID(clazz, "onDeviceForceDisconnected", "()V");
-          if (methodId)
-            env->CallVoidMethod(g_audioState.callbackObj, methodId);
-          g_jvm->DetachCurrentThread();
-        }
-      }
-    }).detach();
-  }
-  return 0;
-}
-
 void close_usb_dac_internal() {
   if (g_audioState.usbHandle != nullptr) {
     stop_and_join_iso_thread("closeUsbDac");
     stop_and_join_decode_thread();
 
-    for (int iface : g_audioState.claimedInterfaces) {
-      int rr = libusb_release_interface(g_audioState.usbHandle, iface);
-      if (rr != 0)
-        LOGE("libusb_release_interface error: %s", libusb_error_name(rr));
+    // Safely stop control thread before releasing USB handle
+    g_audioState.stopControlThread.store(true);
+    g_controlCv.notify_all();
+    if (g_audioState.controlThread != nullptr &&
+        g_audioState.controlThread->joinable()) {
+      g_audioState.controlThread->join();
+      delete g_audioState.controlThread;
+      g_audioState.controlThread = nullptr;
     }
-    g_audioState.claimedInterfaces.clear();
+
+    {
+      std::lock_guard<std::mutex> lock(g_stateMutex);
+      for (int iface : g_audioState.claimedInterfaces) {
+        int rr = libusb_release_interface(g_audioState.usbHandle, iface);
+        if (rr != 0)
+          LOGE("libusb_release_interface error: %s", libusb_error_name(rr));
+      }
+      g_audioState.claimedInterfaces.clear();
+      g_audioState.supportedBitDepths.clear();
+      g_audioState.supportedSampleRates.clear();
+    }
     libusb_close(g_audioState.usbHandle);
     g_audioState.usbHandle = nullptr;
     g_audioState.usbFd = -1;
@@ -320,12 +304,18 @@ void close_usb_dac_internal() {
     g_audioState.currentAltSetting.store(0);
     g_audioState.hasValidatedRate.store(false);
     g_audioState.isPlaying.store(false);
+    g_audioState.isSwapping.store(false);
+    g_audioState.swappingZeroUrbCount.store(0);
+    g_audioState.isSwappingAck.store(false);
+    g_audioState.lastIsoPacketTimeNs.store(0);
     g_audioState.isWarmingUp.store(false);
     g_audioState.warmupSilenceFrames.store(0);
     g_audioState.currentFilePath = "";
     g_audioState.nextFilePath = "";
     g_audioState.hasNextTrack.store(false);
+    g_audioState.totalFrames.store(0);
     g_audioState.decodedFrames.store(0);
+    g_audioState.pendingSeekSeconds.store(-1.0);
     g_audioState.pcmIndex.store(0);
 
     if (!g_audioState.pcmBuffer.empty()) {
@@ -364,8 +354,13 @@ bool init_usb_dac_internal(int fd) {
   record_usb_diag(dbg);
 
   if (g_audioState.usbHandle != nullptr) {
-    record_usb_diag("initUsbDac: usbHandle != nullptr. Preserving existing connection.");
-    return true;
+    if (g_audioState.usbFd == fd) {
+      record_usb_diag("initUsbDac: usbHandle != nullptr with identical FD. Preserving existing connection.");
+      return true;
+    }
+    snprintf(dbg, sizeof(dbg), "initUsbDac: Replacing previous connection (old FD=%d -> new FD=%d)", g_audioState.usbFd, fd);
+    record_usb_diag(dbg);
+    close_usb_dac_internal();
   }
 
   // Clean up orphan transfers now that the USB device was physically detached and kernel state is wiped
@@ -417,7 +412,7 @@ bool init_usb_dac_internal(int fd) {
   int dev_speed = libusb_get_device_speed(dev);
   int dev_fps = (dev_speed == LIBUSB_SPEED_HIGH || dev_speed == LIBUSB_SPEED_SUPER) ? 8000 : 1000;
   g_audioState.usb_frames_per_sec.store(dev_fps);
-  snprintf(dbg, sizeof(dbg), "Device speed=%d -> usb_frames_per_sec=%d", dev_speed, dev_fps);
+  snprintf(dbg, sizeof(dbg), "Device speed=%d -> default usb_frames_per_sec=%d", dev_speed, dev_fps);
   record_usb_diag(dbg);
 
   struct libusb_config_descriptor *config = nullptr;
@@ -450,11 +445,40 @@ bool init_usb_dac_internal(int fd) {
   // Parse Audio Control Interface
   g_audioState.uacVersion = 1;
   g_audioState.featureUnitId = -1;
+  g_audioState.clockSourceId = -1;
+  g_audioState.clockSelectorId = -1;
+  g_audioState.clockSelectorPin = 1;
   g_audioState.sourceBitDepthNext.store(0);
   g_audioState.isHardwareVolumeActive.store(false);
   g_audioState.deviceWedged.store(false);
+  g_audioState.isSwapping.store(false);
+  g_audioState.swappingZeroUrbCount.store(0);
+  g_audioState.isSwappingAck.store(false);
+  g_audioState.lastIsoPacketTimeNs.store(0);
   g_audioState.sampleRateUnverified.store(false);
   g_audioState.volumeChannel = 0;
+
+  struct ClockSourceCandidate {
+    int id;
+    uint8_t bmControls;
+  };
+  struct ClockSelectorCandidate {
+    int id;
+    std::vector<int> pins;
+  };
+  struct FeatureUnitCandidate {
+    int id;
+    int sourceId;
+    int volumeChannel;
+  };
+
+  std::vector<ClockSourceCandidate> clockSources;
+  std::vector<ClockSelectorCandidate> clockSelectors;
+  std::vector<FeatureUnitCandidate> featureUnits;
+  int playbackInputTerminalId = -1;
+  int playbackInputClockId = -1;
+  int playbackOutputSourceId = -1;
+  int playbackOutputClockId = -1;
 
   for (int i = 0; i < config->bNumInterfaces; i++) {
     for (int j = 0; j < config->interface[i].num_altsetting; j++) {
@@ -468,48 +492,127 @@ bool init_usb_dac_internal(int fd) {
           int len = alt->extra[pos];
           if (len < 3 || pos + len > alt->extra_length)
             break;
+          int d_type = alt->extra[pos + 1];
           int subtype = alt->extra[pos + 2];
 
-          if (subtype == 0x01) { // HEADER
-            if (len >= 6) {
-              g_audioState.uacVersion.store(
-                  (alt->extra[pos + 3] == 0x00 && alt->extra[pos + 4] == 0x02)
-                      ? 2
-                      : 1);
-            }
-          } else if (subtype == 0x06) { // FEATURE_UNIT
-            g_audioState.featureUnitId.store(alt->extra[pos + 3]);
-            int bmaPos =
-                (g_audioState.uacVersion.load() == 1) ? pos + 6 : pos + 5;
-            if (bmaPos < pos + len) {
-              uint8_t masterControls = alt->extra[bmaPos];
-              bool hasMasterVol = false;
-              if (g_audioState.uacVersion.load() == 1 &&
-                  (masterControls & 0x02))
-                hasMasterVol = true;
-              if (g_audioState.uacVersion.load() == 2 &&
-                  (masterControls & 0x0C))
-                hasMasterVol = true;
+          if (d_type == 0x24) {
+            if (subtype == 0x01) { // HEADER
+              if (len >= 6) {
+                g_audioState.uacVersion.store(
+                    (alt->extra[pos + 3] == 0x00 && alt->extra[pos + 4] == 0x02)
+                        ? 2
+                        : 1);
+              }
+            } else if (subtype == 0x02) { // INPUT_TERMINAL
+              if (len >= 8) {
+                int termId = alt->extra[pos + 3];
+                uint16_t termType = alt->extra[pos + 4] | (alt->extra[pos + 5] << 8);
+                // 0x0101 = USB Streaming (Host -> DAC Playback Input Terminal)
+                if (termType == 0x0101 && playbackInputTerminalId == -1) {
+                  playbackInputTerminalId = termId;
+                  if (g_audioState.uacVersion.load() == 2 && len >= 9) {
+                    playbackInputClockId = alt->extra[pos + 7];
+                  }
+                }
+              }
+            } else if (subtype == 0x03) { // OUTPUT_TERMINAL
+              if (len >= 9) {
+                uint16_t termType = alt->extra[pos + 4] | (alt->extra[pos + 5] << 8);
+                int srcId = alt->extra[pos + 7];
+                // Exclude 0x0101 (USB Streaming IN = Microphone Capture Output Terminal)
+                if (termType != 0x0101 && playbackOutputSourceId == -1) {
+                  playbackOutputSourceId = srcId;
+                  if (g_audioState.uacVersion.load() == 2 && len >= 10) {
+                    playbackOutputClockId = alt->extra[pos + 8];
+                  }
+                }
+              }
+            } else if (subtype == 0x06) { // FEATURE_UNIT
+              int unitId = alt->extra[pos + 3];
+              int srcId = (len >= 5) ? alt->extra[pos + 4] : -1;
+              int bmaPos =
+                  (g_audioState.uacVersion.load() == 1) ? pos + 6 : pos + 5;
+              int volCh = 0;
+              if (bmaPos < pos + len) {
+                uint8_t masterControls = alt->extra[bmaPos];
+                bool hasMasterVol = false;
+                if (g_audioState.uacVersion.load() == 1 &&
+                    (masterControls & 0x02))
+                  hasMasterVol = true;
+                if (g_audioState.uacVersion.load() == 2 &&
+                    (masterControls & 0x0C))
+                  hasMasterVol = true;
 
-              g_audioState.volumeChannel.store(hasMasterVol ? 0 : 1);
+                volCh = hasMasterVol ? 0 : 1;
+              }
+              featureUnits.push_back({unitId, srcId, volCh});
+            } else if (subtype == 0x0A &&
+                       g_audioState.uacVersion.load() == 2) { // CLOCK_SOURCE
+              uint8_t clockId = alt->extra[pos + 3];
+              uint8_t bmControls =
+                  (pos + 6 <= pos + len) ? alt->extra[pos + 5] : 0;
+              clockSources.push_back({clockId, bmControls});
+            } else if (subtype == 0x0B &&
+                       g_audioState.uacVersion.load() == 2) { // CLOCK_SELECTOR
+              uint8_t clockSelId = alt->extra[pos + 3];
+              uint8_t numPins = (pos + 4 < pos + len) ? alt->extra[pos + 4] : 0;
+              std::vector<int> pins;
+              for (int p = 0; p < numPins; p++) {
+                if (pos + 5 + p < pos + len) {
+                  pins.push_back(alt->extra[pos + 5 + p]);
+                }
+              }
+              clockSelectors.push_back({clockSelId, pins});
+              LOGI("USBExclusive: Found CLOCK_SELECTOR ID=%d with %d input pins", clockSelId, numPins);
             }
-          } else if (subtype == 0x0A &&
-                     g_audioState.uacVersion.load() == 2) { // CLOCK_SOURCE
-            uint8_t clockId = alt->extra[pos + 3];
-            uint8_t bmControls =
-                (pos + 7 <= alt->extra_length) ? alt->extra[pos + 5] : 0;
-            g_audioState.clockSourceId.store(clockId);
-            g_audioState.clockSourceProgrammable.store((bmControls & 0x03) == 0x03);
-          } else if (subtype == 0x0B &&
-                     g_audioState.uacVersion.load() == 2) { // CLOCK_SELECTOR
-            uint8_t clockSelId = alt->extra[pos + 3];
-            uint8_t numPins = alt->extra[pos + 4];
-            LOGI("USBExclusive: Found CLOCK_SELECTOR ID=%d with %d input pins", clockSelId, numPins);
           }
           pos += len;
         }
       }
     }
+  }
+
+  // Resolve Playback Feature Unit (avoid selecting Microphone Capture Feature Unit on headset DACs)
+  if (!featureUnits.empty()) {
+    FeatureUnitCandidate chosenFu = featureUnits[0];
+    for (const auto &fu : featureUnits) {
+      if ((playbackOutputSourceId != -1 && fu.id == playbackOutputSourceId) ||
+          (playbackInputTerminalId != -1 && fu.sourceId == playbackInputTerminalId)) {
+        chosenFu = fu;
+        break;
+      }
+    }
+    g_audioState.featureUnitId.store(chosenFu.id);
+    g_audioState.volumeChannel.store(chosenFu.volumeChannel);
+  }
+
+  // Resolve Playback Clock Source (avoid selecting Microphone Capture Clock Source on headset DACs)
+  if (g_audioState.uacVersion.load() == 2 && !clockSources.empty()) {
+    int targetClockEntity = (playbackInputClockId != -1) ? playbackInputClockId : playbackOutputClockId;
+    for (const auto &csel : clockSelectors) {
+      if (csel.id == targetClockEntity || targetClockEntity == -1) {
+        g_audioState.clockSelectorId.store(csel.id);
+        g_audioState.clockSelectorPin.store(1);
+        if (csel.id == targetClockEntity && !csel.pins.empty()) {
+          targetClockEntity = csel.pins[0];
+        }
+        break;
+      }
+    }
+    ClockSourceCandidate chosenCs = clockSources[0];
+    for (const auto &cs : clockSources) {
+      if (cs.id == targetClockEntity) {
+        chosenCs = cs;
+        break;
+      }
+    }
+    g_audioState.clockSourceId.store(chosenCs.id);
+    g_audioState.clockSourceProgrammable.store((chosenCs.bmControls & 0x03) != 0);
+    snprintf(dbg, sizeof(dbg),
+             "UAC2 AudioControl resolved: clockSourceId=%d (total=%zu, inClk=%d, outClk=%d), featureUnitId=%d (total=%zu)",
+             chosenCs.id, clockSources.size(), playbackInputClockId, playbackOutputClockId,
+             g_audioState.featureUnitId.load(), featureUnits.size());
+    record_usb_diag(dbg);
   }
 
   // Start control thread
@@ -530,9 +633,12 @@ bool init_usb_dac_internal(int fd) {
   uint8_t ep_out = 0;
   int max_packet_size = 0;
 
-  g_audioState.validAlts.clear();
-  g_audioState.supportedBitDepths.clear();
-  g_audioState.supportedSampleRates.clear();
+  {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_audioState.validAlts.clear();
+    g_audioState.supportedBitDepths.clear();
+    g_audioState.supportedSampleRates.clear();
+  }
   g_audioState.sampleRateQuerySuccess = false;
   {
     std::lock_guard<std::mutex> lock(g_audioState.refusedHistoryMutex);
@@ -548,24 +654,34 @@ bool init_usb_dac_internal(int fd) {
           &config->interface[i].altsetting[j];
       if (alt->bInterfaceClass == 1 && alt->bInterfaceSubClass == 2) {
         int subframe_size = get_subframe_size(alt);
-        bitDepthSet.insert(subframe_size * 8);
-
-        if (g_audioState.uacVersion.load() == 1) {
-          auto rates = get_uac1_sample_rates(alt);
-          for (auto r : rates) sampleRateSet.insert(r);
-        }
 
         for (int k = 0; k < alt->bNumEndpoints; k++) {
           if ((alt->endpoint[k].bEndpointAddress & 0x80) == 0 &&
               (alt->endpoint[k].bmAttributes & 0x03) == 1) { // Isochronous OUT
+            bitDepthSet.insert(subframe_size * 8);
+
+            if (g_audioState.uacVersion.load() == 1) {
+              auto rates = get_uac1_sample_rates(alt);
+              for (auto r : rates) sampleRateSet.insert(r);
+            }
+
             int pk_size = libusb_get_max_iso_packet_size(
                 dev, alt->endpoint[k].bEndpointAddress);
             if (pk_size < 0)
               pk_size = alt->endpoint[k].wMaxPacketSize;
 
-            uint8_t ep_out = alt->endpoint[k].bEndpointAddress;
+            uint8_t ep_addr = alt->endpoint[k].bEndpointAddress;
             uint8_t ep_sync = alt->endpoint[k].bSynchAddress;
             bool is_async = ((alt->endpoint[k].bmAttributes & 0x0C) == 0x04);
+            uint8_t ep_bInterval = alt->endpoint[k].bInterval;
+
+            int alt_fps = 1000;
+            if (dev_speed == LIBUSB_SPEED_HIGH || dev_speed == LIBUSB_SPEED_SUPER) {
+              int shift = (ep_bInterval >= 1 && ep_bInterval <= 16) ? (ep_bInterval - 1) : 0;
+              int uframes_per_pkt = 1 << shift;
+              alt_fps = 8000 / uframes_per_pkt;
+              if (alt_fps < 125) alt_fps = 1000;
+            }
 
             // Find companion feedback endpoint if explicit or listed in same altsetting
             uint8_t ep_fb = 0;
@@ -584,14 +700,22 @@ bool init_usb_dac_internal(int fd) {
 
             g_audioState.validAlts.push_back(
                 {alt->bInterfaceNumber, alt->bAlternateSetting,
-                 ep_out, pk_size, subframe_size, ep_fb, is_async});
+                 ep_addr, pk_size, subframe_size, ep_fb, is_async, alt_fps});
+            snprintf(dbg, sizeof(dbg),
+                     "  Alt[iface=%d, alt=%d]: ep=0x%02X maxPkt=%d sf=%d (%d-bit) bInterval=%d fps=%d async=%d",
+                     alt->bInterfaceNumber, alt->bAlternateSetting, ep_addr, pk_size,
+                     subframe_size, subframe_size * 8, ep_bInterval, alt_fps, is_async ? 1 : 0);
+            record_usb_diag(dbg);
           }
         }
       }
     }
   }
 
-  g_audioState.supportedBitDepths.assign(bitDepthSet.begin(), bitDepthSet.end());
+  {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_audioState.supportedBitDepths.assign(bitDepthSet.begin(), bitDepthSet.end());
+  }
   snprintf(dbg, sizeof(dbg), "Valid streaming altsettings found: %zu", g_audioState.validAlts.size());
   record_usb_diag(dbg);
 
@@ -612,6 +736,9 @@ bool init_usb_dac_internal(int fd) {
     as_altsetting = best_alt.altsetting;
     ep_out = best_alt.ep_out;
     max_packet_size = best_alt.max_packet_size;
+    if (best_alt.packets_per_sec > 0) {
+      g_audioState.usb_frames_per_sec.store(best_alt.packets_per_sec);
+    }
   }
 
   if (as_interface == -1 || ep_out == 0) {
@@ -625,7 +752,10 @@ bool init_usb_dac_internal(int fd) {
   }
 
   libusb_set_auto_detach_kernel_driver(g_audioState.usbHandle, 1);
-  g_audioState.claimedInterfaces.clear();
+  {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_audioState.claimedInterfaces.clear();
+  }
 
   // Claim audio interfaces
   for (int i = 0; i < config->bNumInterfaces; i++) {
@@ -642,15 +772,16 @@ bool init_usb_dac_internal(int fd) {
           int ioctl_res = -999;
           int ioctl_errno = 0;
           if (claim_res == LIBUSB_ERROR_BUSY) {
-            struct usbdevfs_disconnect_claim dc;
-            memset(&dc, 0, sizeof(dc));
-            dc.interface = (unsigned int)iface_num;
-            dc.flags = 0;
-            ioctl_res = ioctl(fd, USBDEVFS_DISCONNECT_CLAIM, &dc);
-            if (ioctl_res != 0) ioctl_errno = errno;
-            if (ioctl_res == 0) {
-              claim_res = 0;
-            } else {
+            // If kernel driver held interface, release it first so libusb can claim it
+            ioctl(fd, USBDEVFS_RELEASEINTERFACE, &iface_num);
+            claim_res = libusb_claim_interface(g_audioState.usbHandle, iface_num);
+            if (claim_res == LIBUSB_ERROR_BUSY) {
+              struct usbdevfs_disconnect_claim dc;
+              memset(&dc, 0, sizeof(dc));
+              dc.interface = (unsigned int)iface_num;
+              dc.flags = 0;
+              ioctl_res = ioctl(fd, USBDEVFS_DISCONNECT_CLAIM, &dc);
+              if (ioctl_res != 0) ioctl_errno = errno;
               claim_res = libusb_claim_interface(g_audioState.usbHandle, iface_num);
             }
           }
@@ -672,39 +803,75 @@ bool init_usb_dac_internal(int fd) {
 
   // PHASE 3: Query Sample Rates
   if (g_audioState.uacVersion.load() == 2 && g_audioState.clockSourceId != -1) {
-    unsigned char range_buf[256] = {0};
-    int r = -1;
-    for (int retry = 0; retry < 3; retry++) {
-      r = libusb_control_transfer(g_audioState.usbHandle, 0xA1, 0x02,
-                                  (0x01 << 8), // SAM_FREQ_CONTROL
-                                  (g_audioState.clockSourceId << 8) |
-                                      g_audioState.acInterfaceNum,
-                                  range_buf, sizeof(range_buf), 1000);
-      if (r >= 2) break;
-      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    if (g_audioState.clockSelectorId.load() != -1) {
+      uint8_t pin = (uint8_t)g_audioState.clockSelectorPin.load();
+      libusb_control_transfer(g_audioState.usbHandle, 0x21, 0x01,
+                              (0x01 << 8),
+                              (g_audioState.clockSelectorId.load() << 8) |
+                                  g_audioState.acInterfaceNum.load(),
+                              &pin, 1, 500);
     }
-    if (r >= 2) {
-      int num_subranges = range_buf[0] | (range_buf[1] << 8);
-      for (int s = 0; s < num_subranges; s++) {
-        int offset = 2 + (s * 12);
-        if (offset + 11 < r) {
-          uint32_t sr_min = range_buf[offset] | (range_buf[offset+1] << 8) |
-                           (range_buf[offset+2] << 16) | (range_buf[offset+3] << 24);
-          uint32_t sr_max = range_buf[offset+4] | (range_buf[offset+5] << 8) |
-                           (range_buf[offset+6] << 16) | (range_buf[offset+7] << 24);
-          uint32_t sr_res = range_buf[offset+8] | (range_buf[offset+9] << 8) |
-                           (range_buf[offset+10] << 16) | (range_buf[offset+11] << 24);
-          if (sr_res == 0 || sr_min == sr_max) {
-            sampleRateSet.insert(sr_min);
-          } else {
-            for (uint32_t freq = sr_min; freq <= sr_max; freq += sr_res) {
-              sampleRateSet.insert(freq);
+
+    auto query_clock_rates = [&](int clkId, std::set<uint32_t> &outRates) -> bool {
+      unsigned char range_buf[256] = {0};
+      int r = -1;
+      for (int retry = 0; retry < 3; retry++) {
+        r = libusb_control_transfer(g_audioState.usbHandle, 0xA1, 0x02,
+                                    (0x01 << 8), // SAM_FREQ_CONTROL
+                                    (clkId << 8) | g_audioState.acInterfaceNum.load(),
+                                    range_buf, sizeof(range_buf), 1000);
+        if (r >= 2) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      if (r >= 2) {
+        int num_subranges = range_buf[0] | (range_buf[1] << 8);
+        for (int s = 0; s < num_subranges; s++) {
+          int offset = 2 + (s * 12);
+          if (offset + 11 < r) {
+            uint32_t sr_min = range_buf[offset] | (range_buf[offset+1] << 8) |
+                             (range_buf[offset+2] << 16) | (range_buf[offset+3] << 24);
+            uint32_t sr_max = range_buf[offset+4] | (range_buf[offset+5] << 8) |
+                             (range_buf[offset+6] << 16) | (range_buf[offset+7] << 24);
+            uint32_t sr_res = range_buf[offset+8] | (range_buf[offset+9] << 8) |
+                             (range_buf[offset+10] << 16) | (range_buf[offset+11] << 24);
+            if (sr_res == 0 || sr_min == sr_max) {
+              if (sr_min > 0) outRates.insert(sr_min);
+            } else if (sr_res <= 100) {
+              static const uint32_t standard_rates[] = {
+                  44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
+              };
+              for (uint32_t rate : standard_rates) {
+                if (rate >= sr_min && rate <= sr_max) {
+                  outRates.insert(rate);
+                }
+              }
+              if (sr_min > 0) outRates.insert(sr_min);
+              if (sr_max > 0) outRates.insert(sr_max);
+            } else {
+              for (uint32_t freq = sr_min; freq <= sr_max; freq += sr_res) {
+                if (freq > 0) outRates.insert(freq);
+              }
+              if (sr_max > 0) outRates.insert(sr_max);
             }
-            sampleRateSet.insert(sr_max);
           }
         }
+        return !outRates.empty();
       }
+      return false;
+    };
+
+    if (query_clock_rates(g_audioState.clockSourceId.load(), sampleRateSet)) {
       g_audioState.sampleRateQuerySuccess = true;
+    } else {
+      // Fallback: try other discovered clock sources if primary didn't respond
+      for (const auto &cs : clockSources) {
+        if (cs.id != g_audioState.clockSourceId.load() && query_clock_rates(cs.id, sampleRateSet)) {
+          g_audioState.clockSourceId.store(cs.id);
+          g_audioState.clockSourceProgrammable.store((cs.bmControls & 0x03) != 0);
+          g_audioState.sampleRateQuerySuccess = true;
+          break;
+        }
+      }
     }
   } else if (g_audioState.uacVersion.load() == 1) {
     if (!sampleRateSet.empty()) {
@@ -712,7 +879,10 @@ bool init_usb_dac_internal(int fd) {
     }
   }
 
-  g_audioState.supportedSampleRates.assign(sampleRateSet.begin(), sampleRateSet.end());
+  {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_audioState.supportedSampleRates.assign(sampleRateSet.begin(), sampleRateSet.end());
+  }
   libusb_free_config_descriptor(config);
 
   // Final retry on streaming interface if not claimed yet

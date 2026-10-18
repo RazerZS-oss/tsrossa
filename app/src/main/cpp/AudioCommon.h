@@ -17,6 +17,10 @@
 extern JavaVM *g_jvm;
 extern std::mutex g_apiMutex;
 
+// Safe RAM allocation budgets to prevent Android LMKD from killing the process
+constexpr uint64_t MAX_TRACK_BUFFER_BYTES = 160ULL * 1024 * 1024; // 160 MB limit (~36 min @ 96kHz / ~79 min @ 44.1kHz)
+constexpr uint64_t MAX_NEXT_TRACK_BUFFER_BYTES = 96ULL * 1024 * 1024; // 96 MB limit for gapless pre-buffer
+
 struct ApiMutexLock {
   const char *func;
   int tid;

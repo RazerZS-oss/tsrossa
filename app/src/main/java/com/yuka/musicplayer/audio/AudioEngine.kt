@@ -57,7 +57,6 @@ class AudioEngine {
     external fun getNegotiatedBitDepth(): Int
     external fun getUacVersion(): Int
     external fun getClaimedInterfaces(): String
-    external fun getSourceSampleRate(): Int
     external fun getSourceBitDepth(): Int
     external fun getRecentErrorCount(): Int
     
@@ -73,9 +72,8 @@ class AudioEngine {
     external fun getDacInfo(): String
     external fun getRefusedTrackHistory(): String
     external fun getLastUsbDiagnostic(): String
-    external fun getOutputBitDepth(): Int
-    external fun getOutputSampleRate(): Int
     external fun triggerWarmup(durationMs: Int): Boolean
+    external fun cancelWarmup(): Boolean
     external fun isWarmingUp(): Boolean
     external fun getTimingTelemetry(): String
     external fun isBitPerfectIntegerPassActive(): Boolean
@@ -121,10 +119,4 @@ class AudioEngine {
      * This bypasses Android's AudioFlinger.
      */
     external fun initUsbDac(fd: Int): Boolean
-    
-    fun connectToDac(connection: UsbDeviceConnection): Boolean {
-        val fd = connection.fileDescriptor
-        if (fd < 0) return false
-        return initUsbDac(fd)
-    }
 }

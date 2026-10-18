@@ -68,10 +68,10 @@ fun rememberDacTelemetry(
             while (isDacConnected) {
                 negotiatedSampleRate = audioEngine.getSampleRate()
                 negotiatedBitDepth = audioEngine.getNegotiatedBitDepth()
-                sourceSampleRate = audioEngine.getSourceSampleRate()
+                sourceSampleRate = audioEngine.getSampleRate()
                 sourceBitDepth = audioEngine.getSourceBitDepth()
-                outputBitDepth = audioEngine.getOutputBitDepth()
-                outputSampleRate = audioEngine.getOutputSampleRate()
+                outputBitDepth = audioEngine.getNegotiatedBitDepth()
+                outputSampleRate = audioEngine.getSampleRate()
                 recentErrorCount = audioEngine.getRecentErrorCount()
                 isSampleRateUnverified = audioEngine.isSampleRateUnverified()
                 isDeviceWedged = audioEngine.isDeviceWedged()

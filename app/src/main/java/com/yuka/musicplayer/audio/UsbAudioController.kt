@@ -15,7 +15,11 @@ class UsbAudioController(context: Context) {
 
     private val appContext = context.applicationContext
     private val usbManager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val usbLock = Any()
     private var usbDeviceConnection: android.hardware.usb.UsbDeviceConnection? = null
+    private var openedDeviceName: String? = null
+    private var pendingPermissionDeviceName: String? = null
+    private var pendingPermissionTimestampMs: Long = 0L
 
     // Callback when a valid USB Audio device is ready (permission granted and opened)
     var onDeviceReady: ((Int) -> Unit)? = null
@@ -26,7 +30,10 @@ class UsbAudioController(context: Context) {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 ACTION_USB_PERMISSION -> {
-                    synchronized(this) {
+                    synchronized(usbLock) {
+                        pendingPermissionDeviceName = null
+                        pendingPermissionTimestampMs = 0L
+
                         val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
                         } else {
@@ -44,6 +51,10 @@ class UsbAudioController(context: Context) {
 
                         if (granted) {
                             if (targetDevice != null) {
+                                if (usbDeviceConnection != null && openedDeviceName == targetDevice.deviceName && usbManager.hasPermission(targetDevice)) {
+                                    log("Permission broadcast received, but ${targetDevice.productName} is already open (FD=${usbDeviceConnection!!.fileDescriptor}). Keeping active connection.")
+                                    return
+                                }
                                 log("Permission granted! Opening device ${targetDevice.productName}...")
                                 openDevice(targetDevice)
                             } else {
@@ -90,53 +101,70 @@ class UsbAudioController(context: Context) {
         log("UsbAudioController initialized and receivers registered.")
     }
 
-    fun isConnected(): Boolean = usbDeviceConnection != null
+    fun isConnected(): Boolean = synchronized(usbLock) { usbDeviceConnection != null }
 
     fun scanAndRequestPermission() {
-        val deviceList = usbManager.deviceList
-        log("scanAndRequestPermission: Found ${deviceList.size} USB devices.")
-        for ((name, dev) in deviceList) {
-            val isAudio = isAudioDevice(dev)
-            val vidHex = Integer.toHexString(dev.vendorId).uppercase()
-            val pidHex = Integer.toHexString(dev.productId).uppercase()
-            log("  Device: '$name' (${dev.productName}) VID=0x$vidHex PID=0x$pidHex isAudio=$isAudio")
-        }
-
-        val audioDevice = deviceList.values.find { isAudioDevice(it) }
-
-        if (audioDevice != null) {
-            val hasPerm = usbManager.hasPermission(audioDevice)
-            log("Audio Device Selected: ${audioDevice.productName} (${audioDevice.deviceName}), hasPermission=$hasPerm")
-            
-            // If connection exists and permission is still valid, keep existing connection active
-            if (usbDeviceConnection != null && hasPerm) {
-                log("USB Device already opened (FD=${usbDeviceConnection!!.fileDescriptor}). Keeping connection active.")
-                return
+        synchronized(usbLock) {
+            val deviceList = usbManager.deviceList
+            log("scanAndRequestPermission: Found ${deviceList.size} USB devices.")
+            for ((name, dev) in deviceList) {
+                val isAudio = isAudioDevice(dev)
+                val vidHex = Integer.toHexString(dev.vendorId).uppercase()
+                val pidHex = Integer.toHexString(dev.productId).uppercase()
+                log("  Device: '$name' (${dev.productName}) VID=0x$vidHex PID=0x$pidHex isAudio=$isAudio")
             }
 
-            // Close stale or wedged connection before requesting / opening
-            closeDevice()
+            val audioDevice = deviceList.values.find { isAudioDevice(it) }
 
-            if (hasPerm) {
-                log("Permission is already granted. Proceeding to openDevice...")
-                openDevice(audioDevice)
-            } else {
-                log("Requesting USB permission popup for ${audioDevice.productName}...")
-                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
+            if (audioDevice != null) {
+                val hasPerm = usbManager.hasPermission(audioDevice)
+                log("Audio Device Selected: ${audioDevice.productName} (${audioDevice.deviceName}), hasPermission=$hasPerm")
+
+                // If connection exists for this device and permission is still valid, keep existing connection active
+                if (usbDeviceConnection != null && hasPerm && openedDeviceName == audioDevice.deviceName) {
+                    log("USB Device already opened (FD=${usbDeviceConnection!!.fileDescriptor}). Keeping connection active.")
+                    return
                 }
-                val intent = Intent(ACTION_USB_PERMISSION)
-                intent.setPackage(appContext.packageName)
-                val permissionIntent = PendingIntent.getBroadcast(
-                    appContext, 0, intent, flags
-                )
-                usbManager.requestPermission(audioDevice, permissionIntent)
+
+                if (hasPerm) {
+                    pendingPermissionDeviceName = null
+                    pendingPermissionTimestampMs = 0L
+                    // Close stale or wedged connection before opening
+                    if (usbDeviceConnection != null) {
+                        closeDevice()
+                    }
+                    log("Permission is already granted. Proceeding to openDevice...")
+                    openDevice(audioDevice)
+                } else {
+                    val now = System.currentTimeMillis()
+                    if (pendingPermissionDeviceName == audioDevice.deviceName && (now - pendingPermissionTimestampMs) < 8000L) {
+                        log("Permission request already pending for ${audioDevice.productName}. Skipping duplicate popup request.")
+                        return
+                    }
+                    if (usbDeviceConnection != null) {
+                        closeDevice()
+                    }
+                    pendingPermissionDeviceName = audioDevice.deviceName
+                    pendingPermissionTimestampMs = now
+                    log("Requesting USB permission popup for ${audioDevice.productName}...")
+                    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    } else {
+                        PendingIntent.FLAG_UPDATE_CURRENT
+                    }
+                    val intent = Intent(ACTION_USB_PERMISSION)
+                    intent.setPackage(appContext.packageName)
+                    val permissionIntent = PendingIntent.getBroadcast(
+                        appContext, 0, intent, flags
+                    )
+                    usbManager.requestPermission(audioDevice, permissionIntent)
+                }
+            } else {
+                pendingPermissionDeviceName = null
+                pendingPermissionTimestampMs = 0L
+                log("scanAndRequestPermission: No USB Audio Class device found among ${deviceList.size} devices.")
+                closeDevice()
             }
-        } else {
-            log("scanAndRequestPermission: No USB Audio Class device found among ${deviceList.size} devices.")
-            closeDevice()
         }
     }
 
@@ -150,47 +178,66 @@ class UsbAudioController(context: Context) {
     }
 
     private fun openDevice(device: UsbDevice) {
-        log("openDevice called for: ${device.productName} (interfaces: ${device.interfaceCount})")
-        try {
-            usbDeviceConnection = usbManager.openDevice(device)
-            if (usbDeviceConnection != null) {
-                val fd = usbDeviceConnection!!.fileDescriptor
-                log("usbManager.openDevice SUCCESS: FD=$fd")
-                for (i in 0 until device.interfaceCount) {
-                    val iface = device.getInterface(i)
-                    val cls = iface.interfaceClass
-                    val sub = iface.interfaceSubclass
-                    if (cls == UsbConstants.USB_CLASS_AUDIO) {
-                        try {
-                            val claimed = usbDeviceConnection!!.claimInterface(iface, true)
-                            log("  Iface ${iface.id} (cls=$cls sub=$sub) Java claimInterface(force=true): $claimed")
-                        } catch (e: Exception) {
-                            log("  Iface ${iface.id} (cls=$cls sub=$sub) Java claimInterface threw: ${e.message}")
-                        }
-                    } else {
-                        log("  Iface ${iface.id} (cls=$cls sub=$sub) non-audio interface skipped")
-                    }
-                }
-                log("Invoking onDeviceReady with FD $fd...")
-                onDeviceReady?.invoke(fd)
-            } else {
-                log("FATAL: usbManager.openDevice returned NULL for ${device.productName}!")
+        synchronized(usbLock) {
+            if (usbDeviceConnection != null && openedDeviceName == device.deviceName) {
+                log("openDevice: ${device.productName} is already opened (FD=${usbDeviceConnection!!.fileDescriptor}). Skipping duplicate open.")
+                return
             }
-        } catch (e: Exception) {
-            log("FATAL: Exception while opening USB device: ${e.message}")
-            closeDevice()
+            if (usbDeviceConnection != null) {
+                log("openDevice: Closing previous connection before opening ${device.productName}...")
+                closeDevice()
+            }
+            log("openDevice called for: ${device.productName} (interfaces: ${device.interfaceCount})")
+            try {
+                val conn = usbManager.openDevice(device)
+                if (conn != null) {
+                    usbDeviceConnection = conn
+                    openedDeviceName = device.deviceName
+                    val fd = conn.fileDescriptor
+                    log("usbManager.openDevice SUCCESS: FD=$fd")
+                    val claimedInterfaceIds = mutableSetOf<Int>()
+                    for (i in 0 until device.interfaceCount) {
+                        val iface = device.getInterface(i)
+                        if (!claimedInterfaceIds.add(iface.id)) {
+                            continue
+                        }
+                        val cls = iface.interfaceClass
+                        val sub = iface.interfaceSubclass
+                        if (cls == UsbConstants.USB_CLASS_AUDIO) {
+                            try {
+                                val claimed = conn.claimInterface(iface, true)
+                                log("  Iface ${iface.id} (cls=$cls sub=$sub) Java claimInterface(force=true): $claimed")
+                            } catch (e: Exception) {
+                                log("  Iface ${iface.id} (cls=$cls sub=$sub) Java claimInterface threw: ${e.message}")
+                            }
+                        } else {
+                            log("  Iface ${iface.id} (cls=$cls sub=$sub) non-audio interface skipped")
+                        }
+                    }
+                    log("Invoking onDeviceReady with FD $fd...")
+                    onDeviceReady?.invoke(fd)
+                } else {
+                    log("FATAL: usbManager.openDevice returned NULL for ${device.productName}!")
+                }
+            } catch (e: Exception) {
+                log("FATAL: Exception while opening USB device: ${e.message}")
+                closeDevice()
+            }
         }
     }
 
 
     fun closeDevice() {
-        log("closeDevice() called. Current connection: $usbDeviceConnection")
-        try {
-            usbDeviceConnection?.close()
-        } catch (e: Exception) {
-            log("Error closing usbDeviceConnection: ${e.message}")
+        synchronized(usbLock) {
+            log("closeDevice() called. Current connection: $usbDeviceConnection")
+            try {
+                usbDeviceConnection?.close()
+            } catch (e: Exception) {
+                log("Error closing usbDeviceConnection: ${e.message}")
+            }
+            usbDeviceConnection = null
+            openedDeviceName = null
         }
-        usbDeviceConnection = null
     }
 
     fun release() {
@@ -213,6 +260,13 @@ class UsbAudioController(context: Context) {
             synchronized(traceLogs) {
                 if (traceLogs.size > 50) traceLogs.removeAt(0)
                 traceLogs.add(entry)
+            }
+            if (msg.contains("ERROR", ignoreCase = true) || msg.contains("FAIL", ignoreCase = true)) {
+                com.yuka.musicplayer.utils.AppLogger.e("USB", msg)
+            } else if (msg.contains("WARN", ignoreCase = true)) {
+                com.yuka.musicplayer.utils.AppLogger.w("USB", msg)
+            } else {
+                com.yuka.musicplayer.utils.AppLogger.i("USB", msg)
             }
         }
 

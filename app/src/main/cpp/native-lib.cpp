@@ -126,10 +126,6 @@ Java_com_yuka_musicplayer_audio_AudioEngine_getClaimedInterfaces(JNIEnv *env, jo
   return env->NewStringUTF(interfaces.c_str());
 }
 
-extern "C" JNIEXPORT jint JNICALL
-Java_com_yuka_musicplayer_audio_AudioEngine_getSourceSampleRate(JNIEnv *env, jobject thiz) {
-  return g_audioState.sampleRate.load();
-}
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_getSourceBitDepth(JNIEnv *env, jobject thiz) {
@@ -192,6 +188,7 @@ Java_com_yuka_musicplayer_audio_AudioEngine_isSampleRateUnverified(JNIEnv *env, 
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_isHardwareVolumeLockedBySystem(JNIEnv *env, jobject thiz) {
+  std::lock_guard<std::mutex> lock(g_stateMutex);
   bool acInterfaceClaimed = std::find(g_audioState.claimedInterfaces.begin(),
                                       g_audioState.claimedInterfaces.end(),
                                       g_audioState.acInterfaceNum.load()) !=
@@ -206,6 +203,7 @@ Java_com_yuka_musicplayer_audio_AudioEngine_isForceSoftwareVolume(JNIEnv *env, j
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_getSupportedBitDepths(JNIEnv *env, jobject thiz) {
+  std::lock_guard<std::mutex> lock(g_stateMutex);
   std::string result;
   for (size_t i = 0; i < g_audioState.supportedBitDepths.size(); i++) {
     if (i > 0) result += " / ";
@@ -216,6 +214,7 @@ Java_com_yuka_musicplayer_audio_AudioEngine_getSupportedBitDepths(JNIEnv *env, j
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_getSupportedSampleRates(JNIEnv *env, jobject thiz) {
+  std::lock_guard<std::mutex> lock(g_stateMutex);
   std::string result;
   for (size_t i = 0; i < g_audioState.supportedSampleRates.size(); i++) {
     if (i > 0) result += ",";
@@ -262,16 +261,6 @@ Java_com_yuka_musicplayer_audio_AudioEngine_getDacInfo(JNIEnv *env, jobject thiz
   return env->NewStringUTF(json.c_str());
 }
 
-extern "C" JNIEXPORT jint JNICALL
-Java_com_yuka_musicplayer_audio_AudioEngine_getOutputBitDepth(JNIEnv *env, jobject thiz) {
-  return g_audioState.subframeSize.load() * 8;
-}
-
-extern "C" JNIEXPORT jint JNICALL
-Java_com_yuka_musicplayer_audio_AudioEngine_getOutputSampleRate(JNIEnv *env, jobject thiz) {
-  return g_audioState.sampleRate.load();
-}
-
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_getLastUsbDiagnostic(JNIEnv *env, jobject thiz) {
   std::lock_guard<std::mutex> lock(g_usbDiagMutex);
@@ -282,6 +271,12 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_yuka_musicplayer_audio_AudioEngine_triggerWarmup(JNIEnv *env, jobject thiz, jint durationMs) {
   ApiMutexLock lock(__func__);
   return trigger_warmup_internal(durationMs) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_yuka_musicplayer_audio_AudioEngine_cancelWarmup(JNIEnv *env, jobject thiz) {
+  ApiMutexLock lock(__func__);
+  return cancel_warmup_internal() ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

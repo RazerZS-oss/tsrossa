@@ -2,6 +2,7 @@ package com.yuka.musicplayer.ui.dialogs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -18,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3OnSurface
+import com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
 import com.yuka.musicplayer.ui.theme.ModernSansFont
 import com.yuka.musicplayer.ui.theme.TerminalFont
@@ -36,18 +39,19 @@ fun RenamePlaylistDialog(
     CyberBottomSheet(
         visible = visible,
         onDismissRequest = onDismissRequest,
-        maxHeightFraction = 0.40f,
+        maxHeightFraction = 0.85f,
         maxWidth = 420.dp,
         wrapHeight = true
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Text(
                 text = "Rename Playlist",
-                color = TerminalWhite,
+                color = m3OnSurface(),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = ModernSansFont
@@ -55,7 +59,7 @@ fun RenamePlaylistDialog(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Enter a new name for this playlist.",
-                color = Color.White.copy(alpha = 0.65f),
+                color = m3OnSurfaceVariant(),
                 fontSize = 12.sp,
                 fontFamily = ModernSansFont
             )
@@ -76,7 +80,7 @@ fun RenamePlaylistDialog(
                     onValueChange = { newName = it },
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = TextStyle(
-                        color = TerminalWhite,
+                        color = m3OnSurface(),
                         fontFamily = ModernSansFont,
                         fontSize = 14.sp
                     ),
@@ -103,7 +107,7 @@ fun RenamePlaylistDialog(
                 ) {
                     Text(
                         text = "Cancel",
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = m3OnSurface().copy(alpha = 0.8f),
                         fontSize = 13.sp,
                         fontFamily = ModernSansFont,
                         fontWeight = FontWeight.Medium

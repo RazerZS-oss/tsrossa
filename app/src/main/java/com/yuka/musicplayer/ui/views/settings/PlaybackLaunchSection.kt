@@ -47,7 +47,7 @@ fun PlaybackLaunchSection(
         Spacer(modifier = Modifier.height(14.dp))
         Text(
             text = "Default screen on launch",
-            color = Color.White.copy(alpha = 0.70f),
+            color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
             fontFamily = ModernSansFont,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold
@@ -57,11 +57,12 @@ fun PlaybackLaunchSection(
         val screens = listOf(
             "LIBRARY" to "Library",
             "PLAYLIST" to "Playlist",
-            "TRACK" to "Now Playing"
+            "SETTINGS" to "Settings"
         )
+        val currentScreen = if (defaultScreen == "TRACK") "LIBRARY" else defaultScreen
         SettingsSegmentedControl(
             items = screens,
-            selectedItem = defaultScreen,
+            selectedItem = currentScreen,
             onItemSelected = { screen ->
                 onDefaultScreenChange(screen)
                 prefs.edit().putString("default_screen", screen).apply()
@@ -71,7 +72,7 @@ fun PlaybackLaunchSection(
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "USB BUFFER DEPTH (JITTER PROFILE)",
-            color = Color.White.copy(alpha = 0.65f),
+            color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
             fontFamily = ModernSansFont,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold
@@ -118,7 +119,7 @@ fun PlaybackLaunchSection(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Samsung One UI forces Dolby Atmos DSP on USB. For pure bit-perfect imaging & wide soundstage, turn Dolby Atmos and Equalizer OFF.",
-                        color = Color.White.copy(alpha = 0.70f),
+                        color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
                         fontFamily = ModernSansFont,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
@@ -149,7 +150,7 @@ fun PlaybackLaunchSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.04f))
+                .background(com.yuka.musicplayer.ui.theme.m3SubtleFill(alpha = 0.06f))
                 .padding(12.dp)
         ) {
             Column {
@@ -167,7 +168,7 @@ fun PlaybackLaunchSection(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Phone USB-C ports deliver max ~500mA. Planar or high-impedance headphones can cause dynamic compression on intense bass transients. For best authority, consider a power injection OTG cable.",
-                    color = Color.White.copy(alpha = 0.60f),
+                    color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
                     fontFamily = ModernSansFont,
                     fontSize = 11.sp,
                     lineHeight = 15.sp

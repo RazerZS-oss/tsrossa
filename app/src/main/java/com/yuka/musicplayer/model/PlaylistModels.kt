@@ -6,5 +6,6 @@ data class Playlist(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val trackPaths: List<String> = emptyList(),
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val isPinned: Boolean = false
 )

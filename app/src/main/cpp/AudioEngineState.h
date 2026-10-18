@@ -21,6 +21,7 @@ struct AltSettingInfo {
   int subframe_size;
   uint8_t ep_feedback = 0;
   bool is_async = false;
+  int packets_per_sec = 0;
 };
 
 struct RefusedTrackInfo {
@@ -32,15 +33,13 @@ struct RefusedTrackInfo {
 
 enum ControlRequestType {
   REQ_SET_VOLUME = 1,
-  REQ_SET_SAMPLE_RATE = 2,
-  REQ_SET_INTERFACE = 3,
   REQ_EVENT_TRACK_FINISHED = 10,
   REQ_EVENT_TRACK_TRANSITION = 11,
   REQ_EVENT_USB_STALL_FAULT = 12
 };
 
 struct ControlRequest {
-  int type; // 1 = SET_CUR Volume, 2 = SET_CUR Sample Rate, 3 = SET_INTERFACE, 10 = onTrackFinished, 11 = onTrackTransition
+  int type; // 1 = SET_CUR Volume, 10 = onTrackFinished, 11 = onTrackTransition
   float volume = 0.0f;
   int sampleRate = 0;
   int interfaceNum = 0;
@@ -79,8 +78,6 @@ struct AudioEngineState {
   // Hardware DAC Warmup & Pre-Roll
   std::atomic<bool> isWarmingUp{false};
   std::atomic<uint32_t> warmupSilenceFrames{0};
-  std::atomic<uint32_t> microFadeFrames{0};
-  std::atomic<uint32_t> microFadeTotal{0};
   
   std::string currentFilePath;
   std::string nextFilePath;
@@ -93,7 +90,7 @@ struct AudioEngineState {
   std::atomic<bool> isFinished{false};
   std::atomic<bool> isSwapping{false};
   std::atomic<bool> isSwappingAck{false};
-  double phase_accumulator = 0.0;
+  std::atomic<int> swappingZeroUrbCount{0};
   uint32_t iso_fixed_rem = 0; // Jitterless Fixed-Point Bresenham remainder accumulator
   std::atomic<float> targetVolume{1.0f};
   float rawLinearVolume = 1.0f;
@@ -101,9 +98,10 @@ struct AudioEngineState {
   std::atomic<uint32_t> prepareNextGen{0};
   
   float currentVolume = 1.0f; // Only accessed by isoThread
-  libusb_hotplug_callback_handle hotplugHandle = 0;
 
+  std::atomic<size_t> totalFrames{0};
   std::atomic<size_t> decodedFrames{0};
+  std::atomic<double> pendingSeekSeconds{-1.0};
   std::atomic<bool> isDecoding{false};
   std::atomic<bool> cancelDecoding{false};
   std::thread *decodeThread = nullptr;
@@ -137,6 +135,8 @@ struct AudioEngineState {
   std::atomic<int> uacVersion{0}; // 1 or 2
   std::atomic<int> featureUnitId{-1};
   std::atomic<int> clockSourceId{-1};
+  std::atomic<int> clockSelectorId{-1};
+  std::atomic<int> clockSelectorPin{1};
   std::atomic<bool> clockSourceProgrammable{true};
   std::atomic<int> minVolumeDb{0}; // in 1/256 dB
   std::atomic<int> maxVolumeDb{0};

@@ -59,7 +59,7 @@ fun <T> SettingsSegmentedControl(
             ) {
                 Text(
                     text = label,
-                    color = if (isSelected) accent else Color.White.copy(alpha = 0.65f),
+                    color = if (isSelected) accent else com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
                     fontFamily = ModernSansFont,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                     fontSize = 11.5.sp,
@@ -122,7 +122,7 @@ fun SettingsToggleRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.04f))
+            .background(com.yuka.musicplayer.ui.theme.m3SubtleFill(alpha = 0.06f))
             .clickable { onCheckedChange(!isChecked) }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -131,7 +131,7 @@ fun SettingsToggleRow(
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(
                 text = title,
-                color = TerminalWhite,
+                color = com.yuka.musicplayer.ui.theme.m3OnSurface(),
                 fontFamily = ModernSansFont,
                 fontSize = 13.5.sp,
                 fontWeight = FontWeight.Medium
@@ -139,7 +139,7 @@ fun SettingsToggleRow(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                color = Color.White.copy(alpha = 0.55f),
+                color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
                 fontFamily = ModernSansFont,
                 fontSize = 11.5.sp
             )
@@ -149,11 +149,82 @@ fun SettingsToggleRow(
             checked = isChecked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFF0E0D13),
+                checkedThumbColor = if (com.yuka.musicplayer.util.ColorContrastHelper.calculateLuminance(accent) > 0.45f) Color(0xFF0E0D13) else Color.White,
                 checkedTrackColor = accent,
-                uncheckedThumbColor = Color.White.copy(alpha = 0.65f),
-                uncheckedTrackColor = Color.White.copy(alpha = 0.12f)
+                uncheckedThumbColor = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
+                uncheckedTrackColor = com.yuka.musicplayer.ui.theme.m3SubtleFill(alpha = 0.12f)
             )
         )
     }
 }
+
+enum class SettingsSubPage(val title: String) {
+    ROOT("Settings"),
+    APPEARANCE("Appearance"),
+    PLAYBACK_AUDIO("Playback & Audio"),
+    SETUP("Setup & Permissions"),
+    UPDATES("Updates"),
+    ABOUT("About")
+}
+
+@Composable
+fun SettingsMenuCard(
+    title: String,
+    subtitle: String,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = LocalAccentColor.current
+    val containerBg = com.yuka.musicplayer.ui.theme.m3SurfaceContainerLow()
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(containerBg)
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(accent.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = com.yuka.musicplayer.ui.theme.m3OnSurface(),
+                fontSize = 15.sp,
+                fontFamily = ModernSansFont,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
+                fontSize = 12.sp,
+                fontFamily = ModernSansFont,
+                lineHeight = 16.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = "›",
+            color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Light
+        )
+    }
+}
+

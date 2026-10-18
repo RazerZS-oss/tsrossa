@@ -2,13 +2,12 @@ package com.yuka.musicplayer.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -17,16 +16,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -40,8 +45,7 @@ import com.yuka.musicplayer.ui.theme.LocalAccentColor
 import com.yuka.musicplayer.ui.theme.TerminalFont
 import com.yuka.musicplayer.ui.theme.TerminalGray
 import com.yuka.musicplayer.ui.theme.TerminalWhite
-
-import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 
 /**
  * Tactile touch wrapper providing a bouncy spring scale feedback when pressed on RenderThread.
@@ -51,22 +55,61 @@ fun TactileBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    pressedScale: Float = 0.92f,
+    pressedScale: Float = 0.80f,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnLongClick by rememberUpdatedState(onLongClick)
+    val scope = rememberCoroutineScope()
+    val accent = LocalAccentColor.current
+    val haptic = LocalHapticFeedback.current
     var isPressed by remember { mutableStateOf(false) }
+    var releaseJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    // Effective scale: make every press clearly visible (at most 0.84f even if caller passed 0.90f)
+    val effectivePressedScale = pressedScale.coerceAtMost(0.84f)
+
     val animatedScale by animateFloatAsState(
-        targetValue = if (isPressed) pressedScale else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = 600f),
+        targetValue = if (isPressed) effectivePressedScale else 1f,
+        animationSpec = spring(
+            dampingRatio = if (isPressed) 0.65f else 0.42f,
+            stiffness = if (isPressed) 900f else 520f
+        ),
         label = "tactileScale"
+    )
+    val animatedPressAlpha by animateFloatAsState(
+        targetValue = if (isPressed) 0.32f else 0f,
+        animationSpec = tween(durationMillis = if (isPressed) 60 else 240),
+        label = "tactileHalo"
+    )
+    val animatedRingScale by animateFloatAsState(
+        targetValue = if (isPressed) 1.05f else 0.65f,
+        animationSpec = spring(dampingRatio = 0.60f, stiffness = 550f),
+        label = "tactileRing"
     )
 
     Box(
-        modifier = modifier
+        modifier = Modifier
             .graphicsLayer {
                 scaleX = animatedScale
                 scaleY = animatedScale
+            }
+            .then(modifier)
+            .drawWithContent {
+                drawContent()
+                if (animatedPressAlpha > 0.01f) {
+                    val radius = (size.minDimension * 0.5f) * animatedRingScale
+                    drawCircle(
+                        color = accent.copy(alpha = animatedPressAlpha * 0.75f),
+                        radius = radius
+                    )
+                    drawCircle(
+                        color = accent.copy(alpha = animatedPressAlpha),
+                        radius = radius,
+                        style = Stroke(width = 1.8.dp.toPx())
+                    )
+                }
             }
             .semantics(mergeDescendants = true) {
                 role = Role.Button
@@ -77,20 +120,39 @@ fun TactileBox(
                     } else false
                 }
             }
-            .pointerInput(enabled) {
+            .pointerInput(enabled, currentOnLongClick != null) {
                 if (!enabled) return@pointerInput
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    isPressed = true
-                    val up = try {
-                        waitForUpOrCancellation()
-                    } finally {
-                        isPressed = false
+                detectTapGestures(
+                    onPress = {
+                        releaseJob?.cancel()
+                        isPressed = true
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        val downTime = System.currentTimeMillis()
+                        try {
+                            tryAwaitRelease()
+                        } finally {
+                            val elapsed = System.currentTimeMillis() - downTime
+                            val remaining = (150L - elapsed).coerceAtLeast(0L)
+                            releaseJob = scope.launch {
+                                if (remaining > 0L) kotlinx.coroutines.delay(remaining)
+                                isPressed = false
+                            }
+                        }
+                    },
+                    onLongPress = if (currentOnLongClick != null) {
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            currentOnLongClick?.invoke()
+                        }
+                    } else null,
+                    onTap = {
+                        scope.launch {
+                            // Brief 45ms visual beat so the user clearly sees the squish/glow before any modal opens
+                            kotlinx.coroutines.delay(45L)
+                            currentOnClick()
+                        }
                     }
-                    if (up != null) {
-                        currentOnClick()
-                    }
-                }
+                )
             },
         contentAlignment = Alignment.Center,
         content = content
@@ -1146,6 +1208,191 @@ fun GlyphDoNotDisturb(
             color = color,
             start = Offset(w * 0.20f, h * 0.20f),
             end = Offset(w * 0.80f, h * 0.80f),
+            strokeWidth = stroke * 1.1f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun GlyphInfo(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Info" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Outer circle
+        drawCircle(
+            color = color,
+            radius = w * 0.40f,
+            center = Offset(w * 0.5f, h * 0.5f),
+            style = Stroke(width = stroke)
+        )
+
+        // Upper dot
+        drawCircle(
+            color = color,
+            radius = stroke * 0.75f,
+            center = Offset(w * 0.5f, h * 0.35f)
+        )
+
+        // Vertical line
+        drawLine(
+            color = color,
+            start = Offset(w * 0.5f, h * 0.48f),
+            end = Offset(w * 0.5f, h * 0.68f),
+            strokeWidth = stroke * 1.1f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun GlyphLyrics(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Lyrics" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Outer rounded rect note card
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.16f, h * 0.14f),
+            size = androidx.compose.ui.geometry.Size(w * 0.68f, h * 0.72f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+
+        // 3 horizontal lyric lines
+        drawLine(
+            color = color,
+            start = Offset(w * 0.30f, h * 0.35f),
+            end = Offset(w * 0.70f, h * 0.35f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.30f, h * 0.50f),
+            end = Offset(w * 0.62f, h * 0.50f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.30f, h * 0.65f),
+            end = Offset(w * 0.52f, h * 0.65f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun GlyphArrowBack(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Back" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+        val centerY = h / 2f
+
+        // Horizontal stem: exactly centered
+        drawLine(
+            color = color,
+            start = Offset(w * 0.22f, centerY),
+            end = Offset(w * 0.78f, centerY),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        // Left arrow head: upper wing
+        drawLine(
+            color = color,
+            start = Offset(w * 0.46f, centerY - h * 0.24f),
+            end = Offset(w * 0.22f, centerY),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        // Left arrow head: lower wing
+        drawLine(
+            color = color,
+            start = Offset(w * 0.46f, centerY + h * 0.24f),
+            end = Offset(w * 0.22f, centerY),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun GlyphFilter(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Filter" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.8.dp.toPx()
+
+        // Funnel path
+        val path = Path().apply {
+            moveTo(w * 0.16f, h * 0.22f)
+            lineTo(w * 0.84f, h * 0.22f)
+            lineTo(w * 0.58f, h * 0.52f)
+            lineTo(w * 0.58f, h * 0.80f)
+            lineTo(w * 0.42f, h * 0.72f)
+            lineTo(w * 0.42f, h * 0.52f)
+            close()
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+    }
+}
+
+@Composable
+fun GlyphPin(
+    color: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier.semantics { contentDescription = "Pin" }) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.6.dp.toPx()
+
+        val pinPath = Path().apply {
+            moveTo(w * 0.65f, h * 0.15f)
+            lineTo(w * 0.85f, h * 0.35f)
+            lineTo(w * 0.72f, h * 0.48f)
+            lineTo(w * 0.62f, h * 0.38f)
+            lineTo(w * 0.42f, h * 0.58f)
+            lineTo(w * 0.48f, h * 0.68f)
+            lineTo(w * 0.38f, h * 0.72f)
+            lineTo(w * 0.28f, h * 0.62f)
+            lineTo(w * 0.32f, h * 0.52f)
+            lineTo(w * 0.42f, h * 0.58f)
+            lineTo(w * 0.62f, h * 0.38f)
+            close()
+        }
+        drawPath(
+            path = pinPath,
+            color = color,
+            style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.33f, h * 0.67f),
+            end = Offset(w * 0.15f, h * 0.85f),
             strokeWidth = stroke * 1.1f,
             cap = StrokeCap.Round
         )

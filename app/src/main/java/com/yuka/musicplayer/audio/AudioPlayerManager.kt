@@ -77,7 +77,18 @@ object AudioPlayerManager {
     }
 
     fun requestTogglePlay() {
-        onTogglePlay?.invoke()
+        if (onTogglePlay != null) {
+            onTogglePlay?.invoke()
+        } else if (isInitialized) {
+            if (isPlaying) {
+                audioEngine.pauseAudio()
+                isPlaying = false
+            } else {
+                val resumed = audioEngine.resumeAudio()
+                isPlaying = resumed
+            }
+            notifyStateChanged()
+        }
     }
 
     fun requestSeekTo(seconds: Double) {

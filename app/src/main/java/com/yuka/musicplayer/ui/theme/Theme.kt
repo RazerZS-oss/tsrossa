@@ -1,21 +1,37 @@
 package com.yuka.musicplayer.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.ui.text.font.Font
 import com.yuka.musicplayer.R
 
 val LocalAccentColor = compositionLocalOf { Color(0xFF00FF00) }
 val LocalBgMode = compositionLocalOf { "SIGNATURE" }
+val LocalIsDarkTheme = compositionLocalOf { true }
 val TerminalFont = FontFamily(Font(R.font.fantasquesans_regular))
 val ModernSansFont = FontFamily.SansSerif
 
@@ -45,6 +61,14 @@ val M3SurfaceContainer = Color(0xFF1B1822)
 val M3SurfaceContainerHigh = Color(0xFF24212D)
 val M3SurfaceContainerHighest = Color(0xFF2F2B3B)
 
+// Base M3 Light Surface Scale
+val M3LightSurface = Color(0xFFF8F8FC)
+val M3LightSurfaceContainerLowest = Color(0xFFFFFFFF)
+val M3LightSurfaceContainerLow = Color(0xFFF1F1F6)
+val M3LightSurfaceContainer = Color(0xFFE9E9F0)
+val M3LightSurfaceContainerHigh = Color(0xFFE1E1E9)
+val M3LightSurfaceContainerHighest = Color(0xFFD8D8E2)
+
 // Preserved aliases for backwards compatibility with existing views
 val SignatureDeepNavy = Color(0xFF0E0D13)
 val SignatureSurfaceNavy = Color(0xFF1B1822)
@@ -67,20 +91,35 @@ val AudiophileCyan = Color(0xFF00E5FF)
 
 /**
  * Tonal container color resolver:
- * Calculates a smooth Material 3 tonal elevation by blending [LocalAccentColor]
- * into the active base surface at a specified tone ratio (typically 8% - 18%).
+ * Calculates a smooth Material 3 tonal elevation with Glassmorphism (0.85f alpha default)
+ * by blending [LocalAccentColor] into the active base surface at a specified tone ratio (8% - 18%).
  */
 fun resolveM3TonalSurface(
     baseSurface: Color,
     accent: Color,
-    tintRatio: Float = 0.10f
+    tintRatio: Float = 0.10f,
+    alpha: Float = 0.85f
 ): Color {
     return Color(
         red = (baseSurface.red * (1f - tintRatio) + accent.red * tintRatio).coerceIn(0f, 1f),
         green = (baseSurface.green * (1f - tintRatio) + accent.green * tintRatio).coerceIn(0f, 1f),
         blue = (baseSurface.blue * (1f - tintRatio) + accent.blue * tintRatio).coerceIn(0f, 1f),
-        alpha = 1.0f
+        alpha = alpha
     )
+}
+
+/**
+ * Glassmorphic button color resolver for tactile UI buttons with 0.85f alpha
+ * and subtle accent color tint.
+ */
+fun resolveButtonGlassColor(
+    accent: Color,
+    isDark: Boolean,
+    isSelected: Boolean = false
+): Color {
+    val base = if (isDark) Color(0xFF1C1C22) else Color(0xFFE8E8EE)
+    val tintRatio = if (isSelected) 0.32f else 0.10f
+    return resolveM3TonalSurface(base, accent, tintRatio = tintRatio, alpha = 0.85f)
 }
 
 /**
@@ -111,55 +150,133 @@ fun getM3ContainerColor(
         2 -> 0.14f
         else -> 0.18f
     }
-    return resolveM3TonalSurface(base, accent, tint)
+    return resolveM3TonalSurface(base, accent, tint, alpha = 0.85f)
 }
 
-// Central dynamic M3 surface resolvers reading active LocalBgMode & LocalAccentColor
+data class AnimatedM3Palette(
+    val surfaceBase: Color,
+    val surfaceContainerLow: Color,
+    val surfaceContainer: Color,
+    val surfaceContainerHigh: Color,
+    val onSurface: Color,
+    val onSurfaceVariant: Color
+)
+
+val LocalAnimatedM3Palette = compositionLocalOf<AnimatedM3Palette?> { null }
+
+fun computeRawM3SurfaceBase(bgMode: String, accent: Color, isDark: Boolean, style: String): Color {
+    val alpha = if (style == "SOLID") 1.0f else 0.65f
+    return if (isDark) {
+        if (bgMode == "BLACK") {
+            resolveM3TonalSurface(Color(0xFF070709), accent, 0.05f, alpha)
+        } else {
+            resolveM3TonalSurface(Color(0xFF0A0A0C), accent, 0.07f, alpha)
+        }
+    } else {
+        resolveM3TonalSurface(M3LightSurface, accent, 0.06f, alpha)
+    }
+}
+
+fun computeRawM3SurfaceContainerLow(bgMode: String, accent: Color, isDark: Boolean, style: String): Color {
+    val alpha = if (style == "SOLID") 1.0f else 0.68f
+    return if (isDark) {
+        if (bgMode == "BLACK") {
+            resolveM3TonalSurface(Color(0xFF08080A), accent, 0.06f, alpha)
+        } else {
+            resolveM3TonalSurface(Color(0xFF111114), accent, 0.10f, alpha)
+        }
+    } else {
+        resolveM3TonalSurface(M3LightSurfaceContainerLow, accent, 0.08f, alpha)
+    }
+}
+
+fun computeRawM3SurfaceContainer(bgMode: String, accent: Color, isDark: Boolean, style: String): Color {
+    val alpha = if (style == "SOLID") 1.0f else 0.72f
+    return if (isDark) {
+        if (bgMode == "BLACK") {
+            resolveM3TonalSurface(Color(0xFF0E0E11), accent, 0.09f, alpha)
+        } else {
+            resolveM3TonalSurface(Color(0xFF16161A), accent, 0.14f, alpha)
+        }
+    } else {
+        resolveM3TonalSurface(M3LightSurfaceContainer, accent, 0.11f, alpha)
+    }
+}
+
+fun computeRawM3SurfaceContainerHigh(bgMode: String, accent: Color, isDark: Boolean, style: String): Color {
+    val alpha = if (style == "SOLID") 1.0f else 0.76f
+    return if (isDark) {
+        if (bgMode == "BLACK") {
+            resolveM3TonalSurface(Color(0xFF141418), accent, 0.13f, alpha)
+        } else {
+            resolveM3TonalSurface(Color(0xFF1C1C21), accent, 0.18f, alpha)
+        }
+    } else {
+        resolveM3TonalSurface(M3LightSurfaceContainerHigh, accent, 0.14f, alpha)
+    }
+}
+
+// Central dynamic M3 surface resolvers reading smoothly animated root tokens
 @Composable
 @ReadOnlyComposable
 fun m3SurfaceBase(): Color {
-    val bgMode = LocalBgMode.current
-    val accent = LocalAccentColor.current
-    return if (bgMode == "BLACK") {
-        resolveM3TonalSurface(Color(0xFF070709), accent, 0.05f)
-    } else {
-        resolveM3TonalSurface(Color(0xFF0A0A0C), accent, 0.07f)
-    }
+    LocalAnimatedM3Palette.current?.let { return it.surfaceBase }
+    return computeRawM3SurfaceBase(LocalBgMode.current, LocalAccentColor.current, LocalIsDarkTheme.current, LocalSurfaceStyle.current)
 }
 
 @Composable
 @ReadOnlyComposable
 fun m3SurfaceContainerLow(): Color {
-    val bgMode = LocalBgMode.current
-    val accent = LocalAccentColor.current
-    return if (bgMode == "BLACK") {
-        resolveM3TonalSurface(Color(0xFF08080A), accent, 0.06f)
-    } else {
-        resolveM3TonalSurface(Color(0xFF111114), accent, 0.10f)
-    }
+    LocalAnimatedM3Palette.current?.let { return it.surfaceContainerLow }
+    return computeRawM3SurfaceContainerLow(LocalBgMode.current, LocalAccentColor.current, LocalIsDarkTheme.current, LocalSurfaceStyle.current)
 }
 
 @Composable
 @ReadOnlyComposable
 fun m3SurfaceContainer(): Color {
-    val bgMode = LocalBgMode.current
-    val accent = LocalAccentColor.current
-    return if (bgMode == "BLACK") {
-        resolveM3TonalSurface(Color(0xFF0E0E11), accent, 0.09f)
-    } else {
-        resolveM3TonalSurface(Color(0xFF16161A), accent, 0.14f)
-    }
+    LocalAnimatedM3Palette.current?.let { return it.surfaceContainer }
+    return computeRawM3SurfaceContainer(LocalBgMode.current, LocalAccentColor.current, LocalIsDarkTheme.current, LocalSurfaceStyle.current)
 }
 
 @Composable
 @ReadOnlyComposable
 fun m3SurfaceContainerHigh(): Color {
-    val bgMode = LocalBgMode.current
-    val accent = LocalAccentColor.current
-    return if (bgMode == "BLACK") {
-        resolveM3TonalSurface(Color(0xFF141418), accent, 0.13f)
+    LocalAnimatedM3Palette.current?.let { return it.surfaceContainerHigh }
+    return computeRawM3SurfaceContainerHigh(LocalBgMode.current, LocalAccentColor.current, LocalIsDarkTheme.current, LocalSurfaceStyle.current)
+}
+
+@Composable
+@ReadOnlyComposable
+fun m3OnSurface(): Color {
+    LocalAnimatedM3Palette.current?.let { return it.onSurface }
+    return if (LocalIsDarkTheme.current) Color(0xFFF5F5F5) else Color(0xFF141419)
+}
+
+@Composable
+@ReadOnlyComposable
+fun m3OnSurfaceVariant(): Color {
+    LocalAnimatedM3Palette.current?.let { return it.onSurfaceVariant }
+    return if (LocalIsDarkTheme.current) Color(0xFFCAC4D0) else Color(0xFF5A5A65)
+}
+
+@Composable
+@ReadOnlyComposable
+fun m3SubtleFill(alpha: Float = 0.08f): Color {
+    return if (LocalIsDarkTheme.current) {
+        Color.White.copy(alpha = alpha)
     } else {
-        resolveM3TonalSurface(Color(0xFF1C1C21), accent, 0.18f)
+        Color(0xFF14141F).copy(alpha = (alpha * 0.9f).coerceIn(0.04f, 0.25f))
+    }
+}
+
+@Composable
+@ReadOnlyComposable
+fun m3GlassBorder(): Color {
+    val accent = LocalAccentColor.current
+    return if (LocalIsDarkTheme.current) {
+        accent.copy(alpha = 0.15f)
+    } else {
+        accent.copy(alpha = 0.20f)
     }
 }
 
@@ -169,6 +286,22 @@ fun m3ActivePillContainer(): Color {
     val accent = LocalAccentColor.current
     return accent.copy(alpha = 0.28f)
 }
+
+fun Modifier.glassMorphic(
+    backgroundColor: Color,
+    borderColor: Color = Color.Unspecified,
+    shape: Shape = RoundedCornerShape(16.dp),
+    borderWidth: Dp = 0.dp
+): Modifier = this
+    .clip(shape)
+    .background(backgroundColor, shape)
+    .then(
+        if (borderColor != Color.Unspecified && borderWidth > 0.dp) {
+            Modifier.border(borderWidth, borderColor, shape)
+        } else {
+            Modifier
+        }
+    )
 
 private val DarkColorScheme = darkColorScheme(
     primary = TerminalGreen,
@@ -183,6 +316,21 @@ private val DarkColorScheme = darkColorScheme(
     onBackground = TerminalWhite,
     onSurface = TerminalWhite,
     onSurfaceVariant = Color(0xFFCAC4D0)
+)
+
+private val LightColorScheme = androidx.compose.material3.lightColorScheme(
+    primary = Color(0xFF008542),
+    secondary = Color(0xFF141419),
+    tertiary = Color(0xFF5A5A65),
+    background = Color(0xFFF7F7FA),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFE8E8EE),
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White,
+    onBackground = Color(0xFF141419),
+    onSurface = Color(0xFF141419),
+    onSurfaceVariant = Color(0xFF5A5A65)
 )
 
 val ModernTypography = androidx.compose.material3.Typography(
@@ -251,11 +399,68 @@ val ModernTypography = androidx.compose.material3.Typography(
 
 @Composable
 fun KewMobileTheme(
+    isDarkTheme: Boolean = LocalIsDarkTheme.current,
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = DarkColorScheme,
-        typography = ModernTypography,
-        content = content
+    val bgMode = LocalBgMode.current
+    val accent = LocalAccentColor.current
+    val style = LocalSurfaceStyle.current
+    val animSpec = androidx.compose.animation.core.tween<Color>(
+        durationMillis = 500,
+        easing = androidx.compose.animation.core.FastOutSlowInEasing
     )
+
+    val surfaceBase by androidx.compose.animation.animateColorAsState(
+        targetValue = computeRawM3SurfaceBase(bgMode, accent, isDarkTheme, style),
+        animationSpec = animSpec,
+        label = "m3SurfaceBaseAnim"
+    )
+    val surfaceContainerLow by androidx.compose.animation.animateColorAsState(
+        targetValue = computeRawM3SurfaceContainerLow(bgMode, accent, isDarkTheme, style),
+        animationSpec = animSpec,
+        label = "m3SurfaceLowAnim"
+    )
+    val surfaceContainer by androidx.compose.animation.animateColorAsState(
+        targetValue = computeRawM3SurfaceContainer(bgMode, accent, isDarkTheme, style),
+        animationSpec = animSpec,
+        label = "m3SurfaceContainerAnim"
+    )
+    val surfaceContainerHigh by androidx.compose.animation.animateColorAsState(
+        targetValue = computeRawM3SurfaceContainerHigh(bgMode, accent, isDarkTheme, style),
+        animationSpec = animSpec,
+        label = "m3SurfaceHighAnim"
+    )
+    val onSurface by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isDarkTheme) Color(0xFFF5F5F5) else Color(0xFF141419),
+        animationSpec = animSpec,
+        label = "m3OnSurfaceAnim"
+    )
+    val onSurfaceVariant by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isDarkTheme) Color(0xFFCAC4D0) else Color(0xFF5A5A65),
+        animationSpec = animSpec,
+        label = "m3OnSurfaceVariantAnim"
+    )
+
+    val animatedPalette = androidx.compose.runtime.remember(
+        surfaceBase, surfaceContainerLow, surfaceContainer, surfaceContainerHigh, onSurface, onSurfaceVariant
+    ) {
+        AnimatedM3Palette(
+            surfaceBase = surfaceBase,
+            surfaceContainerLow = surfaceContainerLow,
+            surfaceContainer = surfaceContainer,
+            surfaceContainerHigh = surfaceContainerHigh,
+            onSurface = onSurface,
+            onSurfaceVariant = onSurfaceVariant
+        )
+    }
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAnimatedM3Palette provides animatedPalette
+    ) {
+        MaterialTheme(
+            colorScheme = if (isDarkTheme) DarkColorScheme else LightColorScheme,
+            typography = ModernTypography,
+            content = content
+        )
+    }
 }

@@ -168,5 +168,30 @@ class QueueHelperTest {
 
         assertNull(result.nextFile)
     }
+
+    @Test
+    fun testResolveNextTrackDoesNotMatchDifferentFolderTrackWithSameName() {
+        val albumATrack1 = File("/music/AlbumA/01 - Intro.flac")
+        val albumBTrack1 = File("/music/AlbumB/01 - Intro.flac")
+        val albumBTrack2 = File("/music/AlbumB/02 - Song.flac")
+        val albumBTracks = listOf(albumBTrack1, albumBTrack2)
+        val currentTrackFromAlbumA = createTrackInfo(albumATrack1)
+
+        val result = QueueHelper.resolveNextTrack(
+            isAutoAdvance = false,
+            consumeQueue = false,
+            priorityQueue = emptyList(),
+            currentTrack = currentTrackFromAlbumA,
+            repeatMode = RepeatMode.OFF,
+            activeList = albumBTracks,
+            isShuffleEnabled = false,
+            shuffledList = emptyList(),
+            currentShuffleIndex = -1
+        )
+
+        // When current track from AlbumA is not in AlbumB, it should not match AlbumB's track 1 as current and jump to track 2
+        // Since currentIndex is -1, it plays the first track of AlbumB (not skipping to track 2)
+        assertEquals(albumBTrack1, result.nextFile)
+    }
 }
 

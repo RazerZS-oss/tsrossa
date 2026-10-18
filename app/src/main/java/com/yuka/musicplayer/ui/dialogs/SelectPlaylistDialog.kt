@@ -20,8 +20,11 @@ import com.yuka.musicplayer.model.Playlist
 import com.yuka.musicplayer.ui.components.CyberBottomSheet
 import com.yuka.musicplayer.ui.components.GlyphAdd
 import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.ModalCloseButton
 import com.yuka.musicplayer.ui.components.GlyphPlaylists
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
+import com.yuka.musicplayer.ui.theme.m3OnSurface
+import com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
 import com.yuka.musicplayer.ui.theme.ModernSansFont
@@ -33,12 +36,15 @@ import java.io.File
 @Composable
 fun SelectPlaylistDialog(
     visible: Boolean,
-    targetTrack: File?,
+    targetTrack: File? = null,
+    targetTracks: List<File> = emptyList(),
     playlists: List<Playlist>,
     onDismissRequest: () -> Unit,
     onSelectPlaylist: (Playlist) -> Unit,
     onCreateNewPlaylist: () -> Unit
 ) {
+    val effectiveTracks = if (targetTracks.isNotEmpty()) targetTracks else if (targetTrack != null) listOf(targetTrack) else emptyList()
+
     CyberBottomSheet(
         visible = visible,
         onDismissRequest = onDismissRequest,
@@ -58,15 +64,25 @@ fun SelectPlaylistDialog(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Add to playlist",
-                        color = TerminalWhite,
+                        color = m3OnSurface(),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = ModernSansFont
                     )
-                    if (targetTrack != null) {
+                    if (effectiveTracks.size > 1) {
                         Text(
-                            text = targetTrack.nameWithoutExtension.ifEmpty { targetTrack.name },
-                            color = Color.White.copy(alpha = 0.65f),
+                            text = "${effectiveTracks.size} tracks selected",
+                            color = LocalAccentColor.current,
+                            fontSize = 12.sp,
+                            fontFamily = ModernSansFont,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    } else if (effectiveTracks.size == 1) {
+                        val singleTrack = effectiveTracks.first()
+                        Text(
+                            text = singleTrack.nameWithoutExtension.ifEmpty { singleTrack.name },
+                            color = m3OnSurfaceVariant(),
                             fontSize = 12.sp,
                             fontFamily = ModernSansFont,
                             maxLines = 1,
@@ -75,15 +91,7 @@ fun SelectPlaylistDialog(
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { onDismissRequest() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    GlyphClose(color = TerminalGray, modifier = Modifier.size(18.dp))
-                }
+                ModalCloseButton(onClick = onDismissRequest)
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -132,7 +140,7 @@ fun SelectPlaylistDialog(
                 ) {
                     Text(
                         text = "No custom playlists yet",
-                        color = Color.White.copy(alpha = 0.45f),
+                        color = m3OnSurfaceVariant().copy(alpha = 0.65f),
                         fontSize = 13.sp,
                         fontFamily = ModernSansFont
                     )
@@ -178,7 +186,7 @@ fun SelectPlaylistDialog(
                                 Column {
                                     Text(
                                         text = playlist.name,
-                                        color = if (containsTrack) LocalAccentColor.current else TerminalWhite,
+                                        color = if (containsTrack) LocalAccentColor.current else m3OnSurface(),
                                         fontSize = 14.sp,
                                         fontFamily = ModernSansFont,
                                         fontWeight = FontWeight.SemiBold,
@@ -187,7 +195,7 @@ fun SelectPlaylistDialog(
                                     )
                                     Text(
                                         text = "${playlist.trackPaths.size} tracks",
-                                        color = Color.White.copy(alpha = 0.55f),
+                                        color = m3OnSurfaceVariant(),
                                         fontSize = 11.sp,
                                         fontFamily = ModernSansFont
                                     )

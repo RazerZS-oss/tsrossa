@@ -73,8 +73,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.material3:material3")
     
-    // Image loading and color extraction
-    implementation("io.coil-kt:coil-compose:2.5.0")
+    // Color extraction
     implementation("androidx.palette:palette-ktx:1.0.0")
     
     // Media Controls & MediaSession

@@ -1,98 +1,271 @@
 package com.yuka.musicplayer.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
-import com.yuka.musicplayer.ui.theme.M3SurfaceContainerLow
-import com.yuka.musicplayer.ui.theme.resolveM3TonalSurface
+import com.yuka.musicplayer.ui.theme.RegisterModalBlur
+import com.yuka.musicplayer.ui.theme.glassMorphic
+import com.yuka.musicplayer.ui.theme.m3SurfaceBase
+import kotlinx.coroutines.launch
 
 /**
- * Authentic Material 3 Modal Bottom Sheet Container:
- * - Rounded top corners (28.dp).
- * - Zero border stroke (clean borderless tonal elevation).
- * - M3 SurfaceContainerLow tonal surface.
- * - Standard M3 drag handle pill (32.dp x 4.dp).
+ * Empty no-op per UX specification: modals have clean edge-to-edge aesthetics without redundant '✕' close buttons.
+ */
+@Composable
+fun ModalCloseButton(
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    // Intentionally empty per notes.md specification
+}
+
+/**
+ * Authentic Material 3 + Glassmorphic Modal Bottom Sheet Container:
+ * - 100% Full-width edge-to-edge coverage (fillMaxWidth).
+ * - Borderless smooth glassmorphic surface (borderWidth = 0.dp).
+ * - Automatic global backdrop blur registration (RegisterModalBlur).
+ * - Lightweight graphicsLayer GPU animations (zero remeasure per frame, smooth on low-end phones).
+ * - Soft keyboard (IME) responsive via imePadding.
+ * - Nested scroll connection: pull-down when scrolled to top boundary drags the sheet down and dismisses.
  */
 @Composable
 fun CyberBottomSheet(
     visible: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    maxHeightFraction: Float = 0.88f,
-    maxWidth: Dp = 600.dp,
+    maxHeightFraction: Float = 1.0f,
+    maxWidth: Dp = Dp.Unspecified,
     wrapHeight: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    if (visible) {
-        val sheetSurface = com.yuka.musicplayer.ui.theme.m3SurfaceBase()
+    var isMounted by remember { mutableStateOf(visible) }
+    val progress = remember { Animatable(if (visible) 1f else 0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            isMounted = true
+            dragOffsetY = 0f
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+            )
+        } else {
+            progress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+            )
+            isMounted = false
+            dragOffsetY = 0f
+        }
+    }
+
+    if (isMounted) {
+        RegisterModalBlur(visible = true)
+
+        val sheetSurface = m3SurfaceBase()
+        val accent = LocalAccentColor.current
+        var isFullscreen by remember(wrapHeight) { mutableStateOf(!wrapHeight) }
+
+        val animatedDragOffset by animateFloatAsState(
+            targetValue = dragOffsetY,
+            animationSpec = spring(dampingRatio = 0.85f, stiffness = 500f),
+            label = "sheetDragOffset"
+        )
+
+        val triggerDismiss = {
+            coroutineScope.launch {
+                progress.animateTo(0f, tween(durationMillis = 160, easing = FastOutSlowInEasing))
+                onDismissRequest()
+            }
+        }
+
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val minDismissDragPx = with(density) { 135.dp.toPx() }
+        val minFlingDismissDragPx = with(density) { 90.dp.toPx() }
+        var contentScrolledInCurrentGesture by remember { mutableStateOf(false) }
+        var lastContentScrollTimeMs by remember { mutableLongStateOf(0L) }
+
+        // NestedScrollConnection: stops cleanly at top boundary ("mentok atas dulu") on rapid scrolls/flings
+        val nestedScrollConnection = remember(minDismissDragPx, minFlingDismissDragPx) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (source == NestedScrollSource.Drag && dragOffsetY > 0f && available.y < 0f) {
+                        val delta = available.y.coerceAtLeast(-dragOffsetY)
+                        dragOffsetY += delta
+                        return Offset(0f, delta)
+                    }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource
+                ): Offset {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (kotlin.math.abs(consumed.y) > 0.5f) {
+                        // Inner list was scrolling (via drag or fling) -> lock sheet at top boundary!
+                        contentScrolledInCurrentGesture = true
+                        lastContentScrollTimeMs = now
+                    }
+                    if (source == NestedScrollSource.Drag && available.y > 0f) {
+                        val cooledDownSinceTopHit = (now - lastContentScrollTimeMs) > 380L
+                        if (!contentScrolledInCurrentGesture && cooledDownSinceTopHit) {
+                            dragOffsetY = (dragOffsetY + available.y * 0.55f).coerceAtLeast(0f)
+                            return Offset(0f, available.y)
+                        } else {
+                            // Stop cleanly at the top boundary ("mentok atas dulu")
+                            dragOffsetY = 0f
+                            return Offset(0f, available.y)
+                        }
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPreFling(available: Velocity): Velocity {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val cooledDownSinceTopHit = (now - lastContentScrollTimeMs) > 380L
+                    if (!contentScrolledInCurrentGesture && cooledDownSinceTopHit &&
+                        (dragOffsetY > minDismissDragPx || (dragOffsetY > minFlingDismissDragPx && available.y > 2400f))
+                    ) {
+                        triggerDismiss()
+                        return available
+                    } else if (dragOffsetY > 0f) {
+                        dragOffsetY = 0f
+                        return available
+                    }
+                    return Velocity.Zero
+                }
+
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                    if (kotlin.math.abs(consumed.y) > 1f) {
+                        lastContentScrollTimeMs = android.os.SystemClock.uptimeMillis()
+                    }
+                    contentScrolledInCurrentGesture = false
+                    return Velocity.Zero
+                }
+            }
+        }
 
         Popup(
             alignment = Alignment.BottomCenter,
             onDismissRequest = onDismissRequest,
-            properties = PopupProperties(focusable = true)
+            properties = PopupProperties(focusable = true, clippingEnabled = false)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.65f))
+                    .background(Color.Black.copy(alpha = 0.40f * progress.value.coerceIn(0f, 1f)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { onDismissRequest() },
+                    ) { triggerDismiss() },
                 contentAlignment = Alignment.BottomCenter
             ) {
                 val boxMod = Modifier
-                    .widthIn(max = maxWidth)
                     .fillMaxWidth()
+                    .statusBarsPadding()
+                    .imePadding()
                     .then(
-                        if (wrapHeight) {
-                            Modifier.fillMaxHeight(maxHeightFraction).wrapContentHeight(Alignment.Bottom)
+                        if (wrapHeight && !isFullscreen) {
+                            Modifier.wrapContentHeight(Alignment.Bottom)
                         } else {
-                            Modifier.fillMaxHeight(maxHeightFraction)
+                            Modifier.fillMaxHeight(if (isFullscreen) 0.90f else maxHeightFraction.coerceAtMost(0.90f))
                         }
                     )
+                    .graphicsLayer {
+                        val slideOffset = (1f - progress.value) * (size.height.takeIf { it > 0 } ?: 1000f)
+                        translationY = (slideOffset + animatedDragOffset).coerceAtLeast(0f)
+                        alpha = progress.value.coerceIn(0f, 1f)
+                    }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {} // consume touch inside sheet
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(sheetSurface)
+                    .glassMorphic(
+                        backgroundColor = sheetSurface,
+                        borderColor = Color.Unspecified,
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                        borderWidth = 0.dp
+                    )
+                    .nestedScroll(nestedScrollConnection)
 
                 Box(modifier = boxMod) {
                     Column(
                         modifier = modifier
                             .fillMaxWidth()
-                            .then(if (wrapHeight) Modifier.wrapContentHeight() else Modifier.fillMaxHeight())
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .then(if (wrapHeight && !isFullscreen) Modifier.wrapContentHeight() else Modifier.fillMaxHeight())
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        // Material 3 Centered Drag Handle Pill
+                        // Interactive Drag Handle Pill with real-time finger tracking
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterHorizontally)
-                                .padding(bottom = 12.dp)
-                                .size(width = 32.dp, height = 4.dp)
-                                .background(Color.White.copy(alpha = 0.25f), RoundedCornerShape(50))
-                        )
+                                .fillMaxWidth()
+                                .height(32.dp)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragStart = { },
+                                        onDragEnd = {
+                                            if (dragOffsetY > 110f) {
+                                                triggerDismiss()
+                                            } else if (dragOffsetY < -40f && !isFullscreen) {
+                                                isFullscreen = true
+                                                dragOffsetY = 0f
+                                            } else {
+                                                dragOffsetY = 0f
+                                            }
+                                        },
+                                        onDragCancel = { dragOffsetY = 0f },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            change.consume()
+                                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                        }
+                                    )
+                                }
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    isFullscreen = !isFullscreen
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 38.dp, height = 4.5.dp)
+                                    .background(accent.copy(alpha = 0.45f), RoundedCornerShape(50))
+                            )
+                        }
 
                         content()
                     }
@@ -101,3 +274,4 @@ fun CyberBottomSheet(
         }
     }
 }
+

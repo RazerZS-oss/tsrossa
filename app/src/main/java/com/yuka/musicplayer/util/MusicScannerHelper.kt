@@ -38,12 +38,24 @@ object MusicScannerHelper {
                     val ext = file.extension.uppercase()
                     val supported = isSupportedAudioFile(file)
                     val breadcrumb = getRelativeBreadcrumb(file, rootDir)
+                    val tags = com.yuka.musicplayer.metadata.AudioTagReader.readTags(file)
                     results.add(
                         ScannedMusicItem(
                             file = file,
                             isSupported = supported,
                             formatLabel = ext,
-                            breadcrumb = breadcrumb
+                            breadcrumb = breadcrumb,
+                            title = tags.title,
+                            artist = tags.artist,
+                            album = tags.album,
+                            albumArtist = tags.albumArtist,
+                            genre = tags.genre,
+                            trackNumber = tags.trackNumber,
+                            durationMs = tags.durationMs,
+                            year = tags.year,
+                            composer = tags.composer,
+                            dateAdded = file.lastModified(),
+                            dateModified = file.lastModified()
                         )
                     )
                 }
@@ -60,7 +72,10 @@ object MusicScannerHelper {
         val rootPath = rootDir.absolutePath.trimEnd('/', '\\')
         val parentPath = parent.absolutePath.trimEnd('/', '\\')
 
-        if (parentPath == rootPath || !parentPath.startsWith(rootPath)) {
+        if (parentPath == rootPath) {
+            return ""
+        }
+        if (!parentPath.startsWith("$rootPath/") && !parentPath.startsWith("$rootPath\\")) {
             return ""
         }
 

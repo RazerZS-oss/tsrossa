@@ -95,5 +95,75 @@ class MusicScannerHelperTest {
         assertEquals(1, scanned.size)
         assertEquals("Level1 / Level2 / Level3", scanned[0].breadcrumb)
     }
+
+    @Test
+    fun testGetRelativeBreadcrumbRejectsSiblingFolderWithSamePrefix() {
+        val root = File("/storage/emulated/0/Music")
+        val siblingTrack = File("/storage/emulated/0/Music2/Rock/song.flac")
+        val breadcrumb = MusicScannerHelper.getRelativeBreadcrumb(siblingTrack, root)
+        assertEquals("", breadcrumb)
+    }
+
+    @Test
+    fun testScannerExtractsVorbisTagsIntoScannedMusicItem() {
+        val root = tempFolder.newFolder("TagScanTest")
+        val flacFile = File(root, "tagged.flac")
+
+        val bos = java.io.ByteArrayOutputStream()
+        bos.write("fLaC".toByteArray(Charsets.US_ASCII))
+        // Streaminfo (type 0, not last)
+        bos.write(0x00)
+        bos.write(0x00); bos.write(0x00); bos.write(34)
+        bos.write(ByteArray(34))
+
+        // Vorbis comment (type 4, is last = 0x84)
+        val vcBos = java.io.ByteArrayOutputStream()
+        val vendor = "TagTest".toByteArray(Charsets.UTF_8)
+        vcBos.write(vendor.size and 0xFF)
+        vcBos.write((vendor.size shr 8) and 0xFF)
+        vcBos.write((vendor.size shr 16) and 0xFF)
+        vcBos.write((vendor.size shr 24) and 0xFF)
+        vcBos.write(vendor)
+
+        val comments = listOf(
+            "TITLE=Stairway to Heaven",
+            "ARTIST=Led Zeppelin",
+            "ALBUM=Led Zeppelin IV",
+            "GENRE=Classic Rock",
+            "DATE=1971",
+            "TRACKNUMBER=4"
+        )
+        vcBos.write(comments.size and 0xFF)
+        vcBos.write((comments.size shr 8) and 0xFF)
+        vcBos.write((comments.size shr 16) and 0xFF)
+        vcBos.write((comments.size shr 24) and 0xFF)
+        for (c in comments) {
+            val bytes = c.toByteArray(Charsets.UTF_8)
+            vcBos.write(bytes.size and 0xFF)
+            vcBos.write((bytes.size shr 8) and 0xFF)
+            vcBos.write((bytes.size shr 16) and 0xFF)
+            vcBos.write((bytes.size shr 24) and 0xFF)
+            vcBos.write(bytes)
+        }
+
+        val vcData = vcBos.toByteArray()
+        bos.write(0x84)
+        bos.write((vcData.size shr 16) and 0xFF)
+        bos.write((vcData.size shr 8) and 0xFF)
+        bos.write(vcData.size and 0xFF)
+        bos.write(vcData)
+
+        flacFile.writeBytes(bos.toByteArray())
+
+        val scanned = MusicScannerHelper.scanMusicDirectory(root)
+        assertEquals(1, scanned.size)
+        val item = scanned[0]
+        assertEquals("Stairway to Heaven", item.title)
+        assertEquals("Led Zeppelin", item.artist)
+        assertEquals("Led Zeppelin IV", item.album)
+        assertEquals("Classic Rock", item.genre)
+        assertEquals(1971, item.year)
+        assertEquals(4, item.trackNumber)
+    }
 }
 

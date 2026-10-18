@@ -25,8 +25,19 @@ object OemBatteryHelper {
     fun openBatteryOptimizationSettings(context: Context) {
         val packageName = context.packageName
         val manufacturer = Build.MANUFACTURER.lowercase()
+        val isIgnored = isBatteryOptimizationIgnored(context)
+        com.yuka.musicplayer.utils.AppLogger.i("SYSTEM", "openBatteryOptimizationSettings: isIgnored=$isIgnored, manufacturer=$manufacturer")
 
         val vendorIntents = mutableListOf<Intent>()
+
+        // 1. If not yet ignored, direct system prompt is the most effective on all Android 6+
+        if (!isIgnored && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            vendorIntents.add(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            )
+        }
 
         when {
             manufacturer.contains("xiaomi") || manufacturer.contains("redmi") -> {
@@ -40,7 +51,7 @@ object OemBatteryHelper {
                     Intent().setClassName(
                         "com.miui.powerkeeper",
                         "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"
-                    ).putExtra("package_name", packageName).putExtra("package_label", "Music Player")
+                    ).putExtra("package_name", packageName).putExtra("package_label", "tsrossa")
                 )
             }
             manufacturer.contains("oppo") || manufacturer.contains("realme") -> {
@@ -84,11 +95,6 @@ object OemBatteryHelper {
         // Standard Android Battery Optimization Intent
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             vendorIntents.add(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-            )
-            vendorIntents.add(
                 Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
             )
         }
@@ -103,11 +109,24 @@ object OemBatteryHelper {
         for (intent in vendorIntents) {
             try {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return
+                if (intent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(intent)
+                    com.yuka.musicplayer.utils.AppLogger.i("SYSTEM", "Launched battery settings intent: ${intent.action ?: intent.component}")
+                    return
+                }
             } catch (ignored: Exception) {
                 // Try next fallback intent
             }
+        }
+
+        try {
+            val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(fallback)
+        } catch (e: Exception) {
+            com.yuka.musicplayer.utils.AppLogger.e("SYSTEM", "Failed to launch battery settings", e)
         }
     }
 }

@@ -11,6 +11,50 @@ enum class PlaybackSource { LIBRARY, PLAYLIST }
 
 enum class RepeatMode { OFF, ALL, ONE }
 
+enum class SortField(val displayName: String) {
+    TITLE("Title"),
+    ALBUM("Album"),
+    ARTIST("Artist"),
+    ALBUM_ARTIST("Album Artist"),
+    GENRE("Genre"),
+    TRACK_NUMBER("Track Number"),
+    DURATION("Duration"),
+    YEAR("Year"),
+    COMPOSER("Composer"),
+    DATE_ADDED("Date Added"),
+    DATE_MODIFIED("Date Modified")
+}
+
+enum class SortOrder(val displayName: String) {
+    ASCENDING("Ascending"),
+    DESCENDING("Descending")
+}
+
+fun sortScannedItemsByField(
+    items: List<com.yuka.musicplayer.model.ScannedMusicItem>,
+    field: SortField,
+    order: SortOrder = SortOrder.ASCENDING
+): List<com.yuka.musicplayer.model.ScannedMusicItem> {
+    val comparator = when (field) {
+        SortField.TITLE -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.title.lowercase() }
+        SortField.ALBUM -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.album.lowercase() }
+        SortField.ARTIST -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.artist.lowercase() }
+        SortField.ALBUM_ARTIST -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.albumArtist.lowercase() }
+        SortField.GENRE -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.genre.lowercase() }
+        SortField.TRACK_NUMBER -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.trackNumber }
+        SortField.DURATION -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.durationMs }
+        SortField.YEAR -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.year }
+        SortField.COMPOSER -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.composer.lowercase() }
+        SortField.DATE_ADDED -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.dateAdded }
+        SortField.DATE_MODIFIED -> compareBy<com.yuka.musicplayer.model.ScannedMusicItem> { it.dateModified }
+    }
+    return if (order == SortOrder.ASCENDING) {
+        items.sortedWith(comparator)
+    } else {
+        items.sortedWith(comparator.reversed())
+    }
+}
+
 enum class LibrarySortMode(val label: String, val shortLabel: String) {
     DATE_DESC("DATE (NEWEST)", "DATE ↓"),
     DATE_ASC("DATE (OLDEST)", "DATE ↑"),
@@ -65,7 +109,11 @@ data class TrackInfo(
     val durationSeconds: Double,
     val coverArt: Bitmap?,
     val dominantColor: Color,
-    val isMqa: Boolean = false
+    val isMqa: Boolean = false,
+    val albumArtist: String = "",
+    val genre: String = "",
+    val trackNumber: String = "",
+    val composer: String = ""
 ) {
     val codec: String
         get() = when (file.extension.lowercase()) {

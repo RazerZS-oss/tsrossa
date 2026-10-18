@@ -33,7 +33,7 @@ fun TypographyHapticsSection(
     SettingsCard(title = "Typography & Haptics") {
         Text(
             text = "Global font scale",
-            color = Color.White.copy(alpha = 0.70f),
+            color = com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant(),
             fontFamily = ModernSansFont,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold
@@ -65,12 +65,12 @@ fun TypographyHapticsSection(
                     .weight(1f)
                     .height(40.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.06f)),
+                    .background(com.yuka.musicplayer.ui.theme.m3SubtleFill(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "${String.format("%.1f", fontScale)}x Scale",
-                    color = TerminalWhite,
+                    color = com.yuka.musicplayer.ui.theme.m3OnSurface(),
                     fontFamily = ModernSansFont,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp

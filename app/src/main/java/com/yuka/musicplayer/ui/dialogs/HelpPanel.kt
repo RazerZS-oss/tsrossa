@@ -16,10 +16,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.ModalCloseButton
 import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
 import com.yuka.musicplayer.ui.theme.ModernSansFont
-import com.yuka.musicplayer.ui.theme.TerminalWhite
+import com.yuka.musicplayer.ui.theme.m3OnSurface
+import com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant
 
 @Composable
 fun HelpSectionHeader(title: String) {
@@ -46,7 +48,7 @@ fun HelpItem(title: String, desc: String) {
     ) {
         Text(
             text = title,
-            color = TerminalWhite,
+            color = m3OnSurface(),
             fontFamily = ModernSansFont,
             fontSize = 13.5.sp,
             fontWeight = FontWeight.SemiBold
@@ -54,7 +56,7 @@ fun HelpItem(title: String, desc: String) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = desc,
-            color = Color.White.copy(alpha = 0.70f),
+            color = m3OnSurfaceVariant(),
             fontFamily = ModernSansFont,
             fontSize = 12.sp,
             lineHeight = 16.5.sp
@@ -81,29 +83,20 @@ fun HelpPanel(onClose: () -> Unit) {
             Column {
                 Text(
                     text = "User Guide & Manual",
-                    color = TerminalWhite,
+                    color = m3OnSurface(),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = ModernSansFont
                 )
                 Text(
                     text = "Bit-perfect UAC2 playback and control tips",
-                    color = Color.White.copy(alpha = 0.60f),
+                    color = m3OnSurfaceVariant(),
                     fontSize = 12.sp,
                     fontFamily = ModernSansFont
                 )
             }
 
-            TactileBox(
-                onClick = onClose,
-                pressedScale = 0.88f,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh())
-            ) {
-                GlyphClose(color = Color.White.copy(alpha = 0.80f), modifier = Modifier.size(18.dp))
-            }
+            ModalCloseButton(onClick = onClose)
         }
 
         LazyColumn(

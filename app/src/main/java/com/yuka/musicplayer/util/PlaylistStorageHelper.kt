@@ -55,16 +55,18 @@ object PlaylistStorageHelper {
                 val id = obj.getString("id")
                 val name = obj.getString("name")
                 val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                val isPinned = obj.optBoolean("isPinned", false)
                 val tracksJson = obj.optJSONArray("trackPaths") ?: JSONArray()
                 val tracks = mutableListOf<String>()
                 for (j in 0 until tracksJson.length()) {
                     tracks.add(tracksJson.getString(j))
                 }
-                list.add(Playlist(id = id, name = name, trackPaths = tracks, createdAt = createdAt))
+                list.add(Playlist(id = id, name = name, trackPaths = tracks, createdAt = createdAt, isPinned = isPinned))
             }
+            val sorted = list.sortedWith(compareByDescending<Playlist> { it.isPinned }.thenBy { it.createdAt })
             cachedBaseDirPath = currentPath
-            cachedPlaylists = list
-            list
+            cachedPlaylists = sorted
+            sorted
         } catch (e: Exception) {
             emptyList()
         }
@@ -83,6 +85,7 @@ object PlaylistStorageHelper {
                 obj.put("id", p.id)
                 obj.put("name", p.name)
                 obj.put("createdAt", p.createdAt)
+                obj.put("isPinned", p.isPinned)
                 val tracksJson = JSONArray()
                 p.trackPaths.forEach { tracksJson.put(it) }
                 obj.put("trackPaths", tracksJson)
@@ -204,6 +207,21 @@ object PlaylistStorageHelper {
     }
 
     fun clearPlaylistTracks(context: Context, playlistId: String): List<Playlist>? = clearPlaylistTracks(context.filesDir, playlistId)
+
+    @Synchronized
+    fun togglePinPlaylist(baseDir: File, playlistId: String): List<Playlist>? {
+        val current = loadAllPlaylists(baseDir).toMutableList()
+        val index = current.indexOfFirst { it.id == playlistId }
+        if (index == -1) return null
+        val target = current[index]
+        current[index] = target.copy(isPinned = !target.isPinned)
+        val sorted = current.sortedWith(compareByDescending<Playlist> { it.isPinned }.thenBy { it.createdAt })
+        saveAllPlaylists(baseDir, sorted)
+        return sorted
+    }
+
+    fun togglePinPlaylist(context: Context, playlistId: String): List<Playlist>? =
+        togglePinPlaylist(context.filesDir, playlistId)
 
     @Synchronized
     fun performOneTimeLegacyReset(baseDir: File, sharedPref: SharedPreferences) {

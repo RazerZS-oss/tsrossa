@@ -12,8 +12,12 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import com.yuka.musicplayer.model.LibrarySortMode
 import com.yuka.musicplayer.model.RepeatMode
 import com.yuka.musicplayer.model.TrackInfo
@@ -22,12 +26,15 @@ import com.yuka.musicplayer.update.UpdateCheckState
 import java.io.File
 
 /**
- * Screen Content Container that switches between LIBRARY, PLAYLIST, TRACK, and SETTINGS views with fluid physics transitions.
+ * Screen Content Container that switches between LIBRARY and PLAYLIST with native HorizontalPager swipe gesture,
+ * and seamlessly displays SETTINGS view.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AppScreenContent(
     viewState: ViewState,
     modifier: Modifier = Modifier,
+    onNavChange: (ViewState) -> Unit = {},
     // Library
     musicRootDirectory: File,
     scannedItems: List<com.yuka.musicplayer.model.ScannedMusicItem>,
@@ -37,11 +44,19 @@ fun AppScreenContent(
     playlistSet: Set<String>,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
-    librarySortMode: LibrarySortMode,
-    onCycleSort: () -> Unit,
+    librarySortMode: LibrarySortMode = LibrarySortMode.NAME_ASC,
+    librarySortField: com.yuka.musicplayer.model.SortField = com.yuka.musicplayer.model.SortField.TITLE,
+    librarySortOrder: com.yuka.musicplayer.model.SortOrder = com.yuka.musicplayer.model.SortOrder.ASCENDING,
+    onCycleSort: () -> Unit = {},
+    onSelectSort: ((LibrarySortMode) -> Unit)? = null,
+    onSelectSortField: ((com.yuka.musicplayer.model.SortField, com.yuka.musicplayer.model.SortOrder) -> Unit)? = null,
+    onShuffleLibrary: () -> Unit = {},
+    onBulkAddToPlaylist: (List<File>) -> Unit = {},
+    onBulkDelete: (List<File>) -> Unit = {},
     onRefreshLibrary: () -> Unit,
     onTrackActionTarget: (File) -> Unit,
     onSelectLibraryItem: (com.yuka.musicplayer.model.ScannedMusicItem) -> Unit,
+    onLibraryModalOpenChanged: (Boolean) -> Unit = {},
     // Playlist
     playlists: List<com.yuka.musicplayer.model.Playlist>,
     selectedPlaylistId: String,
@@ -59,182 +74,100 @@ fun AppScreenContent(
     onPlayPlaylistFile: (File, String) -> Unit,
     onPlaylistFileRemoved: (String, String) -> Unit,
     onClearPlaylistAction: (String) -> Unit,
-    // Track Player
-    playbackPosition: Double,
-    onSeekTo: (Double) -> Unit,
-    isPlaying: Boolean,
-    onTogglePlay: () -> Unit,
-    currentVolume: Float,
-    onVolumeChange: (Float) -> Unit,
-    onPlayNext: () -> Unit,
-    onPlayPrev: () -> Unit,
-    isHardwareVolumeActive: Boolean = false,
-    // Settings
-    sharedPref: SharedPreferences,
-    bgMode: String,
-    onBgModeChange: (String) -> Unit,
-    fontScale: Float,
-    onFontScaleChange: (Float) -> Unit,
-    hapticEnabled: Boolean,
-    onHapticChange: (Boolean) -> Unit,
-    keepAwake: Boolean,
-    onKeepAwakeChange: (Boolean) -> Unit,
-    defaultScreenStr: String,
-    onDefaultScreenChange: (String) -> Unit,
-    accentMode: String,
-    onAccentModeChange: (String) -> Unit,
-    accentFixedColorStr: String,
-    onAccentFixedColorChange: (String) -> Unit,
-    isNotificationGranted: Boolean,
-    isStorageGranted: Boolean,
-    isDndGranted: Boolean,
-    isBatteryOptimizationIgnored: Boolean = true,
-    onRequestNotification: () -> Unit,
-    onRequestStorage: () -> Unit,
-    onRequestDnd: () -> Unit,
-    onRequestBatteryOptimization: () -> Unit = {},
-    onOpenPermissionDialog: () -> Unit,
-    onOpenHelp: () -> Unit,
-    updateCheckState: UpdateCheckState,
-    onOpenUpdateDialog: () -> Unit,
-    usbBufferProfile: Int = 1,
-    onUsbBufferProfileChange: (Int) -> Unit = {}
+    onPlayPlaylistSequential: (com.yuka.musicplayer.model.Playlist) -> Unit = {},
+    onPlayPlaylistShuffled: (com.yuka.musicplayer.model.Playlist) -> Unit = {},
+    onTogglePinPlaylist: (com.yuka.musicplayer.model.Playlist) -> Unit = {},
+    isNowPlayingVisible: Boolean = false
 ) {
-    fun viewStateIndex(state: ViewState): Int = when (state) {
-        ViewState.LIBRARY -> 0
-        ViewState.PLAYLIST -> 1
-        ViewState.TRACK -> 2
-        ViewState.SETTINGS -> 3
+    val pagerState = rememberPagerState(
+        initialPage = if (viewState == ViewState.PLAYLIST) 1 else 0,
+        pageCount = { 2 }
+    )
+
+    LaunchedEffect(viewState) {
+        val targetPage = when (viewState) {
+            ViewState.LIBRARY -> 0
+            ViewState.PLAYLIST -> 1
+            else -> 0
+        }
+        if (pagerState.currentPage != targetPage && !pagerState.isScrollInProgress) {
+            pagerState.animateScrollToPage(
+                page = targetPage,
+                animationSpec = spring(dampingRatio = 0.92f, stiffness = 420f)
+            )
+        }
+    }
+
+    LaunchedEffect(pagerState.settledPage) {
+        val target = if (pagerState.settledPage == 0) ViewState.LIBRARY else ViewState.PLAYLIST
+        if (viewState != target && viewState != ViewState.TRACK && viewState != ViewState.SETTINGS) {
+            onNavChange(target)
+        }
+    }
+
+    val isPlaylistSettledActive = androidx.compose.runtime.remember {
+        androidx.compose.runtime.derivedStateOf { pagerState.settledPage == 1 }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        AnimatedContent(
-            targetState = viewState,
-            transitionSpec = {
-                val forward = viewStateIndex(targetState) > viewStateIndex(initialState)
-                if (forward) {
-                    (slideInHorizontally(
-                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
-                        initialOffsetX = { fullWidth -> (fullWidth * 0.25f).toInt() }
-                    ) + fadeIn(animationSpec = tween(220))).togetherWith(
-                        slideOutHorizontally(
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
-                            targetOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() }
-                        ) + fadeOut(animationSpec = tween(180))
-                    )
-                } else {
-                    (slideInHorizontally(
-                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
-                        initialOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() }
-                    ) + fadeIn(animationSpec = tween(220))).togetherWith(
-                        slideOutHorizontally(
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
-                            targetOffsetX = { fullWidth -> (fullWidth * 0.25f).toInt() }
-                        ) + fadeOut(animationSpec = tween(180))
-                    )
-                }
-            },
-            label = "ScreenTransition"
-        ) { targetScreen ->
-            when (targetScreen) {
-                ViewState.LIBRARY -> {
-                    LibraryView(
-                        musicRootDirectory = musicRootDirectory,
-                        scannedItems = scannedItems,
-                        isScanning = isScanningLibrary,
-                        currentTrack = currentTrack,
-                        playlistSet = playlistSet,
-                        searchQuery = searchQuery,
-                        sortMode = librarySortMode,
-                        onCycleSort = onCycleSort,
-                        onRefresh = onRefreshLibrary,
-                        onChangeDirectory = onChangeDirectory,
-                        onSearchChange = onSearchChange,
-                        onTrackSelected = onSelectLibraryItem,
-                        onTrackLongPressed = { file ->
-                            onTrackActionTarget(file)
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                ViewState.PLAYLIST -> {
-                    PlaylistView(
-                        playlists = playlists,
-                        selectedPlaylistId = selectedPlaylistId,
-                        activePlayingPlaylistId = activePlayingPlaylistId,
-                        currentTrack = currentTrack,
-                        isShuffleEnabled = isShuffleEnabled,
-                        repeatMode = repeatMode,
-                        priorityQueueSize = priorityQueueSize,
-                        onSelectPlaylistTab = onSelectPlaylistTab,
-                        onCreatePlaylistClick = onCreatePlaylistClick,
-                        onRenamePlaylistClick = onRenamePlaylistClick,
-                        onDeletePlaylistClick = onDeletePlaylistClick,
-                        onToggleShuffle = onToggleShuffle,
-                        onCycleRepeat = onCycleRepeat,
-                        onOpenQueue = onOpenQueue,
-                        onFileSelected = onPlayPlaylistFile,
-                        onFileRemoved = onPlaylistFileRemoved,
-                        onClearPlaylist = onClearPlaylistAction,
-                        onTrackLongPressed = onTrackActionTarget,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                ViewState.TRACK -> {
-                    TrackView(
-                        track = currentTrack,
-                        playbackPosition = playbackPosition,
-                        isPlaying = isPlaying,
-                        currentVolume = currentVolume,
-                        isShuffleEnabled = isShuffleEnabled,
-                        repeatMode = repeatMode,
-                        priorityQueueSize = priorityQueueSize,
-                        onTogglePlay = onTogglePlay,
-                        onVolumeChange = onVolumeChange,
-                        onPlayNext = onPlayNext,
-                        onPlayPrev = onPlayPrev,
-                        onToggleShuffle = onToggleShuffle,
-                        onCycleRepeat = onCycleRepeat,
-                        onOpenQueue = onOpenQueue,
-                        onSeekTo = onSeekTo,
-                        isHardwareVolumeActive = isHardwareVolumeActive,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                ViewState.SETTINGS -> {
-                    SettingsView(
-                        prefs = sharedPref,
-                        bgMode = bgMode,
-                        onBgModeChange = onBgModeChange,
-                        fontScale = fontScale,
-                        onFontScaleChange = onFontScaleChange,
-                        hapticEnabled = hapticEnabled,
-                        onHapticChange = onHapticChange,
-                        keepAwake = keepAwake,
-                        onKeepAwakeChange = onKeepAwakeChange,
-                        defaultScreen = defaultScreenStr,
-                        onDefaultScreenChange = onDefaultScreenChange,
-                        accentMode = accentMode,
-                        onAccentModeChange = onAccentModeChange,
-                        accentFixedColorStr = accentFixedColorStr,
-                        onAccentFixedColorChange = onAccentFixedColorChange,
-                        isNotificationGranted = isNotificationGranted,
-                        isStorageGranted = isStorageGranted,
-                        isDndGranted = isDndGranted,
-                        isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                        onRequestNotification = onRequestNotification,
-                        onRequestStorage = onRequestStorage,
-                        onRequestDnd = onRequestDnd,
-                        onRequestBatteryOptimization = onRequestBatteryOptimization,
-                        onOpenPermissionDialog = onOpenPermissionDialog,
-                        onOpenHelp = onOpenHelp,
-                        updateCheckState = updateCheckState,
-                        onOpenUpdateDialog = onOpenUpdateDialog,
-                        usbBufferProfile = usbBufferProfile,
-                        onUsbBufferProfileChange = onUsbBufferProfileChange,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+        HorizontalPager(
+            state = pagerState,
+            beyondBoundsPageCount = 1,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            if (page == 0) {
+                LibraryView(
+                    musicRootDirectory = musicRootDirectory,
+                    scannedItems = scannedItems,
+                    isScanning = isScanningLibrary,
+                    currentTrack = currentTrack,
+                    playlistSet = playlistSet,
+                    searchQuery = searchQuery,
+                    sortField = librarySortField,
+                    sortOrder = librarySortOrder,
+                    sortMode = librarySortMode,
+                    onCycleSort = onCycleSort,
+                    onSelectSort = onSelectSort,
+                    onSelectSortField = onSelectSortField,
+                    onShufflePlay = onShuffleLibrary,
+                    onRefresh = onRefreshLibrary,
+                    onChangeDirectory = onChangeDirectory,
+                    onSearchChange = onSearchChange,
+                    onTrackSelected = onSelectLibraryItem,
+                    onTrackLongPressed = onTrackActionTarget,
+                    onBulkAddToPlaylist = onBulkAddToPlaylist,
+                    onBulkDelete = onBulkDelete,
+                    onLocalModalOpenChanged = onLibraryModalOpenChanged,
+                    isNowPlayingVisible = isNowPlayingVisible,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                PlaylistView(
+                    playlists = playlists,
+                    selectedPlaylistId = selectedPlaylistId,
+                    activePlayingPlaylistId = activePlayingPlaylistId,
+                    currentTrack = currentTrack,
+                    isShuffleEnabled = isShuffleEnabled,
+                    repeatMode = repeatMode,
+                    priorityQueueSize = priorityQueueSize,
+                    onSelectPlaylistTab = onSelectPlaylistTab,
+                    onCreatePlaylistClick = onCreatePlaylistClick,
+                    onRenamePlaylistClick = onRenamePlaylistClick,
+                    onDeletePlaylistClick = onDeletePlaylistClick,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeat = onCycleRepeat,
+                    onOpenQueue = onOpenQueue,
+                    onFileSelected = onPlayPlaylistFile,
+                    onFileRemoved = onPlaylistFileRemoved,
+                    onClearPlaylist = onClearPlaylistAction,
+                    onPlayPlaylistSequential = onPlayPlaylistSequential,
+                    onPlayPlaylistShuffled = onPlayPlaylistShuffled,
+                    onTrackLongPressed = onTrackActionTarget,
+                    isPlaylistTabActive = isPlaylistSettledActive.value,
+                    isNowPlayingVisible = isNowPlayingVisible,
+                    onTogglePinPlaylist = onTogglePinPlaylist,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }

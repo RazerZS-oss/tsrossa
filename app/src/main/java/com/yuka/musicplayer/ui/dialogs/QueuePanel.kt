@@ -1,5 +1,6 @@
 package com.yuka.musicplayer.ui.dialogs
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,31 +8,41 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yuka.musicplayer.model.ScannedMusicItem
 import com.yuka.musicplayer.model.TrackInfo
 import com.yuka.musicplayer.ui.components.GlyphClose
+import com.yuka.musicplayer.ui.components.GlyphMusicNote
 import com.yuka.musicplayer.ui.components.GlyphNowPlaying
 import com.yuka.musicplayer.ui.components.GlyphQueue
+import com.yuka.musicplayer.ui.components.GlyphSearch
+import com.yuka.musicplayer.ui.components.ModalCloseButton
 import com.yuka.musicplayer.ui.components.TactileBox
 import com.yuka.musicplayer.ui.theme.LocalAccentColor
 import com.yuka.musicplayer.ui.theme.ModernSansFont
-import com.yuka.musicplayer.ui.theme.TerminalFont
-import com.yuka.musicplayer.ui.theme.TerminalWhite
-import java.io.File
-import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.asImageBitmap
+import com.yuka.musicplayer.ui.theme.m3OnSurface
+import com.yuka.musicplayer.ui.theme.m3OnSurfaceVariant
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainer
 import com.yuka.musicplayer.ui.theme.m3SurfaceContainerHigh
+import com.yuka.musicplayer.util.FuzzySearchHelper
+import com.yuka.musicplayer.util.TrackAlbumThumbnail
+import com.yuka.musicplayer.util.TrackTitleParser
+import java.io.File
 
 @Composable
 fun QueuePanel(
@@ -41,15 +52,61 @@ fun QueuePanel(
     onRemoveFromQueue: (Int) -> Unit,
     onClearQueue: () -> Unit,
     onSelectTrack: (File) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    scannedItemsMap: Map<String, ScannedMusicItem> = emptyMap()
 ) {
     val accent = LocalAccentColor.current
+    var queueSearchQuery by remember { mutableStateOf("") }
+
+    fun getTrackMetadata(file: File): Pair<String, String> {
+        val scanned = scannedItemsMap[file.absolutePath]
+        if (scanned != null) {
+            val t = scanned.title.trim().ifEmpty { file.nameWithoutExtension }
+            val a = scanned.artist.trim().ifEmpty { "Unknown Artist" }
+            return t to a
+        }
+        val (parsedTitle, parsedArtist) = TrackTitleParser.parse(file.nameWithoutExtension.ifEmpty { file.name })
+        val finalTitle = parsedTitle.ifEmpty { file.nameWithoutExtension }
+        val finalArtist = parsedArtist.ifEmpty { "Unknown Artist" }
+        return finalTitle to finalArtist
+    }
+
+    val filteredPriorityQueue = remember(priorityQueue, queueSearchQuery, scannedItemsMap) {
+        if (queueSearchQuery.isBlank()) {
+            priorityQueue.mapIndexed { idx, file -> idx to file }
+        } else {
+            priorityQueue.mapIndexedNotNull { idx, file ->
+                val (title, artist) = getTrackMetadata(file)
+                if (FuzzySearchHelper.matchesAny(queueSearchQuery, title, artist, file.name, file.nameWithoutExtension)) {
+                    idx to file
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
+    val filteredUpcomingTracks = remember(upcomingTracks, queueSearchQuery, scannedItemsMap) {
+        if (queueSearchQuery.isBlank()) {
+            upcomingTracks.mapIndexed { idx, file -> idx to file }
+        } else {
+            upcomingTracks.mapIndexedNotNull { idx, file ->
+                val (title, artist) = getTrackMetadata(file)
+                if (FuzzySearchHelper.matchesAny(queueSearchQuery, title, artist, file.name, file.nameWithoutExtension)) {
+                    idx to file
+                } else {
+                    null
+                }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
+        // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -63,7 +120,7 @@ fun QueuePanel(
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Play Queue & Up Next (${priorityQueue.size})",
-                    color = TerminalWhite,
+                    color = m3OnSurface(),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = ModernSansFont,
@@ -81,36 +138,106 @@ fun QueuePanel(
                             .background(Color(0xFFFF5252).copy(alpha = 0.15f))
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text("Clear", color = Color(0xFFFF5252), fontSize = 11.sp, fontFamily = ModernSansFont, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Clear",
+                            color = Color(0xFFFF5252),
+                            fontSize = 11.sp,
+                            fontFamily = ModernSansFont,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                 }
+                ModalCloseButton(onClick = onClose)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Fuzzy Search Bar (Item 9.2)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(m3SurfaceContainer())
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GlyphSearch(color = m3OnSurfaceVariant(), modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            BasicTextField(
+                value = queueSearchQuery,
+                onValueChange = { queueSearchQuery = it },
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = m3OnSurface(),
+                    fontSize = 13.5.sp,
+                    fontFamily = ModernSansFont,
+                    fontWeight = FontWeight.Normal
+                ),
+                cursorBrush = SolidColor(accent),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        if (queueSearchQuery.isEmpty()) {
+                            Text(
+                                text = "Search in queue...",
+                                color = m3OnSurfaceVariant().copy(alpha = 0.65f),
+                                fontSize = 13.5.sp,
+                                fontFamily = ModernSansFont
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+            if (queueSearchQuery.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(6.dp))
                 TactileBox(
-                    onClick = onClose,
-                    pressedScale = 0.88f,
+                    onClick = { queueSearchQuery = "" },
+                    pressedScale = 0.85f,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(22.dp)
                         .clip(CircleShape)
                         .background(m3SurfaceContainerHigh())
                 ) {
-                    GlyphClose(color = Color.White.copy(alpha = 0.80f), modifier = Modifier.size(18.dp))
+                    GlyphClose(
+                        color = m3OnSurfaceVariant(),
+                        modifier = Modifier
+                            .size(12.dp)
+                            .align(Alignment.Center)
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            item {
-                Text(
-                    text = "Now Playing",
-                    color = accent,
-                    fontFamily = ModernSansFont,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            // Now Playing Section (only if not filtering or matching current track)
+            val showCurrentTrack = currentTrack != null && (
+                queueSearchQuery.isBlank() || FuzzySearchHelper.matchesAny(
+                    queueSearchQuery,
+                    currentTrack.title,
+                    currentTrack.artist,
+                    currentTrack.album,
+                    currentTrack.file.name
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                if (currentTrack != null) {
+            )
+            if (showCurrentTrack && currentTrack != null) {
+                item {
+                    Text(
+                        text = "Now Playing",
+                        color = accent,
+                        fontFamily = ModernSansFont,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -123,7 +250,7 @@ fun QueuePanel(
                             Image(
                                 bitmap = currentTrack.coverArt.asImageBitmap(),
                                 contentDescription = "Artwork",
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(10.dp))
@@ -142,8 +269,8 @@ fun QueuePanel(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                currentTrack.title,
-                                color = TerminalWhite,
+                                text = currentTrack.title,
+                                color = m3OnSurface(),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 fontFamily = ModernSansFont,
@@ -152,7 +279,7 @@ fun QueuePanel(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                currentTrack.artist,
+                                text = currentTrack.artist,
                                 color = accent,
                                 fontSize = 12.sp,
                                 fontFamily = ModernSansFont,
@@ -161,16 +288,20 @@ fun QueuePanel(
                             )
                         }
                     }
-                } else {
-                    Text("No track actively playing", color = Color.White.copy(alpha = 0.50f), fontFamily = ModernSansFont, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(18.dp))
                 }
-                Spacer(modifier = Modifier.height(18.dp))
             }
 
+            // Priority Queue Section
+            val pqCountLabel = if (queueSearchQuery.isNotBlank() && filteredPriorityQueue.size != priorityQueue.size) {
+                "Priority Queue (${filteredPriorityQueue.size}/${priorityQueue.size})"
+            } else {
+                "Priority Queue (${priorityQueue.size})"
+            }
             item {
                 Text(
-                    text = "Priority Queue (${priorityQueue.size})",
-                    color = Color.White.copy(alpha = 0.75f),
+                    text = pqCountLabel,
+                    color = m3OnSurface(),
                     fontFamily = ModernSansFont,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
@@ -190,7 +321,7 @@ fun QueuePanel(
                     ) {
                         Text(
                             text = "Priority queue is empty.\nLong-press any track to 'Play Next' or 'Add to Queue'.",
-                            color = Color.White.copy(alpha = 0.50f),
+                            color = m3OnSurfaceVariant().copy(alpha = 0.70f),
                             fontFamily = ModernSansFont,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center
@@ -198,8 +329,31 @@ fun QueuePanel(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
+            } else if (filteredPriorityQueue.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(m3SurfaceContainer())
+                            .padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No matches in priority queue",
+                            color = m3OnSurfaceVariant().copy(alpha = 0.60f),
+                            fontFamily = ModernSansFont,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             } else {
-                items(priorityQueue.mapIndexed { idx, f -> idx to f }, key = { it.second.absolutePath + it.first }) { (idx, file) ->
+                items(
+                    items = filteredPriorityQueue,
+                    key = { (idx, file) -> "priority_${idx}_${file.absolutePath}" }
+                ) { (idx, file) ->
+                    val (title, artist) = getTrackMetadata(file)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -207,93 +361,162 @@ fun QueuePanel(
                             .clip(RoundedCornerShape(14.dp))
                             .background(m3SurfaceContainer())
                             .clickable { onSelectTrack(file) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(accent.copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center
+                        TrackAlbumThumbnail(
+                            filePath = file.absolutePath,
+                            isCurrentTrack = false,
+                            currentTrackArt = null,
+                            modifier = Modifier.size(44.dp),
+                            cornerRadius = 10.dp
                         ) {
-                            Text(
-                                text = String.format("%02d", idx + 1),
-                                color = accent,
-                                fontFamily = TerminalFont,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(accent.copy(alpha = 0.16f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                GlyphMusicNote(color = accent, modifier = Modifier.size(20.dp))
+                            }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = file.nameWithoutExtension.ifEmpty { file.name },
-                            color = TerminalWhite,
-                            fontFamily = ModernSansFont,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 13.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                color = m3OnSurface(),
+                                fontFamily = ModernSansFont,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.5.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = artist,
+                                color = m3OnSurfaceVariant(),
+                                fontFamily = ModernSansFont,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                         TactileBox(
                             onClick = { onRemoveFromQueue(idx) },
                             pressedScale = 0.85f,
-                            modifier = Modifier.size(32.dp).clip(CircleShape)
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
                         ) {
-                            GlyphClose(color = Color(0xFFFF5252).copy(alpha = 0.80f), modifier = Modifier.size(14.dp))
+                            GlyphClose(
+                                color = Color(0xFFFF5252).copy(alpha = 0.85f),
+                                modifier = Modifier.size(14.dp)
+                            )
                         }
                     }
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
 
+            // Upcoming in Playlist / Folder (Items 9.1, 9.3)
             if (upcomingTracks.isNotEmpty()) {
+                val upCountLabel = if (queueSearchQuery.isNotBlank() && filteredUpcomingTracks.size != upcomingTracks.size) {
+                    "Upcoming in Playlist / Folder (${filteredUpcomingTracks.size}/${upcomingTracks.size})"
+                } else {
+                    "Upcoming in Playlist / Folder (${upcomingTracks.size})"
+                }
                 item {
                     Text(
-                        text = "Upcoming in Playlist / Folder",
-                        color = Color.White.copy(alpha = 0.65f),
+                        text = upCountLabel,
+                        color = m3OnSurface(),
                         fontFamily = ModernSansFont,
-                        fontSize = 12.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                items(upcomingTracks.take(12).mapIndexed { idx, f -> idx to f }) { (idx, file) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSelectTrack(file) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+
+                if (filteredUpcomingTracks.isEmpty()) {
+                    item {
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White.copy(alpha = 0.05f)),
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(m3SurfaceContainer())
+                                .padding(14.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "${idx + 1}",
-                                color = Color.White.copy(alpha = 0.50f),
-                                fontFamily = TerminalFont,
-                                fontSize = 11.sp
+                                text = "No matches in upcoming tracks",
+                                color = m3OnSurfaceVariant().copy(alpha = 0.60f),
+                                fontFamily = ModernSansFont,
+                                fontSize = 12.sp
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = file.nameWithoutExtension.ifEmpty { file.name },
-                            color = Color.White.copy(alpha = 0.70f),
-                            fontFamily = ModernSansFont,
-                            fontWeight = FontWeight.Normal,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                    }
+                } else {
+                    // Item 9.3: Show ALL tracks (no .take(12) limit!)
+                    items(
+                        items = filteredUpcomingTracks,
+                        key = { (idx, file) -> "upcoming_${idx}_${file.absolutePath}" }
+                    ) { (idx, file) ->
+                        val (title, artist) = getTrackMetadata(file)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.5.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(m3SurfaceContainer().copy(alpha = 0.65f))
+                                .clickable { onSelectTrack(file) }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TrackAlbumThumbnail(
+                                filePath = file.absolutePath,
+                                isCurrentTrack = false,
+                                currentTrackArt = null,
+                                modifier = Modifier.size(40.dp),
+                                cornerRadius = 8.dp
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(m3SurfaceContainerHigh()),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    GlyphMusicNote(
+                                        color = m3OnSurfaceVariant().copy(alpha = 0.60f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    color = m3OnSurface(),
+                                    fontFamily = ModernSansFont,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = artist,
+                                    color = m3OnSurfaceVariant(),
+                                    fontFamily = ModernSansFont,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 11.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }

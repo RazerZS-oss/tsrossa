@@ -27,7 +27,7 @@ data class ReleaseInfo(
 sealed class UpdateCheckState {
     object Idle : UpdateCheckState()
     object Checking : UpdateCheckState()
-    data class UpToDate(val currentVersion: String, val latestTag: String) : UpdateCheckState()
+    data class UpToDate(val currentVersion: String, val latestTag: String, val release: ReleaseInfo? = null) : UpdateCheckState()
     data class UpdateAvailable(val release: ReleaseInfo, val currentVersion: String) : UpdateCheckState()
     data class Error(val message: String) : UpdateCheckState()
 }
@@ -112,7 +112,7 @@ object AppUpdateManager {
             if (isNewerVersion(targetRelease.tagName, currentVersion)) {
                 UpdateCheckState.UpdateAvailable(targetRelease, currentVersion)
             } else {
-                UpdateCheckState.UpToDate(currentVersion, targetRelease.tagName)
+                UpdateCheckState.UpToDate(currentVersion, targetRelease.tagName, targetRelease)
             }
         } catch (e: Exception) {
             UpdateCheckState.Error(e.message ?: "Failed to connect to update server")
@@ -179,6 +179,23 @@ object AppUpdateManager {
                 }
             }
 
+            // Verify complete download
+            if (totalBytes > 0 && apkFile.length() < totalBytes) {
+                apkFile.delete()
+                return@withContext Result.failure(
+                    java.io.IOException("Incomplete APK download (${apkFile.length()} / $totalBytes bytes)")
+                )
+            }
+
+            // Verify APK archive integrity and package name
+            val packageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            if (packageInfo == null || packageInfo.packageName != context.packageName) {
+                apkFile.delete()
+                return@withContext Result.failure(
+                    java.io.IOException("Invalid or corrupt APK file downloaded (signature/package mismatch)")
+                )
+            }
+
             Result.success(apkFile)
         } catch (e: Exception) {
             Result.failure(e)
@@ -233,8 +250,50 @@ object AppUpdateManager {
     }
 
     /**
+     * Compares pre-release suffix with natural number ordering and tier ranking.
+     * e.g. "beta10" > "beta2", "rc1" > "beta5"
+     */
+    fun comparePreReleaseSuffix(remote: String, current: String): Int {
+        val tokenRegex = Regex("([a-zA-Z]+)|(\\d+)")
+        val remoteTokens = tokenRegex.findAll(remote).map { it.value }.toList()
+        val currentTokens = tokenRegex.findAll(current).map { it.value }.toList()
+
+        val maxLen = maxOf(remoteTokens.size, currentTokens.size)
+        for (i in 0 until maxLen) {
+            val rToken = remoteTokens.getOrNull(i) ?: return -1
+            val cToken = currentTokens.getOrNull(i) ?: return 1
+
+            val rNum = rToken.toLongOrNull()
+            val cNum = cToken.toLongOrNull()
+
+            if (rNum != null && cNum != null) {
+                if (rNum != cNum) return rNum.compareTo(cNum)
+            } else {
+                val rRank = rankPreReleaseType(rToken)
+                val cRank = rankPreReleaseType(cToken)
+                if (rRank != 0 && cRank != 0 && rRank != cRank) {
+                    return rRank.compareTo(cRank)
+                }
+                val textComp = rToken.compareTo(cToken, ignoreCase = true)
+                if (textComp != 0) return textComp
+            }
+        }
+        return 0
+    }
+
+    private fun rankPreReleaseType(token: String): Int {
+        return when (token.lowercase()) {
+            "alpha" -> 1
+            "beta" -> 2
+            "rc" -> 3
+            else -> 0
+        }
+    }
+
+    /**
      * Semantic version comparison supporting:
      * - "v1.2.0-beta2" vs "1.2.0-beta1" -> true
+     * - "v1.2.0-beta10" vs "1.2.0-beta2" -> true
      * - "v1.2.0" vs "1.2.0-beta1" -> true
      * - "v1.2.1" vs "1.2.0" -> true
      * - "v1.2.0-beta1" vs "1.2.0-beta1" -> false
@@ -270,8 +329,7 @@ object AppUpdateManager {
         if (remoteSuffix == null && currentSuffix != null) return true
         if (remoteSuffix != null && currentSuffix == null) return false
         if (remoteSuffix != null && currentSuffix != null) {
-            // Compare suffix alphabetically or by trailing number (e.g. beta2 > beta1)
-            return remoteSuffix.compareTo(currentSuffix, ignoreCase = true) > 0
+            return comparePreReleaseSuffix(remoteSuffix, currentSuffix) > 0
         }
 
         return false
