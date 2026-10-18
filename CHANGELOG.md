@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.6.0] - 2026-10-18
+## [1.6.0-BETA] - 2026-10-18
 
 ### Added
 - **Material 3 (Material You) Glassmorphic UI Overhaul:**
