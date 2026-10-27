@@ -13,7 +13,13 @@ public enum AppTab: String, CaseIterable {
 public class AppViewModel: ObservableObject {
     public static let shared = AppViewModel()
     
-    @Published public var activeTab: AppTab = .nowPlaying
+    @Published public var activeTab: AppTab = .nowPlaying {
+        didSet {
+            if activeTab == .settings {
+                AudioEngine.shared.refreshDevices()
+            }
+        }
+    }
     @Published public var tracks: [TrackMetadata] = []
     @Published public var searchText: String = ""
     @Published public var showTelemetry: Bool = false
@@ -21,7 +27,10 @@ public class AppViewModel: ObservableObject {
     @Published public var copiedTelemetry: Bool = false
     @Published public var volumeDb: Int = 0 { // 0 dBFS unity gain
         didSet {
-            tsrossa_set_volume_db(Int32(volumeDb))
+            let db = Int32(volumeDb)
+            AudioEngine.shared.engineQueue.async {
+                tsrossa_set_volume_db(db)
+            }
         }
     }
     @Published public var isShuffle: Bool = false
@@ -32,20 +41,29 @@ public class AppViewModel: ObservableObject {
     @Published public var currentArtwork: NSImage? = nil
     @Published public var currentTheme: DynamicMaterialTheme = .defaultTheme
     
-    // Audiophile & CoreAudio Engine Settings (Wired to C++ CoreAudioSink)
+    // Audiophile & CoreAudio Engine Settings (Wired to C++ CoreAudioSink on engineQueue)
     @Published public var isExclusiveHogMode: Bool = true {
         didSet {
-            tsrossa_set_hog_mode_enabled(isExclusiveHogMode)
+            let enabled = isExclusiveHogMode
+            AudioEngine.shared.engineQueue.async {
+                tsrossa_set_hog_mode_enabled(enabled)
+            }
         }
     }
     @Published public var isAutoClockSwitch: Bool = true {
         didSet {
-            tsrossa_set_auto_clock_enabled(isAutoClockSwitch)
+            let enabled = isAutoClockSwitch
+            AudioEngine.shared.engineQueue.async {
+                tsrossa_set_auto_clock_enabled(enabled)
+            }
         }
     }
     @Published public var isRamPlayback: Bool = true {
         didSet {
-            tsrossa_set_ram_lock_enabled(isRamPlayback)
+            let enabled = isRamPlayback
+            AudioEngine.shared.engineQueue.async {
+                tsrossa_set_ram_lock_enabled(enabled)
+            }
         }
     }
     @Published public var keepScreenAwake: Bool = true

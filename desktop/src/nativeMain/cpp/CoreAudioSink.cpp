@@ -200,21 +200,24 @@ bool CoreAudioSink::selectDevice(AudioDeviceID deviceId) {
   bool wasPlaying = m_isPlaying.load();
   bool wasPaused = m_isPaused.load();
   uint64_t savedFrame = m_currentFrameIndex.load();
+  AudioDeviceID oldDevice = m_activeDevice;
 
-  if (m_audioUnit) {
-    AudioOutputUnitStop(m_audioUnit);
-  }
+  // 1. Signal render thread to stop reading PCM immediately before stopping HAL unit
+  m_isPlaying.store(false);
   teardownAudioUnit();
 
-  // Release Hog Mode on previous device before switching
-  if (m_activeDevice != kAudioObjectUnknown) {
-    setHogMode(m_activeDevice, false);
+  // 2. Release Hog Mode on previous device before switching
+  if (oldDevice != kAudioObjectUnknown) {
+    setHogMode(oldDevice, false);
   }
 
-  m_activeDevice = deviceId;
-  LOGI("CoreAudioSink: Selected device %u", (unsigned int)deviceId);
+  // 3. Give coreaudiod 30ms to finish tearing down the old device session
+  usleep(30000);
 
-  // Seamlessly resume on the new device without re-decoding or losing position!
+  m_activeDevice = deviceId;
+  LOGI("CoreAudioSink: Selected device %u (previous=%u)", (unsigned int)deviceId, (unsigned int)oldDevice);
+
+  // 4. Seamlessly resume on the new device without re-decoding or losing position
   if (wasPlaying && !m_pcmBuffer.empty() && m_sampleRate > 0) {
     if (m_autoClockEnabled.load()) {
       setDeviceSampleRate(m_activeDevice, (Float64)m_sampleRate);
@@ -228,7 +231,7 @@ bool CoreAudioSink::selectDevice(AudioDeviceID deviceId) {
       m_isPlaying.store(true);
       for (int retry = 0; retry < 5; ++retry) {
         if (AudioOutputUnitStart(m_audioUnit) == noErr) break;
-        usleep(50000);
+        usleep(40000);
       }
       LOGI("CoreAudioSink: Seamlessly routed active stream to device %u at frame %llu",
            (unsigned int)deviceId, (unsigned long long)savedFrame);
@@ -292,11 +295,42 @@ bool CoreAudioSink::setDeviceSampleRate(AudioDeviceID deviceId, Float64 targetRa
 }
 
 bool CoreAudioSink::setHogMode(AudioDeviceID deviceId, bool enable) {
+  if (deviceId == kAudioObjectUnknown) return false;
+
+  // Check transport type: on Apple Silicon, Built-in Speakers and 3.5mm Headphones share the same
+  // AppleMCA2 codec, so kAudioDevicePropertyHogMode locks the codec against port switching.
+  // Use hardware AUHAL direct mode on built-in ports, and full USB Hog Mode on external USB DACs.
+  UInt32 transport = 0;
+  AudioObjectPropertyAddress transAddr = {
+      kAudioDevicePropertyTransportType,
+      kAudioObjectPropertyScopeGlobal,
+      kAudioObjectPropertyElementMain
+  };
+  UInt32 transSize = sizeof(UInt32);
+  AudioObjectGetPropertyData(deviceId, &transAddr, 0, nullptr, &transSize, &transport);
+
+  if (transport == kAudioDeviceTransportTypeBuiltIn) {
+    LOGI("setHogMode(%s): Using direct AUHAL hardware bypass on built-in Apple Silicon port (device %u)",
+         enable ? "true" : "false", (unsigned int)deviceId);
+    return true;
+  }
+
   AudioObjectPropertyAddress addr = {
       kAudioDevicePropertyHogMode,
       kAudioObjectPropertyScopeGlobal,
       kAudioObjectPropertyElementMain
   };
+
+  pid_t currentHogPid = -1;
+  UInt32 pidSize = sizeof(pid_t);
+  AudioObjectGetPropertyData(deviceId, &addr, 0, nullptr, &pidSize, &currentHogPid);
+
+  if (enable && currentHogPid == getpid()) {
+    return true;
+  }
+  if (!enable && currentHogPid != getpid()) {
+    return true;
+  }
 
   pid_t hogPid = enable ? getpid() : -1;
   OSStatus status = AudioObjectSetPropertyData(deviceId, &addr, 0, nullptr, sizeof(pid_t), &hogPid);
@@ -388,7 +422,10 @@ bool CoreAudioSink::setupAudioUnit(AudioDeviceID deviceId, Float64 sampleRate, U
 
 void CoreAudioSink::teardownAudioUnit() {
   if (m_audioUnit) {
+    m_isPlaying.store(false);
     AudioOutputUnitStop(m_audioUnit);
+    AURenderCallbackStruct emptyCallback = {nullptr, nullptr};
+    AudioUnitSetProperty(m_audioUnit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &emptyCallback, sizeof(emptyCallback));
     AudioUnitUninitialize(m_audioUnit);
     AudioComponentInstanceDispose(m_audioUnit);
     m_audioUnit = nullptr;
