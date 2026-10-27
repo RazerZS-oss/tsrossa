@@ -14,6 +14,16 @@ bool CoreAudioSink::init() {
   std::lock_guard<std::recursive_mutex> lock(m_engineMutex);
   LOGI("CoreAudioSink: Initializing CoreAudio subsystem...");
 
+  // Attach main CFRunLoop to CoreAudio HAL so hardware hot-plug notifications always fire
+  CFRunLoopRef runLoop = CFRunLoopGetMain();
+  AudioObjectPropertyAddress runLoopAddr = {
+      kAudioHardwarePropertyRunLoop,
+      kAudioObjectPropertyScopeGlobal,
+      kAudioObjectPropertyElementMain
+  };
+  AudioObjectSetPropertyData(
+      kAudioObjectSystemObject, &runLoopAddr, 0, nullptr, sizeof(CFRunLoopRef), &runLoop);
+
   // Select default output device if none selected
   if (m_activeDevice == kAudioObjectUnknown) {
     AudioObjectPropertyAddress addr = {
@@ -25,6 +35,18 @@ bool CoreAudioSink::init() {
     OSStatus status = AudioObjectGetPropertyData(
         kAudioObjectSystemObject, &addr, 0, nullptr, &size, &m_activeDevice);
     if (status != noErr || m_activeDevice == kAudioObjectUnknown) {
+      auto devices = getAudioDevices();
+      for (const auto &dev : devices) {
+        if (dev.isDefault) {
+          m_activeDevice = dev.id;
+          break;
+        }
+      }
+      if (m_activeDevice == kAudioObjectUnknown && !devices.empty()) {
+        m_activeDevice = devices.front().id;
+      }
+    }
+    if (m_activeDevice == kAudioObjectUnknown) {
       LOGW("CoreAudioSink: Could not retrieve default output device (status=%d)", status);
     } else {
       LOGI("CoreAudioSink: Default output device acquired (ID=%u)", (unsigned int)m_activeDevice);
@@ -190,11 +212,24 @@ std::vector<DeviceInfo> CoreAudioSink::getAudioDevices() {
     result.push_back(info);
   }
 
+  // Ensure at least one output device is marked default if coreaudiod reported defaultOutputId=0
+  bool hasDefault = false;
+  for (const auto &d : result) {
+    if (d.isDefault) {
+      hasDefault = true;
+      break;
+    }
+  }
+  if (!hasDefault && !result.empty()) {
+    result.front().isDefault = true;
+  }
+
   return result;
 }
 
 bool CoreAudioSink::selectDevice(AudioDeviceID deviceId) {
   std::lock_guard<std::recursive_mutex> lock(m_engineMutex);
+  if (deviceId == kAudioObjectUnknown) return false;
   if (m_activeDevice == deviceId) return true;
 
   bool wasPlaying = m_isPlaying.load();
@@ -225,7 +260,15 @@ bool CoreAudioSink::selectDevice(AudioDeviceID deviceId) {
     if (m_hogModeEnabled.load()) {
       setHogMode(m_activeDevice, true);
     }
-    if (setupAudioUnit(m_activeDevice, (Float64)m_sampleRate, m_channels, m_bitsPerSample)) {
+    bool unitReady = false;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+      if (setupAudioUnit(m_activeDevice, (Float64)m_sampleRate, m_channels, m_bitsPerSample)) {
+        unitReady = true;
+        break;
+      }
+      usleep(50000);
+    }
+    if (unitReady) {
       m_currentFrameIndex.store(savedFrame);
       m_isPaused.store(wasPaused);
       m_isPlaying.store(true);

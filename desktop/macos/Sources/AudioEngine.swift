@@ -59,12 +59,17 @@ public class AudioEngine: ObservableObject {
     private var lastKnownSystemDefaultId: UInt32 = 0
     private var hasInitializedDevices: Bool = false
     
+    // Debounce state to prevent double-clicking a track row from loading the FLAC file twice
+    private var lastPlayRequestPath: String = ""
+    private var lastPlayRequestTime: TimeInterval = 0
+    
     private init() {
         engineQueue.async { [weak self] in
+            guard let self = self else { return }
             _ = tsrossa_init()
-            self?.refreshDevicesOnEngineQueue(checkHotplug: false)
+            self.refreshDevicesOnEngineQueue(checkHotplug: false)
+            self.setupCoreAudioHotplugListeners()
         }
-        setupCoreAudioHotplugListeners()
         startHotplugMonitorTimer()
     }
     
@@ -76,6 +81,18 @@ public class AudioEngine: ObservableObject {
     
     /// Registers native macOS CoreAudio HAL listeners for instant 3.5mm jack & USB DAC plug/unplug events
     private func setupCoreAudioHotplugListeners() {
+        let notifyHotplug: () -> Void = { [weak self] in
+            guard let self = self else { return }
+            self.refreshDevicesOnEngineQueue(checkHotplug: true)
+            // Apple Silicon 3.5mm jack impedance sense takes ~150-350ms to finish exposing streams
+            self.engineQueue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+            }
+            self.engineQueue.asyncAfter(deadline: .now() + 0.60) { [weak self] in
+                self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+            }
+        }
+        
         var devicesAddr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -85,8 +102,8 @@ public class AudioEngine: ObservableObject {
             AudioObjectID(kAudioObjectSystemObject),
             &devicesAddr,
             engineQueue
-        ) { [weak self] _, _ in
-            self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+        ) { _, _ in
+            notifyHotplug()
         }
         
         var defaultOutAddr = AudioObjectPropertyAddress(
@@ -98,8 +115,8 @@ public class AudioEngine: ObservableObject {
             AudioObjectID(kAudioObjectSystemObject),
             &defaultOutAddr,
             engineQueue
-        ) { [weak self] _, _ in
-            self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+        ) { _, _ in
+            notifyHotplug()
         }
     }
     
@@ -144,12 +161,17 @@ public class AudioEngine: ObservableObject {
             lastKnownDeviceIds = currentIds
             lastKnownSystemDefaultId = defaultId
             let initialTarget = defaultId != 0 ? defaultId : (list.first?.id ?? 0)
+            if initialTarget != 0 {
+                _ = tsrossa_select_device(initialTarget)
+            }
+            let json = String(cString: tsrossa_get_telemetry_json())
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.devices = list
                 if self.selectedDeviceId == 0 {
                     self.selectedDeviceId = initialTarget
                 }
+                self.telemetryJson = json
             }
             return
         }
@@ -217,6 +239,14 @@ public class AudioEngine: ObservableObject {
     }
     
     public func play(track: TrackMetadata) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if track.path == lastPlayRequestPath && (now - lastPlayRequestTime) < 0.45 {
+            return
+        }
+        lastPlayRequestPath = track.path
+        lastPlayRequestTime = now
+        stopProgressTimer()
+        
         // Update UI track identity and artwork immediately without waiting for FLAC decode
         self.currentTrack = track
         self.currentTime = 0.0
