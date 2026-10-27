@@ -81,6 +81,22 @@ bool tsrossa_seek(double seconds) {
   return CoreAudioSink::getInstance().seek(seconds);
 }
 
+void tsrossa_set_volume_db(int db) {
+  CoreAudioSink::getInstance().setVolumeDb(db);
+}
+
+void tsrossa_set_hog_mode_enabled(bool enabled) {
+  CoreAudioSink::getInstance().setHogModeEnabled(enabled);
+}
+
+void tsrossa_set_auto_clock_enabled(bool enabled) {
+  CoreAudioSink::getInstance().setAutoClockEnabled(enabled);
+}
+
+void tsrossa_set_ram_lock_enabled(bool enabled) {
+  CoreAudioSink::getInstance().setRamLockEnabled(enabled);
+}
+
 bool tsrossa_is_playing(void) {
   return CoreAudioSink::getInstance().isPlaying();
 }
@@ -91,6 +107,18 @@ double tsrossa_get_current_time(void) {
 
 double tsrossa_get_total_duration(void) {
   return CoreAudioSink::getInstance().getTotalDurationSeconds();
+}
+
+uint32_t tsrossa_get_track_sample_rate(void) {
+  return CoreAudioSink::getInstance().getSampleRate();
+}
+
+uint32_t tsrossa_get_track_bit_depth(void) {
+  return CoreAudioSink::getInstance().getBitDepth();
+}
+
+uint32_t tsrossa_get_track_channels(void) {
+  return CoreAudioSink::getInstance().getChannels();
 }
 
 const char* tsrossa_get_telemetry_json(void) {

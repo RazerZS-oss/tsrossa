@@ -19,7 +19,11 @@ public class AppViewModel: ObservableObject {
     @Published public var showTelemetry: Bool = false
     @Published public var currentFolder: String = "/Users/alen/Music/Music"
     @Published public var copiedTelemetry: Bool = false
-    @Published public var volumeDb: Int = 0 // 0 dBFS unity gain
+    @Published public var volumeDb: Int = 0 { // 0 dBFS unity gain
+        didSet {
+            tsrossa_set_volume_db(Int32(volumeDb))
+        }
+    }
     @Published public var isShuffle: Bool = false
     @Published public var isRepeat: Bool = false
     @Published public var sortMode: String = "DATE (NEWEST)"
@@ -28,17 +32,29 @@ public class AppViewModel: ObservableObject {
     @Published public var currentArtwork: NSImage? = nil
     @Published public var currentTheme: DynamicMaterialTheme = .defaultTheme
     
-    // Audiophile & CoreAudio Engine Settings
-    @Published public var isExclusiveHogMode: Bool = true
-    @Published public var isAutoClockSwitch: Bool = true
-    @Published public var isRamPlayback: Bool = true
+    // Audiophile & CoreAudio Engine Settings (Wired to C++ CoreAudioSink)
+    @Published public var isExclusiveHogMode: Bool = true {
+        didSet {
+            tsrossa_set_hog_mode_enabled(isExclusiveHogMode)
+        }
+    }
+    @Published public var isAutoClockSwitch: Bool = true {
+        didSet {
+            tsrossa_set_auto_clock_enabled(isAutoClockSwitch)
+        }
+    }
+    @Published public var isRamPlayback: Bool = true {
+        didSet {
+            tsrossa_set_ram_lock_enabled(isRamPlayback)
+        }
+    }
     @Published public var keepScreenAwake: Bool = true
     @Published public var bufferProfile: String = "192ms Jitter Safe"
     
     // Appearance & Customization Settings
     @Published public var themeMode: String = "DARK" // DARK, OLED, LIGHT
     @Published public var bgCanvasMode: String = "DYNAMIC" // DYNAMIC, AURA, BLACK
-    @Published public var accentColorMode: String = "DYNAMIC" // DYNAMIC, MATCHA, GOLD, CYAN
+    @Published public var accentColorMode: String = "DYNAMIC" // DYNAMIC, ROSE, MATCHA, GOLD, CYAN
     
     private var keyMonitor: Any?
     
@@ -192,24 +208,32 @@ public class AppViewModel: ObservableObject {
         return String(format: "%02d:%02d", mins, secs)
     }
     
-    // Desktop Keyboard Shortcut Monitor
+    // Desktop Keyboard Shortcut Monitor (intercepts both keyDown & keyUp for Spacebar so focused buttons don't re-fire)
     public func setupKeyboardMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self = self else { return event }
             
             let firstResponder = NSApp.keyWindow?.firstResponder
             let isEditingText = firstResponder is NSTextView && (firstResponder as? NSTextView)?.isEditable == true
             
-            let isCommand = event.modifierFlags.contains(.command)
-            
             if isEditingText {
-                if event.keyCode == 53 { // Escape
+                if event.type == .keyDown && event.keyCode == 53 { // Escape
                     NSApp.keyWindow?.makeFirstResponder(nil)
                     return nil
                 }
                 return event
             }
+            
+            // Swallow keyUp for Spacebar so focused SwiftUI buttons don't re-trigger on Space release
+            if event.type == .keyUp {
+                if event.keyCode == 49 {
+                    return nil
+                }
+                return event
+            }
+            
+            let isCommand = event.modifierFlags.contains(.command)
             
             if isCommand {
                 switch event.keyCode {
@@ -255,6 +279,7 @@ public class AppViewModel: ObservableObject {
             } else {
                 switch event.keyCode {
                 case 49: // Spacebar -> Play / Pause
+                    NSApp.keyWindow?.makeFirstResponder(nil)
                     AudioEngine.shared.togglePlayPause()
                     return nil
                 case 124: // Right Arrow -> Next track

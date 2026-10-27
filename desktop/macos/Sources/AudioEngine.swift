@@ -78,18 +78,42 @@ public class AudioEngine: ObservableObject {
         if tsrossa_select_device(id) {
             self.selectedDeviceId = id
             refreshDevices()
+            updateTelemetry()
         }
     }
     
     public func play(track: TrackMetadata) {
-        self.currentTrack = track
         if tsrossa_play(track.path) {
+            let realRate = tsrossa_get_track_sample_rate()
+            let realBits = tsrossa_get_track_bit_depth()
+            let realChannels = tsrossa_get_track_channels()
+            let realDuration = tsrossa_get_total_duration()
+            
+            let updatedTrack = TrackMetadata(
+                path: track.path,
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                sampleRate: realRate > 0 ? realRate : track.sampleRate,
+                bitDepth: realBits > 0 ? realBits : track.bitDepth,
+                channels: realChannels > 0 ? realChannels : track.channels,
+                durationSeconds: realDuration > 0 ? realDuration : track.durationSeconds
+            )
+            
+            self.currentTrack = updatedTrack
             self.isPlaying = true
             self.isPaused = false
-            self.totalDuration = tsrossa_get_total_duration()
+            self.currentTime = 0.0
+            self.totalDuration = realDuration
+            
+            if let idx = AppViewModel.shared.tracks.firstIndex(where: { $0.path == track.path }) {
+                AppViewModel.shared.tracks[idx] = updatedTrack
+            }
+            
+            refreshDevices()
             startProgressTimer()
             updateTelemetry()
-            AppViewModel.shared.updateThemeForTrack(track: track)
+            AppViewModel.shared.updateThemeForTrack(track: updatedTrack)
         }
     }
     
@@ -129,13 +153,18 @@ public class AudioEngine: ObservableObject {
     
     private func startProgressTimer() {
         stopProgressTimer()
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             self.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
                 guard let self = self else { return }
                 if self.isPlaying && !self.isPaused {
                     self.currentTime = tsrossa_get_current_time()
-                    if !tsrossa_is_playing() && self.currentTime >= self.totalDuration - 0.5 {
-                        self.stop()
+                    if !tsrossa_is_playing() && self.totalDuration > 0 && self.currentTime >= self.totalDuration - 0.5 {
+                        if AppViewModel.shared.isRepeat, let current = self.currentTrack {
+                            self.play(track: current)
+                        } else {
+                            AppViewModel.shared.playNextTrack()
+                        }
                     }
                 }
             }

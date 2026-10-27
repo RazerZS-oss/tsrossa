@@ -5,6 +5,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -46,9 +47,17 @@ public:
   void stop();
   bool seek(double seconds);
 
+  void setVolumeDb(int db);
+  void setHogModeEnabled(bool enabled);
+  void setAutoClockEnabled(bool enabled);
+  void setRamLockEnabled(bool enabled);
+
   bool isPlaying() const { return m_isPlaying.load(); }
   double getCurrentTimeSeconds() const;
   double getTotalDurationSeconds() const;
+  uint32_t getSampleRate() const { return m_sampleRate; }
+  uint32_t getBitDepth() const { return m_bitsPerSample; }
+  uint32_t getChannels() const { return m_channels; }
 
   std::string getTelemetryJson();
 
@@ -79,6 +88,12 @@ private:
   std::atomic<bool> m_isPlaying{false};
   std::atomic<bool> m_isPaused{false};
   std::atomic<uint64_t> m_currentFrameIndex{0};
+  std::atomic<float> m_gainLinear{1.0f};
+
+  std::atomic<bool> m_hogModeEnabled{true};
+  std::atomic<bool> m_autoClockEnabled{true};
+  std::atomic<bool> m_ramLockEnabled{true};
+
   uint64_t m_totalFrames = 0;
   uint32_t m_sampleRate = 0;
   uint32_t m_channels = 0;
@@ -88,5 +103,5 @@ private:
   bool m_isMemoryLocked = false;
   std::string m_currentFilePath;
 
-  std::mutex m_engineMutex;
+  std::recursive_mutex m_engineMutex;
 };
