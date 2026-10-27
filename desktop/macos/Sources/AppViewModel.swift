@@ -74,6 +74,23 @@ public class AppViewModel: ObservableObject {
     @Published public var showSaveQueueModal: Bool = false
     @Published public var saveQueuePlaylistName: String = ""
     
+    // Liked Songs / Favorites State (YouTube Music style)
+    @Published public var likedTrackPaths: Set<String> = []
+    
+    public var likedTracksCount: Int {
+        return tracks.filter { likedTrackPaths.contains($0.path) }.count
+    }
+    
+    // Lyrics State & Real-Time Synchronization (YouTube Music style)
+    @Published public var currentLyrics: [LyricLine] = []
+    @Published public var currentLyricIndex: Int = -1
+    @Published public var queueTabMode: String = "QUEUE" // "QUEUE" or "LYRICS"
+    @Published public var isLoadingLyrics: Bool = false
+    
+    public var hasLyrics: Bool {
+        return !currentLyrics.isEmpty
+    }
+    
     public var selectedPlaylist: UserPlaylist? {
         guard let id = selectedPlaylistId else { return nil }
         return playlists.first(where: { $0.id == id })
@@ -138,6 +155,7 @@ public class AppViewModel: ObservableObject {
     
     public init() {
         loadSavedPlaylists()
+        loadSavedLikedTracks()
         setupKeyboardMonitor()
     }
     
@@ -151,7 +169,7 @@ public class AppViewModel: ObservableObject {
     // COMPUTED FILTERED TRACKS (Playlist + Format + BitDepth + kHz + Search)
     // =========================================================================
     public var activePlaylist: UserPlaylist? {
-        guard let id = selectedPlaylistId else { return nil }
+        guard let id = selectedPlaylistId, id != "LIKED_SONGS" else { return nil }
         return playlists.first(where: { $0.id == id })
     }
     
@@ -166,8 +184,10 @@ public class AppViewModel: ObservableObject {
     public var filteredTracks: [TrackMetadata] {
         var result = tracks
         
-        // 1. Playlist filter (Smart Keyword or Explicit Track Paths)
-        if let playlist = activePlaylist {
+        // 1. Liked Songs or Playlist filter (Smart Keyword or Explicit Track Paths)
+        if selectedPlaylistId == "LIKED_SONGS" {
+            result = result.filter { likedTrackPaths.contains($0.path) }
+        } else if let playlist = activePlaylist {
             result = result.filter { playlist.matches(track: $0) }
         }
         
@@ -336,18 +356,18 @@ public class AppViewModel: ObservableObject {
     // =========================================================================
     public func addToPlayNext(track: TrackMetadata) {
         if let first = upNextQueue.first, first.path == track.path {
-            showToast("🎵 '\(track.title)' is already playing next")
+            showToast("'\(track.title)' is already playing next")
             return
         }
         upNextQueue.removeAll { $0.path == track.path }
         upNextQueue.insert(track, at: 0)
-        showToast("🎵 Set to Play Next: \(track.title)")
+        showToast("Set to Play Next: \(track.title)")
     }
     
     public func addToQueueEnd(track: TrackMetadata) {
         if !upNextQueue.contains(where: { $0.path == track.path }) {
             upNextQueue.append(track)
-            showToast("➕ Added to Queue (#\(upNextQueue.count)): \(track.title)")
+            showToast("Added to Queue (#\(upNextQueue.count)): \(track.title)")
         } else {
             if let pos = upNextQueue.firstIndex(where: { $0.path == track.path }) {
                 showToast("Track is already in queue (#\(pos + 1))")
@@ -417,7 +437,70 @@ public class AppViewModel: ObservableObject {
         savePlaylists()
         selectedPlaylistId = newPl.id
         showSaveQueueModal = false
-        showToast("✨ Saved \(paths.count) tracks to playlist '\(name)'")
+        showToast("Saved \(paths.count) tracks to playlist '\(name)'")
+    }
+    
+    // =========================================================================
+    // LIKED SONGS & FAVORITES MANAGEMENT (YouTube Music Style)
+    // =========================================================================
+    private let likedTracksStorageKey = "tsrossa.likedTracks.v1"
+    
+    private func loadSavedLikedTracks() {
+        if let saved = UserDefaults.standard.stringArray(forKey: likedTracksStorageKey) {
+            likedTrackPaths = Set(saved)
+        }
+    }
+    
+    public func saveLikedTracks() {
+        UserDefaults.standard.set(Array(likedTrackPaths), forKey: likedTracksStorageKey)
+    }
+    
+    public func isTrackLiked(_ path: String) -> Bool {
+        return likedTrackPaths.contains(path)
+    }
+    
+    public func toggleLike(track: TrackMetadata) {
+        if likedTrackPaths.contains(track.path) {
+            likedTrackPaths.remove(track.path)
+            showToast("Removed from Liked Songs: \(track.title)")
+        } else {
+            likedTrackPaths.insert(track.path)
+            showToast("Added to Liked Songs: \(track.title)")
+        }
+        saveLikedTracks()
+    }
+    
+    // =========================================================================
+    // SYNCHRONIZED LYRICS ENGINE (YouTube Music Style)
+    // =========================================================================
+    public func loadLyrics(for track: TrackMetadata) {
+        isLoadingLyrics = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let lines = LyricsManager.shared.fetchLyrics(for: track)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.currentLyrics = lines
+                self.currentLyricIndex = -1
+                self.isLoadingLyrics = false
+            }
+        }
+    }
+    
+    public func updateLyricIndex(currentTime: Double) {
+        guard !currentLyrics.isEmpty else { return }
+        guard currentLyrics.first?.isSynced == true else { return }
+        
+        var targetIndex = -1
+        for (idx, line) in currentLyrics.enumerated() {
+            if line.timestampSeconds <= currentTime {
+                targetIndex = idx
+            } else {
+                break
+            }
+        }
+        if targetIndex != currentLyricIndex {
+            currentLyricIndex = targetIndex
+        }
     }
     
     public func playNextTrack() {
@@ -608,6 +691,11 @@ public class AppViewModel: ObservableObject {
                     return nil
                 case 17: // Cmd + T -> Repeat
                     self.isRepeat.toggle()
+                    return nil
+                case 37: // Cmd + L -> Toggle Like on current track
+                    if let cur = AudioEngine.shared.currentTrack {
+                        self.toggleLike(track: cur)
+                    }
                     return nil
                 case 126: // Cmd + Up Arrow -> Volume Up
                     self.volumeUp()

@@ -316,6 +316,19 @@ public struct MainAppView: View {
                         onDelete: nil
                     )
                     
+                    // "Liked Songs" pinned item (YouTube Music style)
+                    sidebarPlaylistRow(
+                        title: "Liked Songs",
+                        icon: "heart.fill",
+                        count: vm.likedTracksCount,
+                        isSelected: vm.activeTab == .library && vm.selectedPlaylistId == "LIKED_SONGS",
+                        onSelect: {
+                            vm.selectedPlaylistId = "LIKED_SONGS"
+                            vm.activeTab = .library
+                        },
+                        onDelete: nil
+                    )
+                    
                     ForEach(vm.playlists) { pl in
                         let matchCount = vm.tracks.filter { pl.matches(track: $0) }.count
                         sidebarPlaylistRow(
@@ -1347,6 +1360,12 @@ public struct MainAppView: View {
                             .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textPrimary)
                             .lineLimit(1)
                         
+                        if vm.isTrackLiked(track.path) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(vm.currentTheme.primary)
+                        }
+                        
                         if isSearchTarget {
                             Text("⏎ ENTER TO PLAY")
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
@@ -1413,6 +1432,15 @@ public struct MainAppView: View {
                 
                 Divider()
                 
+                let isLiked = vm.isTrackLiked(track.path)
+                Button(action: {
+                    vm.toggleLike(track: track)
+                }) {
+                    Label(isLiked ? "Unlike Song" : "Like Song", systemImage: isLiked ? "heart.slash" : "heart.fill")
+                }
+                
+                Divider()
+                
                 Menu("Add / Remove from Playlist") {
                     ForEach(vm.playlists) { pl in
                         let inPlaylist = pl.matches(track: track)
@@ -1445,6 +1473,15 @@ public struct MainAppView: View {
                     vm.addToQueueEnd(track: track)
                 }) {
                     Label("Add to Queue", systemImage: "text.badge.plus")
+                }
+                
+                Divider()
+                
+                let isRowLiked = vm.isTrackLiked(track.path)
+                Button(action: {
+                    vm.toggleLike(track: track)
+                }) {
+                    Label(isRowLiked ? "Unlike Song" : "Like Song", systemImage: isRowLiked ? "heart.slash" : "heart.fill")
                 }
                 
                 Divider()
@@ -1830,221 +1867,405 @@ public struct MainAppView: View {
     }
     
     // =========================================================================
-    // VIEW 3: WIDESCREEN PLAY QUEUE VIEW (Google / Spotify Style Interactive Queue)
+    // VIEW 3: WIDESCREEN PLAY QUEUE & LYRICS VIEW (YouTube Music Style Dual Mode)
     // =========================================================================
     private var desktopQueueView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("ACTIVE PLAYBACK QUEUE")
+            // Header Bar with YouTube Music Style Tab Switcher
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(vm.queueTabMode == "LYRICS" ? "SYNCHRONIZED LYRICS" : "ACTIVE PLAYBACK QUEUE")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(vm.currentTheme.primary)
-                    Text("Play Queue & Up Next Flow")
-                        .font(.system(size: 22, weight: .bold))
+                    Text(vm.queueTabMode == "LYRICS" ? "Karaoke & Song Lyrics" : "Play Queue & Up Next Flow")
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(vm.currentTheme.textPrimary)
                 }
+                
                 Spacer()
                 
-                HStack(spacing: 10) {
-                    if !vm.upNextQueue.isEmpty {
-                        Button(action: { vm.openSaveQueueModal() }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "plus.rectangle.on.rectangle")
-                                Text("Save Queue as Playlist")
-                            }
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(vm.currentTheme.onPrimary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(vm.currentTheme.primary)
-                            .cornerRadius(14)
-                            .contentShape(Rectangle())
+                // YouTube Music Style Dual Tab Pills: [ Up Next (N) ] [ Lyrics ]
+                HStack(spacing: 6) {
+                    Button(action: { vm.queueTabMode = "QUEUE" }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "music.note.list")
+                            Text("Up Next (\(vm.upNextQueue.count))")
                         }
-                        .buttonStyle(TsrossaScaleButtonStyle())
-                        
-                        Button(action: { vm.clearQueue() }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "trash")
-                                Text("Clear Queue")
-                            }
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(vm.currentTheme.error)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(vm.currentTheme.surfaceContainerHigh)
-                            .cornerRadius(14)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(vm.queueTabMode == "QUEUE" ? vm.currentTheme.onPrimary : vm.currentTheme.textSecondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(vm.queueTabMode == "QUEUE" ? vm.currentTheme.primary : vm.currentTheme.surfaceContainerHigh)
+                        .cornerRadius(12)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(PlainButtonStyle())
                     
-                    Text("\(vm.upNextQueue.count) queued • \(filteredTracks.count) upcoming")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(vm.currentTheme.textSecondary)
+                    Button(action: { vm.queueTabMode = "LYRICS" }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "quote.bubble.fill")
+                            Text("Lyrics")
+                            if vm.hasLyrics {
+                                Circle()
+                                    .fill(vm.queueTabMode == "LYRICS" ? vm.currentTheme.onPrimary : TsrossaColors.terminalGreen)
+                                    .frame(width: 5, height: 5)
+                            }
+                        }
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(vm.queueTabMode == "LYRICS" ? vm.currentTheme.onPrimary : vm.currentTheme.textSecondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(vm.queueTabMode == "LYRICS" ? vm.currentTheme.primary : vm.currentTheme.surfaceContainerHigh)
+                        .cornerRadius(12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(3)
+                .background(vm.currentTheme.surfaceContainerLowest.opacity(0.6))
+                .cornerRadius(14)
+                
+                Spacer()
+                
+                // Right Actions based on Active Tab
+                if vm.queueTabMode == "QUEUE" {
+                    HStack(spacing: 10) {
+                        if !vm.upNextQueue.isEmpty {
+                            Button(action: { vm.openSaveQueueModal() }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus.rectangle.on.rectangle")
+                                    Text("Save Queue as Playlist")
+                                }
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(vm.currentTheme.onPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
+                                .background(vm.currentTheme.primary)
+                                .cornerRadius(14)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(TsrossaScaleButtonStyle())
+                            
+                            Button(action: { vm.clearQueue() }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "trash")
+                                    Text("Clear Queue")
+                                }
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(vm.currentTheme.error)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(vm.currentTheme.surfaceContainerHigh)
+                                .cornerRadius(14)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        if vm.hasLyrics {
+                            Text(vm.currentLyrics.first?.isSynced == true ? "SYNCED LRC" : "PLAIN TEXT")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(TsrossaColors.terminalGreen)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(TsrossaColors.terminalGreen.opacity(0.15))
+                                .cornerRadius(6)
+                        }
+                        
+                        if let cur = engine.currentTrack {
+                            Button(action: { vm.loadLyrics(for: cur) }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "arrow.clockwise")
+                                    Text("Reload Lyrics")
+                                }
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(vm.currentTheme.surfaceContainerHigh)
+                                .cornerRadius(14)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 28)
-            .padding(.vertical, 18)
+            .padding(.vertical, 16)
             
             Divider()
                 .background(vm.currentTheme.outline.opacity(0.15))
             
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    // SECTION 1: NOW PLAYING CARD
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("NOW PLAYING")
+            if vm.queueTabMode == "LYRICS" {
+                desktopLyricsView
+            } else {
+                desktopQueueScrollContent
+            }
+        }
+    }
+    
+    // =========================================================================
+    // VIEW 3A: INTERACTIVE UP NEXT QUEUE CONTENT
+    // =========================================================================
+    private var desktopQueueScrollContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                // SECTION 1: NOW PLAYING CARD
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("NOW PLAYING")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.primary)
+                    
+                    if let current = engine.currentTrack {
+                        HStack(spacing: 16) {
+                            ZStack {
+                                if let art = vm.currentArtwork {
+                                    Image(nsImage: art)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 52, height: 52)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(vm.currentTheme.primaryContainer.opacity(0.5))
+                                        .frame(width: 52, height: 52)
+                                        .overlay(
+                                            Image(systemName: "waveform")
+                                                .font(.system(size: 22))
+                                                .foregroundColor(vm.currentTheme.primary)
+                                        )
+                                }
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(current.title)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(vm.currentTheme.textPrimary)
+                                    .lineLimit(1)
+                                HStack(spacing: 8) {
+                                    Text(current.artist)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(vm.currentTheme.textSecondary)
+                                        .lineLimit(1)
+                                    Text("•")
+                                        .foregroundColor(vm.currentTheme.textMuted)
+                                    Text(current.album)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(vm.currentTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            // Format Badge & Duration
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("\(current.path.hasSuffix(".flac") ? "FLAC" : "WAV") \(current.bitDepth)-bit / \(String(format: "%.1fkHz", Double(current.sampleRate)/1000.0))")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(vm.currentTheme.onPrimaryContainer)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(vm.currentTheme.primaryContainer)
+                                    .cornerRadius(6)
+                                
+                                Text("\(vm.formatTime(engine.currentTime)) / \(vm.formatTime(current.durationSeconds))")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(vm.currentTheme.textSecondary)
+                            }
+                        }
+                        .padding(14)
+                        .background(vm.currentTheme.surfaceContainerHigh)
+                        .cornerRadius(14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(vm.currentTheme.primary.opacity(0.4), lineWidth: 1)
+                        )
+                    } else {
+                        HStack(spacing: 12) {
+                            Image(systemName: "pause.circle")
+                                .font(.system(size: 20))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                            Text("No track currently playing. Pick a song from your library or queue to start listening.")
+                                .font(.system(size: 13))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.03))
+                        .cornerRadius(12)
+                    }
+                }
+                
+                // SECTION 2: DYNAMIC UP NEXT IN QUEUE
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("UP NEXT IN QUEUE (\(vm.upNextQueue.count))")
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundColor(vm.currentTheme.primary)
                         
-                        if let current = engine.currentTrack {
-                            HStack(spacing: 16) {
-                                ZStack {
-                                    if let art = vm.currentArtwork {
-                                        Image(nsImage: art)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 52, height: 52)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    } else {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(vm.currentTheme.primaryContainer.opacity(0.5))
-                                            .frame(width: 52, height: 52)
-                                            .overlay(
-                                                Image(systemName: "waveform")
-                                                    .font(.system(size: 22))
-                                                    .foregroundColor(vm.currentTheme.primary)
-                                            )
-                                    }
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(current.title)
-                                        .font(.system(size: 15, weight: .bold))
-                                        .foregroundColor(vm.currentTheme.textPrimary)
-                                        .lineLimit(1)
-                                    HStack(spacing: 8) {
-                                        Text(current.artist)
-                                            .font(.system(size: 12))
-                                            .foregroundColor(vm.currentTheme.textSecondary)
-                                            .lineLimit(1)
-                                        Text("•")
-                                            .foregroundColor(vm.currentTheme.textMuted)
-                                        Text(current.album)
-                                            .font(.system(size: 12))
-                                            .foregroundColor(vm.currentTheme.textMuted)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                // Format Badge & Duration
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text("\(current.path.hasSuffix(".flac") ? "FLAC" : "WAV") \(current.bitDepth)-bit / \(String(format: "%.1fkHz", Double(current.sampleRate)/1000.0))")
-                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                        .foregroundColor(vm.currentTheme.onPrimaryContainer)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(vm.currentTheme.primaryContainer)
-                                        .cornerRadius(6)
-                                    
-                                    Text("\(vm.formatTime(engine.currentTime)) / \(vm.formatTime(current.durationSeconds))")
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundColor(vm.currentTheme.textSecondary)
-                                }
-                            }
-                            .padding(14)
-                            .background(vm.currentTheme.surfaceContainerHigh)
-                            .cornerRadius(14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(vm.currentTheme.primary.opacity(0.4), lineWidth: 1)
-                            )
-                        } else {
-                            HStack(spacing: 12) {
-                                Image(systemName: "pause.circle")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(vm.currentTheme.textMuted)
-                                Text("No track currently playing. Pick a song from your library or queue to start listening.")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(vm.currentTheme.textSecondary)
-                            }
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.white.opacity(0.03))
-                            .cornerRadius(12)
-                        }
-                    }
-                    
-                    // SECTION 2: DYNAMIC UP NEXT IN QUEUE
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("UP NEXT IN QUEUE (\(vm.upNextQueue.count))")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(vm.currentTheme.primary)
-                            
-                            Spacer()
-                            
-                            if !vm.upNextQueue.isEmpty {
-                                Text("These tracks play next in order before continuing normal playback")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(vm.currentTheme.textMuted)
-                            }
-                        }
+                        Spacer()
                         
-                        if vm.upNextQueue.isEmpty {
-                            VStack(spacing: 10) {
-                                Image(systemName: "text.badge.plus")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(vm.currentTheme.textMuted)
-                                Text("Your Up Next Queue is Empty")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(vm.currentTheme.textPrimary)
-                                Text("Use 'Play Next' or 'Add to Queue' from the track menu or right-click to queue tracks here dynamically like Google/Spotify.")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(vm.currentTheme.textSecondary)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding(24)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.white.opacity(0.02))
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(vm.currentTheme.outline.opacity(0.18), lineWidth: 1)
-                            )
-                        } else {
-                            LazyVStack(spacing: 6) {
-                                ForEach(Array(vm.upNextQueue.enumerated()), id: \.element.id) { idx, track in
-                                    interactiveQueueItemRow(index: idx, track: track)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // SECTION 3: CONTINUATION FROM CURRENT CONTEXT
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("NEXT FROM: \(vm.selectedPlaylist?.name.uppercased() ?? "LIBRARY") (\(filteredTracks.count) TRACKS)")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(vm.currentTheme.textSecondary)
-                            Spacer()
-                            Text("Will resume automatically when Up Next queue finishes")
+                        if !vm.upNextQueue.isEmpty {
+                            Text("These tracks play next in order before continuing normal playback")
                                 .font(.system(size: 11))
                                 .foregroundColor(vm.currentTheme.textMuted)
                         }
-                        
-                        LazyVStack(spacing: 4) {
-                            ForEach(Array(filteredTracks.prefix(50).enumerated()), id: \.element.id) { idx, track in
-                                desktopTrackTableRow(index: idx + 1, track: track)
+                    }
+                    
+                    if vm.upNextQueue.isEmpty {
+                        VStack(spacing: 10) {
+                            Image(systemName: "text.badge.plus")
+                                .font(.system(size: 28))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                            Text("Your Up Next Queue is Empty")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                            Text("Use 'Play Next' or 'Add to Queue' from the track menu or right-click to queue tracks here dynamically like Google/Spotify.")
+                                .font(.system(size: 12))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(24)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.02))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(vm.currentTheme.outline.opacity(0.18), lineWidth: 1)
+                        )
+                    } else {
+                        LazyVStack(spacing: 6) {
+                            ForEach(Array(vm.upNextQueue.enumerated()), id: \.element.id) { idx, track in
+                                interactiveQueueItemRow(index: idx, track: track)
                             }
                         }
                     }
                 }
-                .padding(.horizontal, 28)
-                .padding(.vertical, 16)
+                
+                // SECTION 3: CONTINUATION FROM CURRENT CONTEXT
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("NEXT FROM: \(vm.selectedPlaylist?.name.uppercased() ?? "LIBRARY") (\(filteredTracks.count) TRACKS)")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(vm.currentTheme.textSecondary)
+                        Spacer()
+                        Text("Will resume automatically when Up Next queue finishes")
+                            .font(.system(size: 11))
+                            .foregroundColor(vm.currentTheme.textMuted)
+                    }
+                    
+                    LazyVStack(spacing: 4) {
+                        ForEach(Array(filteredTracks.prefix(50).enumerated()), id: \.element.id) { idx, track in
+                            desktopTrackTableRow(index: idx + 1, track: track)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+        }
+    }
+    
+    // =========================================================================
+    // VIEW 3B: INTERACTIVE SYNCHRONIZED LYRICS (YouTube Music / Apple Music Style)
+    // =========================================================================
+    private var desktopLyricsView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    if vm.isLoadingLyrics {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Loading lyrics...")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                    } else if vm.currentLyrics.isEmpty {
+                        VStack(spacing: 14) {
+                            Image(systemName: "quote.bubble")
+                                .font(.system(size: 40))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                            Text("No Lyrics Available")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                            Text("Place a .lrc or .txt companion file in the same folder as your audio file:\n\(engine.currentTrack?.title ?? "song").lrc")
+                                .font(.system(size: 12))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                                .multilineTextAlignment(.center)
+                            
+                            if let cur = engine.currentTrack {
+                                Button(action: {
+                                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: cur.path)])
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "folder")
+                                        Text("Open Track Folder in Finder")
+                                    }
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(vm.currentTheme.onPrimary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(vm.currentTheme.primary)
+                                    .cornerRadius(14)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(40)
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                    } else {
+                        VStack(alignment: .leading, spacing: 18) {
+                            ForEach(Array(vm.currentLyrics.enumerated()), id: \.element.id) { idx, line in
+                                let isCurrent = (idx == vm.currentLyricIndex)
+                                Button(action: {
+                                    if line.isSynced {
+                                        engine.seek(to: line.timestampSeconds)
+                                    }
+                                }) {
+                                    HStack(alignment: .top, spacing: 14) {
+                                        if line.isSynced {
+                                            Text(vm.formatTime(line.timestampSeconds))
+                                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                                .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textMuted.opacity(0.55))
+                                                .frame(width: 44, alignment: .leading)
+                                                .padding(.top, 2)
+                                        }
+                                        
+                                        Text(line.text)
+                                            .font(.system(size: isCurrent ? 22 : 16, weight: isCurrent ? .bold : .medium))
+                                            .foregroundColor(isCurrent ? vm.currentTheme.textPrimary : vm.currentTheme.textMuted)
+                                            .lineSpacing(4)
+                                            .multilineTextAlignment(.leading)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(isCurrent ? vm.currentTheme.primaryContainer.opacity(0.35) : Color.clear)
+                                    .cornerRadius(12)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .id(idx)
+                            }
+                        }
+                        .padding(.horizontal, 36)
+                        .padding(.vertical, 28)
+                        .onChange(of: vm.currentLyricIndex) { newIndex in
+                            if newIndex >= 0 {
+                                withAnimation(.easeInOut(duration: 0.35)) {
+                                    proxy.scrollTo(newIndex, anchor: .center)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -2574,9 +2795,23 @@ public struct MainAppView: View {
                                 .foregroundColor(vm.currentTheme.primary)
                         }
                     }
+                    
                     Spacer(minLength: 0)
+                    
+                    if let cur = engine.currentTrack {
+                        let isCurLiked = vm.isTrackLiked(cur.path)
+                        Button(action: { vm.toggleLike(track: cur) }) {
+                            Image(systemName: isCurLiked ? "heart.fill" : "heart")
+                                .font(.system(size: 15))
+                                .foregroundColor(isCurLiked ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help(isCurLiked ? "Unlike Track (Cmd + L)" : "Like Track (Cmd + L)")
+                    }
                 }
-                .frame(width: 260, alignment: .leading)
+                .frame(width: 275, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
@@ -2722,22 +2957,49 @@ public struct MainAppView: View {
                         .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
                 )
                 
-                // Queue Quick Switch
+                // Lyrics Quick Switch (YouTube Music style)
                 Button(action: {
-                    vm.activeTab = (vm.activeTab == .playlist) ? .nowPlaying : .playlist
+                    if vm.activeTab != .playlist {
+                        vm.activeTab = .playlist
+                        vm.queueTabMode = "LYRICS"
+                    } else if vm.queueTabMode == "LYRICS" {
+                        vm.queueTabMode = "QUEUE"
+                    } else {
+                        vm.queueTabMode = "LYRICS"
+                    }
                 }) {
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(vm.activeTab == .playlist ? vm.currentTheme.onPrimary : vm.currentTheme.textPrimary)
+                    Image(systemName: "quote.bubble")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor((vm.activeTab == .playlist && vm.queueTabMode == "LYRICS") ? vm.currentTheme.onPrimary : vm.currentTheme.textPrimary)
                         .frame(width: 34, height: 34)
-                        .background(vm.activeTab == .playlist ? vm.currentTheme.primary : vm.currentTheme.surfaceContainerHigh)
+                        .background((vm.activeTab == .playlist && vm.queueTabMode == "LYRICS") ? vm.currentTheme.primary : vm.currentTheme.surfaceContainerHigh)
                         .clipShape(Circle())
                         .contentShape(Circle())
                 }
                 .buttonStyle(TsrossaScaleButtonStyle())
-                .help("Toggle Queue (⌘3)")
+                .help("Toggle Synced Lyrics")
+                
+                // Queue Quick Switch
+                Button(action: {
+                    if vm.activeTab == .playlist && vm.queueTabMode == "QUEUE" {
+                        vm.activeTab = .nowPlaying
+                    } else {
+                        vm.activeTab = .playlist
+                        vm.queueTabMode = "QUEUE"
+                    }
+                }) {
+                    Image(systemName: "music.note.list")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor((vm.activeTab == .playlist && vm.queueTabMode == "QUEUE") ? vm.currentTheme.onPrimary : vm.currentTheme.textPrimary)
+                        .frame(width: 34, height: 34)
+                        .background((vm.activeTab == .playlist && vm.queueTabMode == "QUEUE") ? vm.currentTheme.primary : vm.currentTheme.surfaceContainerHigh)
+                        .clipShape(Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(TsrossaScaleButtonStyle())
+                .help("Toggle Play Queue (Cmd + 3)")
             }
-            .frame(width: 260, alignment: .trailing)
+            .frame(width: 290, alignment: .trailing)
         }
         .padding(.horizontal, 24)
         .background(vm.currentTheme.surfaceContainer.opacity(0.95))

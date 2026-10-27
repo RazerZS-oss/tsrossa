@@ -251,6 +251,7 @@ public class AudioEngine: ObservableObject {
         self.currentTrack = track
         self.currentTime = 0.0
         AppViewModel.shared.updateThemeForTrack(track: track)
+        AppViewModel.shared.loadLyrics(for: track)
         
         let trackPath = track.path
         engineQueue.async { [weak self] in
@@ -348,6 +349,7 @@ public class AudioEngine: ObservableObject {
                 let t = tsrossa_get_current_time()
                 let stillPlaying = tsrossa_is_playing()
                 self.currentTime = t
+                AppViewModel.shared.updateLyricIndex(currentTime: t)
                 if !stillPlaying && self.totalDuration > 0 && t >= self.totalDuration - 0.5 {
                     self.isAdvancingTrack = true
                     if AppViewModel.shared.isRepeat, let current = self.currentTrack {
