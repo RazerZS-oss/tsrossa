@@ -75,7 +75,11 @@ public class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelega
                 
                 // GitHub error or rate limit
                 if let message = json["message"] as? String, json["tag_name"] == nil {
-                    self.statusMessage = "GitHub: \(message)"
+                    if message == "Not Found" {
+                        self.statusMessage = "No releases published yet on GitHub (v\(self.currentVersion) is active)."
+                    } else {
+                        self.statusMessage = "GitHub: \(message)"
+                    }
                     return
                 }
                 
