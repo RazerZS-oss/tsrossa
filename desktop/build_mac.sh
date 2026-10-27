@@ -67,9 +67,19 @@ fi
 
 codesign --force --deep -s - "$BUILD_DIR/tsrossa.app"
 
-echo "==> Packaging tsrossa-1.6.0-macos.zip..."
-(cd "$BUILD_DIR" && rm -f tsrossa-1.6.0-macos.zip && zip -r -y tsrossa-1.6.0-macos.zip tsrossa.app)
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$DIR/macos/Info.plist" 2>/dev/null || echo "1.6.0")
+
+echo "==> Packaging tsrossa-${VERSION}-macos.zip..."
+(cd "$BUILD_DIR" && rm -f "tsrossa-${VERSION}-macos.zip" "tsrossa-macos.zip" && zip -r -y "tsrossa-${VERSION}-macos.zip" tsrossa.app && ln -s "tsrossa-${VERSION}-macos.zip" tsrossa-macos.zip)
+
+if [ "$1" == "--install" ] || [ "$INSTALL_APP" == "1" ]; then
+    echo "==> Installing to /Applications/tsrossa.app..."
+    rm -rf /Applications/tsrossa.app
+    cp -R "$BUILD_DIR/tsrossa.app" /Applications/tsrossa.app
+    xattr -cr /Applications/tsrossa.app 2>/dev/null || true
+    echo "    Installed successfully to /Applications/tsrossa.app"
+fi
 
 echo "==> Build complete! Output located at:"
 echo "    App: $BUILD_DIR/tsrossa.app"
-echo "    Zip: $BUILD_DIR/tsrossa-1.6.0-macos.zip"
+echo "    Zip: $BUILD_DIR/tsrossa-${VERSION}-macos.zip"

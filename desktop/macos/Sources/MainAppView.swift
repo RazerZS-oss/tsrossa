@@ -4,6 +4,7 @@ import AppKit
 public struct MainAppView: View {
     @ObservedObject private var engine = AudioEngine.shared
     @ObservedObject private var vm = AppViewModel.shared
+    @ObservedObject private var updater = UpdateManager.shared
     
     private var filteredTracks: [TrackMetadata] {
         vm.filteredTracks
@@ -100,6 +101,9 @@ public struct MainAppView: View {
         .onAppear {
             TsrossaBrandLogo.applyMacDockIcon()
             vm.loadInitialMusicDirectory()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                updater.checkForUpdates(userInitiated: false)
+            }
         }
     }
     
@@ -417,6 +421,7 @@ public struct MainAppView: View {
     
     private func sidebarNavButton(tab: AppTab, icon: String, title: String, shortcut: String) -> some View {
         let isSelected = vm.activeTab == tab
+        let showUpdateBadge = (tab == .settings && updater.updateAvailable)
         return Button(action: { vm.activeTab = tab }) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
@@ -427,6 +432,12 @@ public struct MainAppView: View {
                 Text(title)
                     .font(.system(size: 13, weight: isSelected ? .bold : .medium))
                     .foregroundColor(isSelected ? vm.currentTheme.onPrimaryContainer : vm.currentTheme.textSecondary)
+                
+                if showUpdateBadge {
+                    Circle()
+                        .fill(TsrossaColors.bitPerfectGold)
+                        .frame(width: 6, height: 6)
+                }
                 
                 Spacer()
                 
@@ -1765,24 +1776,143 @@ public struct MainAppView: View {
                             }
                         }
                         
-                        // 5. ABOUT TSROSSA
-                        settingsCard(title: "ABOUT TSROSSA MACOS") {
-                            HStack(spacing: 14) {
-                                TsrossaBrandIcon(size: 48, cornerRadius: 12)
-                                
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text("tsrossa bit-perfect desktop player")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(vm.currentTheme.textPrimary)
-                                        Spacer()
-                                        Text("v1.6.0 macOS")
-                                            .font(.system(size: 11, design: .monospaced))
-                                            .foregroundColor(vm.currentTheme.primary)
+                        // 5. ABOUT TSROSSA & UPDATES
+                        settingsCard(title: "ABOUT TSROSSA MACOS & SOFTWARE UPDATES") {
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(spacing: 14) {
+                                    TsrossaBrandIcon(size: 48, cornerRadius: 12)
+                                    
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text("tsrossa bit-perfect desktop player")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(vm.currentTheme.textPrimary)
+                                            Spacer()
+                                            Text("v\(updater.currentVersion) macOS")
+                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                                .foregroundColor(vm.currentTheme.primary)
+                                        }
+                                        Text("Native Apple Silicon CoreAudio HAL port with Material You dynamic theming and zero-DSP hardware playback.")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(vm.currentTheme.textSecondary)
                                     }
-                                    Text("Native Apple Silicon CoreAudio HAL port of yukaatsu/tsrossa with Material You dynamic color extraction and zero-DSP hardware playback.")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(vm.currentTheme.textSecondary)
+                                }
+                                
+                                Divider().background(vm.currentTheme.outline.opacity(0.15))
+                                
+                                // Software Update Checker & Installer
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("GitHub OTA Software Update")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundColor(vm.currentTheme.textPrimary)
+                                            Text("github.com/\(updater.repoOwner)/\(updater.repoName)")
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundColor(vm.currentTheme.textSecondary)
+                                        }
+                                        Spacer()
+                                        
+                                        if updater.isChecking {
+                                            ProgressView()
+                                                .scaleEffect(0.7)
+                                        } else {
+                                            Button(action: {
+                                                updater.checkForUpdates()
+                                            }) {
+                                                HStack(spacing: 5) {
+                                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                                        .font(.system(size: 11))
+                                                    Text(updater.hasChecked ? "Check Again" : "Check for Updates")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                }
+                                                .foregroundColor(vm.currentTheme.onPrimary)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(vm.currentTheme.primary)
+                                                .cornerRadius(12)
+                                                .contentShape(Rectangle())
+                                            }
+                                            .buttonStyle(TsrossaScaleButtonStyle())
+                                            .disabled(updater.isDownloading || updater.isExtracting)
+                                        }
+                                    }
+                                    
+                                    if !updater.statusMessage.isEmpty {
+                                        HStack(spacing: 6) {
+                                            Circle()
+                                                .fill(updater.updateAvailable ? TsrossaColors.bitPerfectGold : (updater.isDownloading ? vm.currentTheme.primary : TsrossaColors.terminalGreen))
+                                                .frame(width: 6, height: 6)
+                                            Text(updater.statusMessage)
+                                                .font(.system(size: 11, design: .monospaced))
+                                                .foregroundColor(updater.updateAvailable ? TsrossaColors.bitPerfectGold : vm.currentTheme.textSecondary)
+                                        }
+                                    }
+                                    
+                                    if updater.updateAvailable {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            if !updater.releaseNotes.isEmpty {
+                                                Text("Release Notes:")
+                                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(vm.currentTheme.textMuted)
+                                                Text(updater.releaseNotes)
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(vm.currentTheme.textPrimary)
+                                                    .lineLimit(4)
+                                                    .padding(8)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .background(Color.white.opacity(0.04))
+                                                    .cornerRadius(8)
+                                            }
+                                            
+                                            if updater.isDownloading {
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    ProgressView(value: updater.downloadProgress, total: 1.0)
+                                                        .accentColor(vm.currentTheme.primary)
+                                                    HStack {
+                                                        Text("\(Int(updater.downloadProgress * 100))%")
+                                                            .font(.system(size: 10, design: .monospaced))
+                                                            .foregroundColor(vm.currentTheme.textSecondary)
+                                                        Spacer()
+                                                        Text("Downloading package...")
+                                                            .font(.system(size: 10, design: .monospaced))
+                                                            .foregroundColor(vm.currentTheme.textSecondary)
+                                                    }
+                                                }
+                                            } else if updater.isExtracting {
+                                                HStack(spacing: 8) {
+                                                    ProgressView().scaleEffect(0.7)
+                                                    Text("Installing & relaunching...")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                        .foregroundColor(vm.currentTheme.primary)
+                                                }
+                                            } else {
+                                                Button(action: {
+                                                    updater.startDownloadAndInstall()
+                                                }) {
+                                                    HStack(spacing: 6) {
+                                                        Image(systemName: "arrow.down.circle.fill")
+                                                        Text("Update to v\(updater.latestVersion) & Restart")
+                                                    }
+                                                    .font(.system(size: 12, weight: .bold))
+                                                    .foregroundColor(Color.black)
+                                                    .padding(.horizontal, 16)
+                                                    .padding(.vertical, 8)
+                                                    .background(TsrossaColors.bitPerfectGold)
+                                                    .cornerRadius(12)
+                                                    .contentShape(Rectangle())
+                                                }
+                                                .buttonStyle(TsrossaScaleButtonStyle())
+                                            }
+                                        }
+                                        .padding(10)
+                                        .background(vm.currentTheme.primaryContainer.opacity(0.25))
+                                        .cornerRadius(12)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(TsrossaColors.bitPerfectGold.opacity(0.35), lineWidth: 1)
+                                        )
+                                    }
                                 }
                             }
                         }
