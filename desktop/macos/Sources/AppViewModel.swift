@@ -68,6 +68,8 @@ public class AppViewModel: ObservableObject {
         accentColorMode = mode
         withAnimation(.easeInOut(duration: 0.35)) {
             switch mode {
+            case "ROSE":
+                currentTheme = DynamicMaterialTheme(seedR: 1.0, seedG: 0.18, seedB: 0.33)
             case "MATCHA":
                 currentTheme = DynamicMaterialTheme(seedR: 0.62, seedG: 0.82, seedB: 0.38)
             case "GOLD":

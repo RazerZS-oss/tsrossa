@@ -93,6 +93,7 @@ public struct MainAppView: View {
         }
         .frame(minWidth: 980, minHeight: 680)
         .onAppear {
+            TsrossaBrandLogo.applyMacDockIcon()
             vm.loadInitialMusicDirectory()
         }
     }
@@ -159,16 +160,10 @@ public struct MainAppView: View {
             Spacer()
                 .frame(height: 46)
             
-            // Brand Header
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(vm.currentTheme.primaryContainer)
-                        .frame(width: 34, height: 34)
-                    Image(systemName: "waveform.circle.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(vm.currentTheme.primary)
-                }
+            // Brand Header with Authentic Android tsrossa Crimson Rose Logo
+            HStack(spacing: 11) {
+                TsrossaBrandIcon(size: 38, cornerRadius: 10)
+                    .shadow(color: Color(red: 1.0, green: 0.18, blue: 0.33).opacity(0.35), radius: 8, x: 0, y: 3)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -232,14 +227,14 @@ public struct MainAppView: View {
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(vm.currentTheme.textMuted)
                 
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     sidebarPaletteDot(mode: "DYNAMIC", title: "Auto", color: vm.currentTheme.primary)
+                    sidebarPaletteDot(mode: "ROSE", title: "Rose", color: Color(red: 1.0, green: 0.18, blue: 0.33))
                     sidebarPaletteDot(mode: "MATCHA", title: "Matcha", color: Color(red: 0.62, green: 0.82, blue: 0.38))
                     sidebarPaletteDot(mode: "GOLD", title: "Gold", color: Color(red: 1.0, green: 0.84, blue: 0.0))
-                    sidebarPaletteDot(mode: "CYAN", title: "Cyan", color: Color(red: 0.0, green: 0.898, blue: 1.0))
                 }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 16)
             .padding(.bottom, 14)
             
             // Hardware Signal Path Mini-Card at Bottom of Sidebar (Roon / Audirvana Reference)
@@ -485,29 +480,8 @@ public struct MainAppView: View {
                             )
                             .shadow(color: vm.currentTheme.primary.opacity(0.38), radius: 32, x: 0, y: 16)
                     } else {
-                        RoundedRectangle(cornerRadius: 28)
-                            .fill(
-                                LinearGradient(
-                                    colors: [vm.currentTheme.surfaceContainerHigh, vm.currentTheme.surfaceContainer],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 310, height: 310)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 28)
-                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                            .shadow(color: vm.currentTheme.primary.opacity(0.22), radius: 24, x: 0, y: 12)
-                        
-                        VStack(spacing: 12) {
-                            Image(systemName: "music.quarternote.3")
-                                .font(.system(size: 76))
-                                .foregroundColor(vm.currentTheme.primary)
-                            Text("BIT-PERFECT MASTER")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(vm.currentTheme.textSecondary)
-                        }
+                        TsrossaBrandIcon(size: 310, cornerRadius: 28)
+                            .shadow(color: vm.currentTheme.primary.opacity(0.32), radius: 28, x: 0, y: 14)
                     }
                 }
                 
@@ -714,12 +688,8 @@ public struct MainAppView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .shadow(color: vm.currentTheme.primary.opacity(0.35), radius: 12, x: 0, y: 6)
                     } else {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(vm.currentTheme.primaryContainer)
-                            .frame(width: 96, height: 96)
-                        Image(systemName: "opticaldisc.fill")
-                            .font(.system(size: 42))
-                            .foregroundColor(vm.currentTheme.primary)
+                        TsrossaBrandIcon(size: 96, cornerRadius: 16)
+                            .shadow(color: vm.currentTheme.primary.opacity(0.28), radius: 12, x: 0, y: 6)
                     }
                 }
                 
@@ -1121,8 +1091,9 @@ public struct MainAppView: View {
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundColor(vm.currentTheme.textPrimary)
                                 
-                                HStack(spacing: 8) {
-                                    accentPill(title: "Dynamic (Monet)", mode: "DYNAMIC", color: vm.currentTheme.primary)
+                                HStack(spacing: 6) {
+                                    accentPill(title: "Auto (Monet)", mode: "DYNAMIC", color: vm.currentTheme.primary)
+                                    accentPill(title: "Rose", mode: "ROSE", color: Color(red: 1.0, green: 0.18, blue: 0.33))
                                     accentPill(title: "Matcha", mode: "MATCHA", color: Color(red: 0.62, green: 0.82, blue: 0.38))
                                     accentPill(title: "Gold", mode: "GOLD", color: Color(red: 1.0, green: 0.84, blue: 0.0))
                                     accentPill(title: "Cyan", mode: "CYAN", color: Color(red: 0.0, green: 0.898, blue: 1.0))
@@ -1177,19 +1148,23 @@ public struct MainAppView: View {
                         
                         // 5. ABOUT TSROSSA
                         settingsCard(title: "ABOUT TSROSSA MACOS") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("tsrossa bit-perfect desktop player")
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(vm.currentTheme.textPrimary)
-                                    Spacer()
-                                    Text("v1.6.0 macOS")
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundColor(vm.currentTheme.primary)
+                            HStack(spacing: 14) {
+                                TsrossaBrandIcon(size: 48, cornerRadius: 12)
+                                
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text("tsrossa bit-perfect desktop player")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundColor(vm.currentTheme.textPrimary)
+                                        Spacer()
+                                        Text("v1.6.0 macOS")
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundColor(vm.currentTheme.primary)
+                                    }
+                                    Text("Native Apple Silicon CoreAudio HAL port of yukaatsu/tsrossa with Material You dynamic color extraction and zero-DSP hardware playback.")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(vm.currentTheme.textSecondary)
                                 }
-                                Text("Native Apple Silicon CoreAudio HAL port of yukaatsu/tsrossa with Material You dynamic color extraction and zero-DSP hardware playback.")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(vm.currentTheme.textSecondary)
                             }
                         }
                     }
@@ -1216,12 +1191,7 @@ public struct MainAppView: View {
                                 .frame(width: 56, height: 56)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         } else {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(vm.currentTheme.surfaceContainerHigh)
-                                .frame(width: 56, height: 56)
-                            Image(systemName: "music.note")
-                                .font(.system(size: 20))
-                                .foregroundColor(vm.currentTheme.primary)
+                            TsrossaBrandIcon(size: 56, cornerRadius: 12)
                         }
                     }
                     

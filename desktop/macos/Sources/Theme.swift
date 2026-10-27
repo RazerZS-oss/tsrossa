@@ -85,8 +85,8 @@ public struct DynamicMaterialTheme: Equatable {
         return lhs.primary == rhs.primary && lhs.surface == rhs.surface
     }
     
-    // Tsrossa's signature matcha green fallback (#9ECF60)
-    public static let defaultTheme = DynamicMaterialTheme(seedR: 0.62, seedG: 0.82, seedB: 0.38)
+    // Tsrossa's signature Crimson Rose fallback (#FF2E55) matching Android ic_launcher
+    public static let defaultTheme = DynamicMaterialTheme(seedR: 1.0, seedG: 0.18, seedB: 0.33)
     
     public init(seedR: Double, seedG: Double, seedB: Double) {
         let hsl = rgbToHsl(r: seedR, g: seedG, b: seedB)
@@ -363,3 +363,111 @@ extension View {
         self.modifier(GlassmorphicSurface(cornerRadius: cornerRadius, opacity: opacity, borderColor: borderColor))
     }
 }
+
+// ==============================================================================
+// AUTHENTIC ANDROID TSROSSA LOGO LOADER & VIEW (macOS Dock + Desktop UI)
+// ==============================================================================
+
+public enum TsrossaBrandLogo {
+    public static let launcherImage: NSImage? = {
+        if let bundlePath = Bundle.main.path(forResource: "ic_launcher", ofType: "png"),
+           let img = NSImage(contentsOfFile: bundlePath) {
+            return img
+        }
+        let repoPath = "/Users/alen/Music/tsrossa/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+        if FileManager.default.fileExists(atPath: repoPath),
+           let img = NSImage(contentsOfFile: repoPath) {
+            return img
+        }
+        return nil
+    }()
+    
+    public static let foregroundImage: NSImage? = {
+        if let bundlePath = Bundle.main.path(forResource: "ic_launcher_foreground", ofType: "png"),
+           let img = NSImage(contentsOfFile: bundlePath) {
+            return img
+        }
+        let repoPath = "/Users/alen/Music/tsrossa/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+        if FileManager.default.fileExists(atPath: repoPath),
+           let img = NSImage(contentsOfFile: repoPath) {
+            return img
+        }
+        return launcherImage
+    }()
+    
+    public static func applyMacDockIcon() {
+        if let icon = launcherImage {
+            NSApplication.shared.applicationIconImage = icon
+        }
+    }
+}
+
+public struct TsrossaBrandIcon: View {
+    public var size: CGFloat = 36
+    public var cornerRadius: CGFloat = 10
+    
+    public init(size: CGFloat = 36, cornerRadius: CGFloat = 10) {
+        self.size = size
+        self.cornerRadius = cornerRadius
+    }
+    
+    public var body: some View {
+        ZStack {
+            // Exact radial background from Android ic_launcher_background.xml
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.118, green: 0.071, blue: 0.141), // #1E1224
+                            Color(red: 0.063, green: 0.047, blue: 0.086), // #100C16
+                            Color(red: 0.027, green: 0.020, blue: 0.039)  // #07050A
+                        ],
+                        center: .center,
+                        startRadius: 2,
+                        endRadius: size * 0.72
+                    )
+                )
+                .frame(width: size, height: size)
+            
+            // Subtle crimson aura glow from ic_launcher_background.xml (#47E11D48)
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.882, green: 0.114, blue: 0.282).opacity(0.28),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 1,
+                        endRadius: size * 0.42
+                    )
+                )
+                .frame(width: size * 0.85, height: size * 0.85)
+            
+            if let fg = TsrossaBrandLogo.foregroundImage {
+                Image(nsImage: fg)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size * 1.18, height: size * 1.18)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            } else if let img = TsrossaBrandLogo.launcherImage {
+                Image(nsImage: img)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+        )
+    }
+}
+

@@ -38,6 +38,33 @@ cp "$BUILD_DIR/tsrossa" "$BUILD_DIR/tsrossa.app/Contents/MacOS/"
 cp "$BUILD_DIR/libtsrossa-mac.dylib" "$BUILD_DIR/tsrossa.app/Contents/Frameworks/"
 cp "$DIR/macos/Info.plist" "$BUILD_DIR/tsrossa.app/Contents/"
 
+# Copy authentic Android logo assets & compile native macOS AppIcon.icns
+ANDROID_ICON="$ROOT_DIR/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+ANDROID_ICON_ROUND="$ROOT_DIR/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png"
+ANDROID_ICON_FG="$ROOT_DIR/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+
+if [ -f "$ANDROID_ICON" ]; then
+    cp "$ANDROID_ICON" "$BUILD_DIR/tsrossa.app/Contents/Resources/ic_launcher.png"
+    cp "$ANDROID_ICON_ROUND" "$BUILD_DIR/tsrossa.app/Contents/Resources/ic_launcher_round.png" 2>/dev/null || true
+    cp "$ANDROID_ICON_FG" "$BUILD_DIR/tsrossa.app/Contents/Resources/ic_launcher_foreground.png" 2>/dev/null || true
+
+    ICONSET_DIR="$BUILD_DIR/AppIcon.iconset"
+    rm -rf "$ICONSET_DIR"
+    mkdir -p "$ICONSET_DIR"
+    sips -z 16 16     "$ANDROID_ICON" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null 2>&1
+    sips -z 32 32     "$ANDROID_ICON" --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null 2>&1
+    sips -z 32 32     "$ANDROID_ICON" --out "$ICONSET_DIR/icon_32x32.png" >/dev/null 2>&1
+    sips -z 64 64     "$ANDROID_ICON" --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null 2>&1
+    sips -z 128 128   "$ANDROID_ICON" --out "$ICONSET_DIR/icon_128x128.png" >/dev/null 2>&1
+    sips -z 256 256   "$ANDROID_ICON" --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null 2>&1
+    sips -z 256 256   "$ANDROID_ICON" --out "$ICONSET_DIR/icon_256x256.png" >/dev/null 2>&1
+    sips -z 512 512   "$ANDROID_ICON" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null 2>&1
+    sips -z 512 512   "$ANDROID_ICON" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null 2>&1
+    sips -z 1024 1024 "$ANDROID_ICON" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null 2>&1
+    iconutil -c icns "$ICONSET_DIR" -o "$BUILD_DIR/tsrossa.app/Contents/Resources/AppIcon.icns" || true
+    rm -rf "$ICONSET_DIR"
+fi
+
 codesign --force --deep -s - "$BUILD_DIR/tsrossa.app"
 
 echo "==> Packaging tsrossa-1.6.0-macos.zip..."
