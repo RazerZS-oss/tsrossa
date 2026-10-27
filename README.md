@@ -1,131 +1,145 @@
-<p align="center">
-  <img src="tsrossa.png" alt="tsrossa Banner" width="100%"/>
-</p>
+# tsrossa
 
-<h1 align="center">tsrossa</h1>
+Direct-to-DAC Bit-Perfect USB & CoreAudio Audio Player for macOS and Android.
 
-<p align="center">
-  <strong>Direct-to-DAC Bit-Perfect USB Audio Player for Android</strong><br/>
-  High-fidelity C++17 audio engine bypassing Android AudioFlinger via kernel-level USB transport.
-</p>
-
-<p align="center">
-  <a href="https://github.com/yukaatsu/tsrossa/releases"><img src="https://img.shields.io/badge/Release-v1.6.0--beta-orange.svg" alt="Release v1.6.0-beta"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Platform-Android%208.0%2B-2ea44f.svg" alt="Platform"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Engine-Native%20C%2B%2B17%20%2F%20libusb-0052cc.svg" alt="Engine"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Audio-Bit--Perfect%20UAC1%20%7C%20UAC2-success.svg" alt="Audio"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Formats-FLAC%20%7C%20WAV-blueviolet.svg" alt="Supported Formats"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg" alt="License"></a>
-  <a href="https://bagibagi.co/Yukaatsu"><img src="https://img.shields.io/badge/Donate-BagiBagi-FFDD00.svg?logo=buy-me-a-coffee&logoColor=black" alt="Support"></a>
-</p>
+tsrossa is an open-source, bit-perfect music player developed specifically for audiophiles and high-resolution hardware setups. It bypasses standard operating system mixers (Android AudioFlinger and macOS CoreAudio system mixer) to deliver bit-perfect, zero-jitter linear PCM directly to external USB DACs and high-fidelity output hardware.
 
 ---
 
-## Overview
+## Supported Platforms
 
-**tsrossa** is an open-source, bit-perfect music player developed specifically for audiophile USB DAC setups on Android. 
-
-Standard Android audio architectures route playback through the system `AudioTrack` API and `AudioFlinger` mixing service. This pipeline enforces fixed 48 kHz sample-rate conversion (SRC), applies non-linear software digital volume attenuation, and introduces buffer jitter through multiple OS layers.
-
-tsrossa eliminates the entire Android audio framework. By querying Android's USB Host API solely to acquire the raw device file descriptor (`usbfs`), the native C++17 engine interfaces directly with external DACs using `libusb-1.0`. PCM streams are transmitted directly across asynchronous USB Isochronous endpoints with exact hardware clock configuration, zero sample-rate conversion, zero DSP processing, and true unity gain.
+- **macOS**: Apple Silicon (M1/M2/M3/M4) and Intel (x86_64), macOS 12.0+
+- **Android**: Android 8.0 (API 26) through Android 15+ (API 35) with USB Host OTG
 
 ---
 
-## Interface
+## Core Engineering Features
 
-<table align="center">
-  <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/01_now_playing.png" alt="Now Playing Screen" width="100%"/>
-      <br/><b>Now Playing Screen</b><br/>
-      <sub>Clean Material 3 interface with dynamic album art palette, quick tactile header controls, and hardware volume pill</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/02_library.png" alt="Music Library" width="100%"/>
-      <br/><b>Music Library</b><br/>
-      <sub>Ultra-fast cached track browser with live search, folder picking, intelligent title parsing, and sorting options</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/03_system_logs.png" alt="Hardware Telemetry" width="100%"/>
-      <br/><b>Hardware Telemetry</b><br/>
-      <sub>Real-time UAC2 endpoint audit, hardware clock verification, RAM buffer state, and 1-tap report export</sub>
-    </td>
-  </tr>
-</table>
+### 1. Bit-Perfect Direct Audio Transport
+- **macOS**: Direct CoreAudio HAL integration using Exclusive Hog Mode (`kAudioDevicePropertyHogMode`), bypassing the macOS system audio mixer and sample-rate converters. Supports dynamic hardware clock switching to match native file sampling rates (44.1 kHz up to 192 kHz / 384 kHz).
+- **Android**: Direct kernel-level USB transport via `libusb-1.0` and Linux `usbfs`, bypassing `AudioTrack` and `AudioFlinger`. Communicates directly with USB Audio Class (UAC1 / UAC2) endpoints with asynchronous isochronous transfers.
 
----
+### 2. POSIX Memory Pinning (mlock)
+- Audio files (FLAC and WAV) are pre-decoded into 32-bit linear PCM memory buffers prior to playback.
+- Employs POSIX `mlock()` to lock audio pages in physical RAM, preventing operating system paging, flash memory I/O spikes, and micro-stuttering.
 
-## Architecture & Engineering
+### 3. Dynamic Play Queue & Playlist Management
+- Google / Spotify style dynamic playback queue:
+  - **Play Next**: Inserts a track at the top of the queue to play immediately after the active song.
+  - **Add to Queue**: Appends tracks to the custom dynamic sequence.
+  - **Queue Workspace (Tab 3)**: Interactive queue manager with Now Playing status, drag/button reordering, individual track removal, and bulk queue clearing.
+  - **Save Queue as Playlist**: 1-click conversion of active playback queue into a permanent playlist.
+  - **Smart Filter Playlists**: Create instant keyword-based or artist-based playlists (e.g. Polyphia).
 
-### 1. Direct Kernel USB Transport (`usbfs` + `libusb-1.0`)
-- Circumvents `AudioTrack`, `AudioFlinger`, and vendor audio HAL layers entirely.
-- Establishes a dedicated native C++ transfer loop utilizing Linux `usbfs` handles.
-- Schedules asynchronous Isochronous transfers directly to the DAC's audio streaming endpoint.
+### 4. Audiophile Filtering & Fast Binary Parsing
+- Dedicated binary header parser (`MetadataScanner`) for instantaneous reading of FLAC `STREAMINFO` and WAV `fmt ` chunks without full-file I/O overhead.
+- Multi-dimensional audiophile filter bar: 1-click filtering by format (FLAC, WAV), bit depth (24-bit, 16-bit, 8-bit), and sample rate (44.1k, 48k, 88.2k, 96k, 192k).
+- Spotify-style typeahead search with instant `Enter`-to-play execution.
 
-### 2. Hardware Clock & Rate Negotiation (UAC1 / UAC2)
-- Inspects USB Audio Class descriptors to map physical Clock Source and Clock Selector entities.
-- Configures sample rates directly at the hardware crystal oscillator via `CS_SAMPLING_FREQ_CONTROL` requests.
-- Eliminates Android's mandatory 48 kHz resampler: 44.1 kHz audio remains native 44.1 kHz, 96 kHz remains 96 kHz, up to 384 kHz.
+### 5. Hardware Diagnostics & Hot-Plug Detection
+- Real-time CoreAudio hardware listener detecting 3.5mm headphone jack and external USB DAC connections on the fly, with automated fallback to internal speakers when unplugged.
+- Comprehensive hardware telemetry modal (Cmd + D) reporting active sample rate, bit depth, buffer size, Hog Mode state, and RAM buffer allocation.
 
-### 3. In-Memory PCM Preload & Memory Locking (`mlock`)
-- Decodes FLAC and WAV files into an uncompressed 32-bit linear PCM memory buffer prior to playback.
-- Uses POSIX `mlock()` to lock audio pages in physical RAM, preventing Linux kernel swapping, flash memory I/O spikes, and micro-stutters.
-
-### 4. Hardware Feature Unit Volume & True Unity Gain
-- Implements logarithmic volume attenuation directly on the DAC hardware via USB Feature Unit volume requests (`FU_VOLUME_CONTROL`).
-- Full volume (100% / 0.0 dB) engages true Bit-Perfect Unity Gain, preserving exact 0 dBFS dynamic range without digital math distortion.
-- An optional software 64-bit dithered attenuation fallback is available for DACs lacking hardware volume units.
-
-### 5. Gapless Streaming Handover
-- Secondary background worker decodes the next queued track into RAM prior to current track completion.
-- Seamlessly switches audio frames across endpoint boundaries without stream teardown, preventing pops, clicks, or timing gaps.
+### 6. In-App Automated OTA Updates (macOS)
+- Built-in GitHub Releases updater (`UpdateManager`).
+- Checks for new versions on launch or on demand, downloads latest application archives, verifies integrity, and updates the installation in-place.
 
 ---
 
 ## Technical Specifications
 
-| Parameter | Supported Range / Specification |
+| Parameter | Specification |
 | :--- | :--- |
-| **Supported Formats** | • **FLAC** (`.flac`): 16-bit, 24-bit, 32-bit integer PCM (44.1 kHz to 384 kHz)<br/>• **WAV** (`.wav`, `.wave`): 16-bit, 24-bit, 32-bit Linear PCM, and 32-bit IEEE Float |
-| **Output Target** | External USB DACs via USB-C OTG (Dongles, Portable DAC/Amps, Desktop DACs) |
+| **Supported Formats** | FLAC (.flac): 16-bit, 24-bit, 32-bit integer PCM (44.1 kHz to 384 kHz)<br/>WAV (.wav, .wave): 16-bit, 24-bit, 32-bit Linear PCM, and 32-bit IEEE Float |
+| **macOS Output** | CoreAudio HAL Direct Output, External USB DACs, Built-in Headphone Jack, Internal Speakers |
+| **Android Output** | External USB DACs via USB-C OTG (Dongles, Portable DAC/Amps, Desktop DACs) |
 | **USB Audio Protocols** | USB Audio Class 1.0 (UAC1) and USB Audio Class 2.0 (UAC2) |
-| **Endpoint Sync** | Asynchronous and Adaptive Isochronous endpoints |
-| **Android Version** | Android 8.0 (API 26) through Android 15+ (API 35) |
-| **Permissions Required** | `android.permission.READ_MEDIA_AUDIO` / `READ_EXTERNAL_STORAGE`, `USB_PERMISSION` |
-
-> **Design Scope**: tsrossa is designed strictly as a high-fidelity bit-perfect transport for external USB DACs. Built-in phone speakers, internal 3.5mm jacks, and lossy formats (MP3, AAC, OGG) are intentionally excluded to keep the native audio pipeline clean and uncompromised.
+| **Memory Buffer** | POSIX mlock() RAM pinning, zero SSD page faults |
+| **License** | Apache License 2.0 |
 
 ---
 
-## Quick Start
+## Installation
 
-### Installation
-1. Download the latest APK from [GitHub Releases](https://github.com/yukaatsu/tsrossa/releases).
-2. Install the APK on your device.
-3. Connect your USB DAC via OTG. Grant USB access permission when prompted.
-4. Select a FLAC or WAV file in the Library browser to begin bit-perfect playback.
+### For End Users (Pre-Built Binaries)
 
-### Hardware Diagnostics
-Tap **`[LOGS]`** in the header to view the real-time hardware status modal:
-- Negotiated sample rate & bit depth
-- Active interface endpoints and UAC protocol version
-- Bit-perfect transmission verification
-- Zero-jitter RAM playback and gapless engine status
+End users do not need to clone the repository or install compilation toolchains.
 
-Use **`[COPY REPORT]`** or **`[SHARE REPORT]`** to include hardware telemetry when opening an issue.
+#### macOS
+1. Download the latest `tsrossa-*-macos.zip` from [GitHub Releases](https://github.com/RazerZS-oss/tsrossa/releases/latest).
+2. Extract the archive to obtain `tsrossa.app`.
+3. Drag `tsrossa.app` into your `/Applications` folder.
+4. Launch `tsrossa`.
+   - Subsequent updates can be installed directly from inside the app via the **Update** button in the top navigation bar.
+
+#### Android
+1. Download the latest `tsrossa-*.apk` from [GitHub Releases](https://github.com/RazerZS-oss/tsrossa/releases/latest).
+2. Install the APK on your Android device (ensure "Install from unknown sources" is permitted for your browser/file manager).
+3. Connect your USB DAC via OTG and grant USB permission when prompted.
 
 ---
 
-## Support & Contributions
+### For Developers (Building from Source)
 
-If you find tsrossa useful for your portable audiophile setup, consider supporting ongoing development:
+Prerequisites:
+- macOS: Xcode Command Line Tools (`xcode-select --install`), macOS 12+, Apple Silicon or Intel Mac.
+- Android: JDK 17, Android SDK (API 34/35), Android NDK (r25+), CMake 3.22+.
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Donate-BagiBagi-FFDD00.svg?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://bagibagi.co/Yukaatsu)
+#### 1. Clone the Repository
+```bash
+git clone https://github.com/RazerZS-oss/tsrossa.git
+cd tsrossa
+```
 
-Contributions, issue reports, and DAC compatibility logs are welcome on [GitHub Issues](https://github.com/yukaatsu/tsrossa/issues).
+#### 2. Build macOS Application Bundle
+To compile the C++ CoreAudio audio engine, compile Swift sources, and assemble `/Applications`-ready `tsrossa.app`:
+
+```bash
+chmod +x desktop/build_mac.sh
+./desktop/build_mac.sh
+```
+
+The resulting application and distribution archive will be located at:
+- Application: `desktop/build/tsrossa.app`
+- Distribution ZIP: `desktop/build/tsrossa-1.6.0-macos.zip`
+
+To deploy locally to `/Applications`:
+```bash
+rm -rf /Applications/tsrossa.app
+cp -R desktop/build/tsrossa.app /Applications/tsrossa.app
+xattr -cr /Applications/tsrossa.app
+codesign --force --deep -s - /Applications/tsrossa.app
+open /Applications/tsrossa.app
+```
+
+#### 3. Build Android APK
+To compile the native C++17 USB audio engine and assemble the Android APK:
+
+```bash
+./gradlew assembleRelease
+```
+
+The output APK will be located at:
+- `app/build/outputs/apk/release/app-release.apk`
+
+---
+
+## User Interface Overview
+
+- **Now Playing (Cmd + 1)**: Primary playback view featuring album artwork, lossless signal path inspector, audiophile format badges, and queue continuation cards.
+- **Music Library (Cmd + 2)**: Library table browser with instant search, format filters (FLAC/WAV, 24-bit/16-bit/8-bit, kHz rates), and playlist navigation.
+- **Play Queue (Cmd + 3)**: Dedicated queue workspace to manage Up Next tracks, reorder items, clear active sequences, and save queues to permanent playlists.
+- **DAC & Settings (Cmd + 4)**: Hardware configuration panel for CoreAudio device selection, Exclusive Hog Mode toggle, Dynamic Clock Switching, and theme customization.
+- **Hardware Telemetry (Cmd + D)**: Live diagnostic monitor detailing DAC hardware parameters, frame buffers, and bit-perfect lock status.
+
+---
+
+## Contributing
+
+Pull requests, issue reports, and DAC compatibility logs are welcome. Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ---
 
 ## License
 
-tsrossa is distributed under the [Apache License 2.0](LICENSE).
+tsrossa is licensed under the [Apache License 2.0](LICENSE).
