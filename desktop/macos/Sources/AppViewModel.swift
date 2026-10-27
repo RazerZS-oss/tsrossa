@@ -4,16 +4,16 @@ import AppKit
 import SwiftUI
 
 public enum AppTab: String, CaseIterable {
-    case nowPlaying = "Now Playing"
     case library = "Library"
-    case playlist = "Queue"
-    case settings = "Audio Devices"
+    case playlist = "Playlist"
+    case nowPlaying = "Now Playing"
+    case settings = "Settings"
 }
 
 public class AppViewModel: ObservableObject {
     public static let shared = AppViewModel()
     
-    @Published public var activeTab: AppTab = .library
+    @Published public var activeTab: AppTab = .nowPlaying
     @Published public var tracks: [TrackMetadata] = []
     @Published public var searchText: String = ""
     @Published public var showTelemetry: Bool = false
@@ -27,7 +27,6 @@ public class AppViewModel: ObservableObject {
     // Material 3 Dynamic Theming & Artwork State
     @Published public var currentArtwork: NSImage? = nil
     @Published public var currentTheme: DynamicMaterialTheme = .defaultTheme
-    @Published public var hoveredTrackPath: String? = nil
     
     private var keyMonitor: Any?
     
@@ -137,13 +136,12 @@ public class AppViewModel: ObservableObject {
         return String(format: "%02d:%02d", mins, secs)
     }
     
-    // Keyboard Shortcut Monitor for Desktop
+    // Desktop Keyboard Shortcut Monitor
     public func setupKeyboardMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
             
-            // Check if user is typing in a text field
             let firstResponder = NSApp.keyWindow?.firstResponder
             let isEditingText = firstResponder is NSTextView && (firstResponder as? NSTextView)?.isEditable == true
             
@@ -159,20 +157,16 @@ public class AppViewModel: ObservableObject {
             
             if isCommand {
                 switch event.keyCode {
-                case 3: // Cmd + F -> Focus search
-                    self.activeTab = .library
-                    NotificationCenter.default.post(name: NSNotification.Name("FocusSearchField"), object: nil)
-                    return nil
                 case 18: // Cmd + 1 -> Library
                     self.activeTab = .library
                     return nil
-                case 19: // Cmd + 2 -> Now Playing
-                    self.activeTab = .nowPlaying
-                    return nil
-                case 20: // Cmd + 3 -> Queue
+                case 19: // Cmd + 2 -> Playlist
                     self.activeTab = .playlist
                     return nil
-                case 21: // Cmd + 4 -> Settings / Devices
+                case 20: // Cmd + 3 -> Now Playing
+                    self.activeTab = .nowPlaying
+                    return nil
+                case 21: // Cmd + 4 -> Settings
                     self.activeTab = .settings
                     return nil
                 case 2: // Cmd + D -> Diagnostics
