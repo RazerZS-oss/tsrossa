@@ -87,6 +87,17 @@ public class AppViewModel: ObservableObject {
     @Published public var queueTabMode: String = "QUEUE" // "QUEUE" or "LYRICS"
     @Published public var isLoadingLyrics: Bool = false
     
+    // Theater / Fullscreen Mode (YouTube Music style Cmd + F)
+    @Published public var isTheaterMode: Bool = false
+    @Published public var theaterTabMode: String = "LYRICS" // "LYRICS" or "QUEUE"
+    
+    // Autoplay Infinite Radio (YouTube Music / Spotify style)
+    @Published public var isAutoplayRadio: Bool = true {
+        didSet {
+            UserDefaults.standard.set(isAutoplayRadio, forKey: "tsrossa.isAutoplayRadio")
+        }
+    }
+    
     public var hasLyrics: Bool {
         return !currentLyrics.isEmpty
     }
@@ -154,6 +165,9 @@ public class AppViewModel: ObservableObject {
     private let playlistsStorageKey = "tsrossa.userPlaylists.v1"
     
     public init() {
+        if UserDefaults.standard.object(forKey: "tsrossa.isAutoplayRadio") != nil {
+            isAutoplayRadio = UserDefaults.standard.bool(forKey: "tsrossa.isAutoplayRadio")
+        }
         loadSavedPlaylists()
         loadSavedLikedTracks()
         setupKeyboardMonitor()
@@ -503,6 +517,61 @@ public class AppViewModel: ObservableObject {
         }
     }
     
+    // =========================================================================
+    // AUTOPLAY INFINITE RADIO & SMART CONTINUATION (YouTube Music Style)
+    // =========================================================================
+    public func getAutoplayRecommendations() -> [TrackMetadata] {
+        guard let current = AudioEngine.shared.currentTrack else { return [] }
+        var pool: [TrackMetadata] = []
+        var seenPaths = Set<String>()
+        seenPaths.insert(current.path)
+        for t in upNextQueue { seenPaths.insert(t.path) }
+        
+        // 1. Same artist
+        let artistMatches = tracks.filter {
+            !seenPaths.contains($0.path) &&
+            !$0.artist.isEmpty &&
+            $0.artist != "Unknown Artist" &&
+            $0.artist.localizedCaseInsensitiveContains(current.artist)
+        }
+        for t in artistMatches {
+            seenPaths.insert(t.path)
+            pool.append(t)
+        }
+        
+        // 2. Same album
+        if !current.album.isEmpty && current.album != "Unknown Album" {
+            let albumMatches = tracks.filter {
+                !seenPaths.contains($0.path) &&
+                $0.album.localizedCaseInsensitiveContains(current.album)
+            }
+            for t in albumMatches {
+                seenPaths.insert(t.path)
+                pool.append(t)
+            }
+        }
+        
+        // 3. Same audiophile bit depth and sample rate
+        let formatMatches = tracks.filter {
+            !seenPaths.contains($0.path) &&
+            $0.bitDepth == current.bitDepth &&
+            $0.sampleRate == current.sampleRate
+        }
+        for t in formatMatches {
+            seenPaths.insert(t.path)
+            pool.append(t)
+        }
+        
+        // 4. Remaining tracks from library
+        let remaining = tracks.filter { !seenPaths.contains($0.path) }.shuffled()
+        for t in remaining {
+            if pool.count >= 15 { break }
+            pool.append(t)
+        }
+        
+        return Array(pool.prefix(10))
+    }
+    
     public func playNextTrack() {
         // 1. If user queued tracks manually (Play Next / Add to Queue), play the queue first!
         if !upNextQueue.isEmpty {
@@ -514,16 +583,32 @@ public class AppViewModel: ObservableObject {
         // 2. Otherwise fall back to library / playlist context
         let contextList = !filteredTracks.isEmpty ? filteredTracks : tracks
         guard !contextList.isEmpty else { return }
+        
         if let current = AudioEngine.shared.currentTrack, let idx = contextList.firstIndex(where: { $0.path == current.path }) {
-            let nextIdx: Int
-            if isShuffle && contextList.count > 1 {
-                var rand = Int.random(in: 0..<contextList.count)
-                if rand == idx { rand = (idx + 1) % contextList.count }
-                nextIdx = rand
+            if idx < contextList.count - 1 {
+                if isShuffle && contextList.count > 1 {
+                    var rand = Int.random(in: 0..<contextList.count)
+                    if rand == idx { rand = (idx + 1) % contextList.count }
+                    AudioEngine.shared.play(track: contextList[rand])
+                } else {
+                    AudioEngine.shared.play(track: contextList[idx + 1])
+                }
             } else {
-                nextIdx = (idx + 1) % contextList.count
+                // Reached the end of current playlist / context!
+                if isRepeat {
+                    AudioEngine.shared.play(track: contextList[0])
+                } else if isAutoplayRadio {
+                    let recommendations = getAutoplayRecommendations()
+                    if let radioTrack = recommendations.first {
+                        AudioEngine.shared.play(track: radioTrack)
+                        showToast("Autoplay Radio: Playing '\(radioTrack.title)' by \(radioTrack.artist)")
+                    } else {
+                        AudioEngine.shared.play(track: contextList[0])
+                    }
+                } else {
+                    AudioEngine.shared.play(track: contextList[0])
+                }
             }
-            AudioEngine.shared.play(track: contextList[nextIdx])
         } else if let first = contextList.first {
             AudioEngine.shared.play(track: first)
         }
@@ -630,8 +715,12 @@ public class AppViewModel: ObservableObject {
             
             if isEditingText {
                 if event.type == .keyDown {
-                    // Escape -> unfocus text field or close modal
+                    // Escape -> unfocus text field, close modal, or exit theater
                     if event.keyCode == 53 {
+                        if self.isTheaterMode {
+                            self.isTheaterMode = false
+                            return nil
+                        }
                         NSApp.keyWindow?.makeFirstResponder(nil)
                         return nil
                     }
@@ -661,10 +750,32 @@ public class AppViewModel: ObservableObject {
                 return event
             }
             
+            if event.keyCode == 53 { // Global Escape
+                if self.isTheaterMode {
+                    self.isTheaterMode = false
+                    return nil
+                }
+                if self.showNewPlaylistModal {
+                    self.showNewPlaylistModal = false
+                    return nil
+                }
+                if self.showSaveQueueModal {
+                    self.showSaveQueueModal = false
+                    return nil
+                }
+                if self.showTelemetry {
+                    self.showTelemetry = false
+                    return nil
+                }
+            }
+            
             let isCommand = event.modifierFlags.contains(.command)
             
             if isCommand {
                 switch event.keyCode {
+                case 3: // Cmd + F -> Toggle Theater Mode (YouTube Music style)
+                    self.isTheaterMode.toggle()
+                    return nil
                 case 18: // Cmd + 1 -> Now Playing
                     self.activeTab = .nowPlaying
                     return nil
