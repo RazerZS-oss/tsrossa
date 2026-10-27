@@ -28,6 +28,18 @@ public class AppViewModel: ObservableObject {
     @Published public var currentArtwork: NSImage? = nil
     @Published public var currentTheme: DynamicMaterialTheme = .defaultTheme
     
+    // Audiophile & CoreAudio Engine Settings
+    @Published public var isExclusiveHogMode: Bool = true
+    @Published public var isAutoClockSwitch: Bool = true
+    @Published public var isRamPlayback: Bool = true
+    @Published public var keepScreenAwake: Bool = true
+    @Published public var bufferProfile: String = "192ms Jitter Safe"
+    
+    // Appearance & Customization Settings
+    @Published public var themeMode: String = "DARK" // DARK, OLED, LIGHT
+    @Published public var bgCanvasMode: String = "DYNAMIC" // DYNAMIC, AURA, BLACK
+    @Published public var accentColorMode: String = "DYNAMIC" // DYNAMIC, MATCHA, GOLD, CYAN
+    
     private var keyMonitor: Any?
     
     public init() {
@@ -45,7 +57,29 @@ public class AppViewModel: ObservableObject {
             guard let self = self else { return }
             withAnimation(.easeInOut(duration: 0.50)) {
                 self.currentArtwork = artwork
-                self.currentTheme = theme
+                if self.accentColorMode == "DYNAMIC" {
+                    self.currentTheme = theme
+                }
+            }
+        }
+    }
+    
+    public func setAccentColorMode(_ mode: String) {
+        accentColorMode = mode
+        withAnimation(.easeInOut(duration: 0.35)) {
+            switch mode {
+            case "MATCHA":
+                currentTheme = DynamicMaterialTheme(seedR: 0.62, seedG: 0.82, seedB: 0.38)
+            case "GOLD":
+                currentTheme = DynamicMaterialTheme(seedR: 1.0, seedG: 0.84, seedB: 0.0)
+            case "CYAN":
+                currentTheme = DynamicMaterialTheme(seedR: 0.0, seedG: 0.90, seedB: 1.0)
+            default: // DYNAMIC
+                if let track = AudioEngine.shared.currentTrack {
+                    updateThemeForTrack(track: track)
+                } else {
+                    currentTheme = DynamicMaterialTheme.defaultTheme
+                }
             }
         }
     }

@@ -21,31 +21,11 @@ public struct MainAppView: View {
         ZStack {
             // ==========================================
             // MATERIAL YOU DYNAMIC THEMED BACKGROUND
-            // Changes dynamically per track!
             // ==========================================
-            LinearGradient(
-                colors: [
-                    vm.currentTheme.surfaceContainerLowest,
-                    vm.currentTheme.surface
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.5), value: vm.currentTheme)
-            
-            // Dynamic Ambient Subtle Glow
-            RadialGradient(
-                colors: [vm.currentTheme.primary.opacity(0.18), Color.clear],
-                center: .top,
-                startRadius: 40,
-                endRadius: 500
-            )
-            .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.5), value: vm.currentTheme)
+            backgroundLayer
             
             VStack(spacing: 0) {
-                // 1. TOP HEADER (tsrossa ● Bit-Perfect + Quick Action Icons)
+                // 1. TOP HEADER (Traffic-light friendly spacing)
                 topHeaderView
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
@@ -66,7 +46,7 @@ public struct MainAppView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
-                // 3. FLOATING MINI-PLAYER (when on Library or Playlist and playing)
+                // 3. FLOATING MINI-PLAYER (when on Library, Playlist, or Settings and playing)
                 if vm.activeTab != .nowPlaying && engine.currentTrack != nil {
                     floatingMiniPlayer
                         .padding(.horizontal, 20)
@@ -78,6 +58,8 @@ public struct MainAppView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 16)
             }
+            .frame(maxWidth: 580)
+            .frame(maxWidth: .infinity)
             
             // SYSTEM LOGS MODAL OVERLAY
             if vm.showTelemetry {
@@ -89,9 +71,50 @@ public struct MainAppView: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .frame(minWidth: 460, idealWidth: 480, maxWidth: 520, minHeight: 840, idealHeight: 880, maxHeight: 920)
+        .frame(minWidth: 460, minHeight: 780)
         .onAppear {
             vm.loadInitialMusicDirectory()
+        }
+    }
+    
+    // Background Canvas Layer (Configurable via Settings)
+    @ViewBuilder
+    private var backgroundLayer: some View {
+        if vm.bgCanvasMode == "BLACK" {
+            Color.black.ignoresSafeArea()
+        } else if vm.bgCanvasMode == "AURA", let artwork = vm.currentArtwork {
+            ZStack {
+                vm.currentTheme.surfaceContainerLowest.ignoresSafeArea()
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .blur(radius: 75)
+                    .opacity(0.35)
+                    .saturation(1.4)
+                    .ignoresSafeArea()
+            }
+            .animation(.easeInOut(duration: 0.5), value: vm.currentTheme)
+        } else {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        vm.currentTheme.surfaceContainerLowest,
+                        vm.currentTheme.surface
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                
+                RadialGradient(
+                    colors: [vm.currentTheme.primary.opacity(0.18), Color.clear],
+                    center: .top,
+                    startRadius: 40,
+                    endRadius: 550
+                )
+                .ignoresSafeArea()
+            }
+            .animation(.easeInOut(duration: 0.5), value: vm.currentTheme)
         }
     }
     
@@ -100,7 +123,7 @@ public struct MainAppView: View {
     // ==========================================
     private var topHeaderView: some View {
         HStack(alignment: .center, spacing: 0) {
-            // Dedicated spacing for macOS traffic lights (Close, Minimize, Zoom)
+            // Dedicated clearance for macOS window buttons (Close, Minimize, Zoom)
             Spacer()
                 .frame(width: 64)
             
@@ -120,7 +143,7 @@ public struct MainAppView: View {
             
             Spacer()
             
-            // 4 Circular Quick Action Buttons (Guaranteed 100% full click area!)
+            // 4 Circular Quick Action Buttons (100% full click area!)
             HStack(spacing: 8) {
                 headerCircleButton(icon: "waveform.path.ecg") {
                     engine.updateTelemetry()
@@ -155,7 +178,7 @@ public struct MainAppView: View {
                     .foregroundColor(vm.currentTheme.textSecondary)
             }
             .frame(width: 36, height: 36)
-            .contentShape(Circle()) // Entire circle is 100% clickable!
+            .contentShape(Circle())
         }
         .buttonStyle(TsrossaScaleButtonStyle())
     }
@@ -337,7 +360,7 @@ public struct MainAppView: View {
                 .buttonStyle(TsrossaScaleButtonStyle())
             }
             
-            // Volume Pill & Queue Row (Material You Dynamic Tones)
+            // Volume Pill & Queue Row
             HStack(spacing: 12) {
                 // Wide Volume Pill
                 HStack {
@@ -532,7 +555,6 @@ public struct MainAppView: View {
                 
                 Spacer()
                 
-                // Duration & Details
                 Text(vm.formatTime(track.durationSeconds))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(vm.currentTheme.textMuted)
@@ -540,7 +562,7 @@ public struct MainAppView: View {
             .padding(10)
             .background(isCurrent ? vm.currentTheme.primaryContainer.opacity(0.28) : Color.clear)
             .cornerRadius(12)
-            .contentShape(Rectangle()) // Entire row is 100% clickable!
+            .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -661,13 +683,13 @@ public struct MainAppView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 48)
-            .contentShape(Rectangle()) // Entire tab is 100% clickable!
+            .contentShape(Rectangle())
         }
         .buttonStyle(TsrossaScaleButtonStyle())
     }
     
     // ==========================================
-    // PLAYLIST & SETTINGS VIEWS
+    // PLAYLIST & QUEUE VIEW
     // ==========================================
     private var playlistView: some View {
         VStack(spacing: 16) {
@@ -713,59 +735,328 @@ public struct MainAppView: View {
         }
     }
     
+    // ==========================================
+    // COMPLETE SETTINGS SCREEN (Audiophile & Theme)
+    // ==========================================
     private var settingsView: some View {
-        VStack(spacing: 20) {
-            Text("Audio Output & Settings")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(vm.currentTheme.textPrimary)
-                .padding(.top, 24)
-            
-            VStack(alignment: .leading, spacing: 14) {
-                Text("OUTPUT DEVICE SELECTION")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(vm.currentTheme.primary)
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("Audio Output & Settings")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(vm.currentTheme.textPrimary)
+                    .padding(.top, 16)
                 
-                ForEach(engine.devices) { dev in
-                    Button(action: { engine.selectDevice(id: dev.id) }) {
-                        HStack {
-                            Image(systemName: dev.isUsb ? "cable.connector" : "speaker.wave.2")
-                                .foregroundColor(vm.currentTheme.primary)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(dev.name)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(vm.currentTheme.textPrimary)
-                                Text(dev.isUsb ? "External USB DAC (UAC2)" : "Internal CoreAudio Output")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(vm.currentTheme.textSecondary)
+                // 1. OUTPUT DEVICE & DAC HARDWARE
+                settingsCard(title: "OUTPUT DEVICE SELECTION") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(engine.devices) { dev in
+                            Button(action: { engine.selectDevice(id: dev.id) }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: dev.isUsb ? "cable.connector" : "speaker.wave.2")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(vm.currentTheme.primary)
+                                        .frame(width: 24)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(dev.name)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(vm.currentTheme.textPrimary)
+                                        Text(dev.isUsb ? "External USB DAC (UAC2 Direct Hardware Link)" : "Internal Apple Silicon CoreAudio Hardware")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(vm.currentTheme.textSecondary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    if dev.id == engine.selectedDeviceId {
+                                        HStack(spacing: 6) {
+                                            Text(String(format: "%.1f kHz", dev.sampleRate / 1000.0))
+                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                .foregroundColor(vm.currentTheme.primary)
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(vm.currentTheme.primary)
+                                        }
+                                    }
+                                }
+                                .padding(12)
+                                .background(dev.id == engine.selectedDeviceId ? vm.currentTheme.primaryContainer.opacity(0.35) : Color.white.opacity(0.04))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(dev.id == engine.selectedDeviceId ? vm.currentTheme.primary.opacity(0.4) : Color.clear, lineWidth: 1)
+                                )
+                                .contentShape(Rectangle())
                             }
-                            
-                            Spacer()
-                            
-                            if dev.id == engine.selectedDeviceId {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(vm.currentTheme.primary)
-                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .padding(12)
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(12)
-                        .contentShape(Rectangle())
+                        
+                        Divider().background(vm.currentTheme.outline.opacity(0.15))
+                        
+                        settingsToggleRow(
+                            title: "Bit-Perfect Exclusive Lock (Hog Mode)",
+                            subtitle: "Direct DAC ownership, completely bypassing macOS system audio mixer",
+                            isOn: $vm.isExclusiveHogMode
+                        )
+                        
+                        Divider().background(vm.currentTheme.outline.opacity(0.15))
+                        
+                        settingsToggleRow(
+                            title: "Hardware Sample Rate Switching",
+                            subtitle: "Automatically switches DAC clock frequency (44.1k to 192k) with zero resampling",
+                            isOn: $vm.isAutoClockSwitch
+                        )
+                        
+                        Divider().background(vm.currentTheme.outline.opacity(0.15))
+                        
+                        settingsToggleRow(
+                            title: "Zero-Jitter RAM Playback (mlock)",
+                            subtitle: "Pins decoded audio frames into physical memory to eliminate SSD read latency",
+                            isOn: $vm.isRamPlayback
+                        )
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
+                
+                // 2. THEME & APPEARANCE (Matching mobile tsrossa!)
+                settingsCard(title: "THEME & VISUAL APPEARANCE") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Accent Color Palette")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(vm.currentTheme.textPrimary)
+                        
+                        HStack(spacing: 6) {
+                            accentPill(title: "Dynamic (Monet)", mode: "DYNAMIC", color: vm.currentTheme.primary)
+                            accentPill(title: "Matcha", mode: "MATCHA", color: Color(red: 0.62, green: 0.82, blue: 0.38))
+                            accentPill(title: "Gold", mode: "GOLD", color: Color(red: 1.0, green: 0.84, blue: 0.0))
+                            accentPill(title: "Cyan", mode: "CYAN", color: Color(red: 0.0, green: 0.898, blue: 1.0))
+                        }
+                        
+                        Divider().background(vm.currentTheme.outline.opacity(0.15))
+                        
+                        Text("Background Canvas Mode")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(vm.currentTheme.textPrimary)
+                        
+                        HStack(spacing: 8) {
+                            bgPill(title: "Tonal M3", mode: "DYNAMIC")
+                            bgPill(title: "Artwork Aura", mode: "AURA")
+                            bgPill(title: "Pitch Black", mode: "BLACK")
+                        }
+                    }
+                }
+                
+                // 3. MUSIC DIRECTORY & STORAGE
+                settingsCard(title: "MUSIC DIRECTORY & LIBRARY") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Active Music Folder:")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(vm.currentTheme.textSecondary)
+                        
+                        HStack {
+                            Image(systemName: "folder.fill")
+                                .foregroundColor(vm.currentTheme.primary)
+                            Text(vm.currentFolder)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(8)
+                        
+                        HStack(spacing: 10) {
+                            Button(action: { vm.openFolderPicker() }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "folder.badge.gearshape")
+                                    Text("Change Folder")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(vm.currentTheme.primaryContainer.opacity(0.40))
+                                .cornerRadius(8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(TsrossaScaleButtonStyle())
+                            
+                            Button(action: { vm.rescanCurrentFolder() }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.clockwise")
+                                    Text("Rescan Library")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.08))
+                                .cornerRadius(8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(TsrossaScaleButtonStyle())
+                        }
+                        
+                        Text("Supported Decoders: Native dr_flac (16/24-bit FLAC) & dr_wav (PCM WAV)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(vm.currentTheme.textMuted)
+                    }
+                }
+                
+                // 4. HARDWARE TELEMETRY & AUDIT
+                settingsCard(title: "SIGNAL PATH & HARDWARE AUDIT") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Stream State:")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                            Spacer()
+                            Text("ACTIVE (0 dBFS Bit-Perfect)")
+                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .foregroundColor(TsrossaColors.terminalGreen)
+                        }
+                        HStack {
+                            Text("DAC Clock:")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                            Spacer()
+                            Text("\(engine.currentTrack?.sampleRate ?? 44100) Hz Crystal Lock")
+                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .foregroundColor(TsrossaColors.bitPerfectGold)
+                        }
+                        
+                        Button(action: {
+                            engine.updateTelemetry()
+                            vm.showTelemetry = true
+                        }) {
+                            HStack {
+                                Image(systemName: "waveform.path.ecg")
+                                Text("Open Full Hardware Diagnostics Report (⌘D)")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(vm.currentTheme.primary)
+                            .padding(12)
+                            .background(vm.currentTheme.primaryContainer.opacity(0.35))
+                            .cornerRadius(10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(TsrossaScaleButtonStyle())
+                    }
+                }
+                
+                // 5. ABOUT TSROSSA
+                settingsCard(title: "ABOUT TSROSSA") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("tsrossa bit-perfect player")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                            Spacer()
+                            Text("v1.6.0 macOS")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.primary)
+                        }
+                        Text("High-fidelity bit-perfect audio player designed for external USB DACs and Apple Silicon CoreAudio hardware with zero DSP degradation.")
+                            .font(.system(size: 11))
+                            .foregroundColor(vm.currentTheme.textSecondary)
+                        
+                        Divider().background(vm.currentTheme.outline.opacity(0.15))
+                        
+                        HStack {
+                            Text("Android Creator:")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                            Text("yukaatsu")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(vm.currentTheme.textPrimary)
+                            Spacer()
+                            Text("macOS Engine:")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                            Text("Apple Silicon C++17")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(vm.currentTheme.primary)
+                        }
+                    }
+                }
+                
+                Spacer().frame(height: 120)
             }
-            .padding(20)
-            .background(vm.currentTheme.surfaceContainer)
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
-            )
-            .padding(.horizontal, 24)
-            
-            Spacer()
+            .padding(.horizontal, 20)
         }
+    }
+    
+    private func settingsCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundColor(vm.currentTheme.primary)
+            
+            content()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(vm.currentTheme.surfaceContainer)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
+        )
+    }
+    
+    private func settingsToggleRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(vm.currentTheme.textPrimary)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(vm.currentTheme.textSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .toggleStyle(SwitchToggleStyle(tint: vm.currentTheme.primary))
+        }
+    }
+    
+    private func accentPill(title: String, mode: String, color: Color) -> some View {
+        let isSelected = vm.accentColorMode == mode
+        return Button(action: { vm.setAccentColorMode(mode) }) {
+            HStack(spacing: 5) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(title)
+                    .font(.system(size: 10, weight: isSelected ? .bold : .medium))
+            }
+            .foregroundColor(isSelected ? vm.currentTheme.onPrimary : vm.currentTheme.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(isSelected ? vm.currentTheme.primary : Color.white.opacity(0.06))
+            .cornerRadius(8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func bgPill(title: String, mode: String) -> some View {
+        let isSelected = vm.bgCanvasMode == mode
+        return Button(action: {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                vm.bgCanvasMode = mode
+            }
+        }) {
+            Text(title)
+                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                .foregroundColor(isSelected ? vm.currentTheme.onPrimary : vm.currentTheme.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(isSelected ? vm.currentTheme.primary : Color.white.opacity(0.06))
+                .cornerRadius(8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     // ==========================================
