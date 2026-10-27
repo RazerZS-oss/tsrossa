@@ -191,14 +191,14 @@ public class AppViewModel: ObservableObject {
             
             if isCommand {
                 switch event.keyCode {
-                case 18: // Cmd + 1 -> Library
+                case 18: // Cmd + 1 -> Now Playing
+                    self.activeTab = .nowPlaying
+                    return nil
+                case 19: // Cmd + 2 -> Library
                     self.activeTab = .library
                     return nil
-                case 19: // Cmd + 2 -> Playlist
+                case 20: // Cmd + 3 -> Play Queue
                     self.activeTab = .playlist
-                    return nil
-                case 20: // Cmd + 3 -> Now Playing
-                    self.activeTab = .nowPlaying
                     return nil
                 case 21: // Cmd + 4 -> Settings
                     self.activeTab = .settings

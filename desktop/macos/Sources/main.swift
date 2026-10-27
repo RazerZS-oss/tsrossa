@@ -51,22 +51,22 @@ struct TsrossaMacApp: App {
             }
             
             CommandMenu("View") {
-                Button("Library") {
-                    AppViewModel.shared.activeTab = .library
-                }
-                .keyboardShortcut("1", modifiers: .command)
-                
                 Button("Now Playing") {
                     AppViewModel.shared.activeTab = .nowPlaying
                 }
+                .keyboardShortcut("1", modifiers: .command)
+                
+                Button("Music Library") {
+                    AppViewModel.shared.activeTab = .library
+                }
                 .keyboardShortcut("2", modifiers: .command)
                 
-                Button("Queue") {
+                Button("Play Queue") {
                     AppViewModel.shared.activeTab = .playlist
                 }
                 .keyboardShortcut("3", modifiers: .command)
                 
-                Button("Audio Devices") {
+                Button("DAC & Settings") {
                     AppViewModel.shared.activeTab = .settings
                 }
                 .keyboardShortcut("4", modifiers: .command)
