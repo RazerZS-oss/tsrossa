@@ -86,6 +86,18 @@ public struct MainAppView: View {
             }
             
             // ==========================================================
+            // SAVE CURRENT QUEUE AS PLAYLIST MODAL
+            // ==========================================================
+            if vm.showSaveQueueModal {
+                Color.black.opacity(0.72)
+                    .ignoresSafeArea()
+                    .onTapGesture { vm.showSaveQueueModal = false }
+                
+                saveQueueModalView
+                    .transition(.scale.combined(with: .opacity))
+            }
+            
+            // ==========================================================
             // HARDWARE DIAGNOSTICS & TELEMETRY MODAL (Cmd + D)
             // ==========================================================
             if vm.showTelemetry {
@@ -95,6 +107,36 @@ public struct MainAppView: View {
                 
                 TelemetryModalView()
                     .transition(.scale.combined(with: .opacity))
+            }
+            
+            // ==========================================================
+            // TOAST NOTIFICATION OVERLAY (Queue & Play Next feedback)
+            // ==========================================================
+            if !vm.toastMessage.isEmpty {
+                VStack {
+                    HStack(spacing: 8) {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(vm.currentTheme.primary)
+                        Text(vm.toastMessage)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(vm.currentTheme.textPrimary)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(vm.currentTheme.surfaceContainerHigh)
+                    .cornerRadius(24)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(vm.currentTheme.primary.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.45), radius: 12, x: 0, y: 6)
+                    .padding(.top, 24)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    
+                    Spacer()
+                }
+                .allowsHitTesting(false)
             }
         }
         .frame(minWidth: 980, minHeight: 680)
@@ -734,12 +776,20 @@ public struct MainAppView: View {
                     HStack {
                         Image(systemName: "music.note.list")
                             .foregroundColor(vm.currentTheme.primary)
-                        Text("UP NEXT IN LIBRARY (\(vm.tracks.count) TRACKS)")
+                        Text(vm.upNextQueue.isEmpty ? "UP NEXT IN LIBRARY (\(vm.tracks.count))" : "UP NEXT IN QUEUE (\(vm.upNextQueue.count))")
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundColor(vm.currentTheme.primary)
                         Spacer()
-                        Button(action: { vm.activeTab = .library }) {
-                            Text("View Full Table →")
+                        if !vm.upNextQueue.isEmpty {
+                            Button(action: { vm.clearQueue() }) {
+                                Text("Clear")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(vm.currentTheme.error)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        Button(action: { vm.activeTab = .playlist }) {
+                            Text("Manage Queue →")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(vm.currentTheme.textSecondary)
                                 .contentShape(Rectangle())
@@ -749,7 +799,25 @@ public struct MainAppView: View {
                     
                     ScrollView {
                         LazyVStack(spacing: 6) {
-                            ForEach(Array(vm.tracks.prefix(40).enumerated()), id: \.offset) { idx, track in
+                            if !vm.upNextQueue.isEmpty {
+                                ForEach(Array(vm.upNextQueue.enumerated()), id: \.element.id) { idx, track in
+                                    queueRowWithRemove(index: idx + 1, track: track)
+                                }
+                                
+                                Divider()
+                                    .background(vm.currentTheme.outline.opacity(0.15))
+                                    .padding(.vertical, 4)
+                                
+                                HStack {
+                                    Text("UPCOMING CONTINUATION")
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .foregroundColor(vm.currentTheme.textMuted)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 4)
+                            }
+                            
+                            ForEach(Array(vm.tracks.prefix(35).enumerated()), id: \.offset) { idx, track in
                                 compactQueueRow(index: idx + 1, track: track)
                             }
                         }
@@ -793,6 +861,61 @@ public struct MainAppView: View {
             }
             Spacer()
         }
+    }
+    
+    private func queueRowWithRemove(index: Int, track: TrackMetadata) -> some View {
+        Button(action: {
+            if let idx = vm.upNextQueue.firstIndex(where: { $0.path == track.path }) {
+                vm.removeFromQueue(at: idx)
+            }
+            engine.play(track: track)
+        }) {
+            HStack(spacing: 8) {
+                Text("NEXT #\(index)")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundColor(vm.currentTheme.onPrimary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(vm.currentTheme.primary)
+                    .cornerRadius(4)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(track.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(vm.currentTheme.primary)
+                        .lineLimit(1)
+                    Text(track.artist)
+                        .font(.system(size: 10))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    if let idx = vm.upNextQueue.firstIndex(where: { $0.path == track.path }) {
+                        vm.removeFromQueue(at: idx)
+                    }
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                        .padding(4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Remove from Queue")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(vm.currentTheme.primaryContainer.opacity(0.32))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(vm.currentTheme.primary.opacity(0.35), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     private func compactQueueRow(index: Int, track: TrackMetadata) -> some View {
@@ -1269,11 +1392,64 @@ public struct MainAppView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
-            
-            // Column 7: Add to Playlist Menu Button
-            Menu {
-                Text("Add / Remove from Playlist")
+            .contextMenu {
+                Button(action: {
+                    engine.play(track: track)
+                }) {
+                    Label("Play Now", systemImage: "play.fill")
+                }
+                
+                Button(action: {
+                    vm.addToPlayNext(track: track)
+                }) {
+                    Label("Play Next (Putar Berikutnya)", systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+                
+                Button(action: {
+                    vm.addToQueueEnd(track: track)
+                }) {
+                    Label("Add to Queue (Tambahkan ke Antrean)", systemImage: "text.badge.plus")
+                }
+                
                 Divider()
+                
+                Menu("Add / Remove from Playlist") {
+                    ForEach(vm.playlists) { pl in
+                        let inPlaylist = pl.matches(track: track)
+                        Button(action: {
+                            vm.toggleTrackInPlaylist(trackPath: track.path, playlistId: pl.id)
+                        }) {
+                            Text("\(inPlaylist ? "✓ " : "   ")\(pl.name)")
+                        }
+                    }
+                }
+                
+                Divider()
+                
+                Button(action: {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: track.path)])
+                }) {
+                    Label("Show in Finder", systemImage: "folder")
+                }
+            }
+            
+            // Column 7: Add to Queue & Playlist Menu Button
+            Menu {
+                Button(action: {
+                    vm.addToPlayNext(track: track)
+                }) {
+                    Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+                
+                Button(action: {
+                    vm.addToQueueEnd(track: track)
+                }) {
+                    Label("Add to Queue", systemImage: "text.badge.plus")
+                }
+                
+                Divider()
+                
+                Text("Add / Remove from Playlist")
                 ForEach(vm.playlists) { pl in
                     let inPlaylist = pl.matches(track: track)
                     Button(action: {
@@ -1293,7 +1469,7 @@ public struct MainAppView: View {
                     Text("+ New Playlist with '\(track.title)'...")
                 }
             } label: {
-                Image(systemName: "plus.circle")
+                Image(systemName: "ellipsis.circle")
                     .font(.system(size: 13))
                     .foregroundColor(vm.currentTheme.textSecondary)
                     .frame(width: 28, height: 28)
@@ -1510,23 +1686,203 @@ public struct MainAppView: View {
     }
     
     // =========================================================================
-    // VIEW 3: WIDESCREEN PLAY QUEUE VIEW
+    // SAVE ACTIVE QUEUE AS PLAYLIST MODAL
+    // =========================================================================
+    private var saveQueueModalView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("SAVE QUEUE AS PLAYLIST")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.primary)
+                    Text("Convert Active Queue to Playlist")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(vm.currentTheme.textPrimary)
+                }
+                Spacer()
+                Button(action: { vm.showSaveQueueModal = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            // 1. Playlist Name Input
+            VStack(alignment: .leading, spacing: 6) {
+                Text("PLAYLIST NAME")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(vm.currentTheme.textSecondary)
+                
+                TextField("e.g., My Up Next Mix, Evening Queue...", text: $vm.saveQueuePlaylistName)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 13))
+                    .foregroundColor(vm.currentTheme.textPrimary)
+                    .padding(10)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
+                    )
+            }
+            
+            // 2. Track List Summary
+            VStack(alignment: .leading, spacing: 6) {
+                let count = (engine.currentTrack != nil ? 1 : 0) + vm.upNextQueue.count
+                Text("TRACKS TO INCLUDE (\(count) TRACKS)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(vm.currentTheme.textSecondary)
+                
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        if let current = engine.currentTrack {
+                            HStack(spacing: 10) {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(vm.currentTheme.primary)
+                                Text("Now Playing: \(current.title)")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(vm.currentTheme.textPrimary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(current.artist)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(vm.currentTheme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(vm.currentTheme.primaryContainer.opacity(0.25))
+                            .cornerRadius(8)
+                        }
+                        
+                        ForEach(Array(vm.upNextQueue.enumerated()), id: \.element.id) { idx, t in
+                            HStack(spacing: 10) {
+                                Text("#\(idx + 1)")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(vm.currentTheme.primary)
+                                    .frame(width: 24, alignment: .leading)
+                                Text(t.title)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(vm.currentTheme.textPrimary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(t.artist)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(vm.currentTheme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.03))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+                .frame(height: 160)
+                .padding(6)
+                .background(Color.black.opacity(0.22))
+                .cornerRadius(10)
+            }
+            
+            // Modal Action Buttons
+            HStack {
+                Button(action: { vm.showSaveQueueModal = false }) {
+                    Text("Cancel")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Spacer()
+                
+                Button(action: { vm.saveCurrentQueueAsPlaylist() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.rectangle.on.rectangle")
+                        Text("Save as New Playlist")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(vm.currentTheme.onPrimary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(vm.currentTheme.primary)
+                    .cornerRadius(10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(TsrossaScaleButtonStyle())
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
+        .background(vm.currentTheme.surfaceContainerHigh)
+        .cornerRadius(22)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(vm.currentTheme.outline.opacity(0.35), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.55), radius: 30, x: 0, y: 16)
+    }
+    
+    // =========================================================================
+    // VIEW 3: WIDESCREEN PLAY QUEUE VIEW (Google / Spotify Style Interactive Queue)
     // =========================================================================
     private var desktopQueueView: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("ACTIVE PLAYBACK QUEUE")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(vm.currentTheme.primary)
-                    Text("Play Queue & Upcoming Master Tracks")
+                    Text("Play Queue & Up Next Flow")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundColor(vm.currentTheme.textPrimary)
                 }
                 Spacer()
-                Text("\(filteredTracks.count) tracks queued")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(vm.currentTheme.textSecondary)
+                
+                HStack(spacing: 10) {
+                    if !vm.upNextQueue.isEmpty {
+                        Button(action: { vm.openSaveQueueModal() }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus.rectangle.on.rectangle")
+                                Text("Save Queue as Playlist")
+                            }
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(vm.currentTheme.onPrimary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(vm.currentTheme.primary)
+                            .cornerRadius(14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(TsrossaScaleButtonStyle())
+                        
+                        Button(action: { vm.clearQueue() }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash")
+                                Text("Clear Queue")
+                            }
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(vm.currentTheme.error)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(vm.currentTheme.surfaceContainerHigh)
+                            .cornerRadius(14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    
+                    Text("\(vm.upNextQueue.count) queued • \(filteredTracks.count) upcoming")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                }
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 18)
@@ -1535,15 +1891,269 @@ public struct MainAppView: View {
                 .background(vm.currentTheme.outline.opacity(0.15))
             
             ScrollView {
-                LazyVStack(spacing: 6) {
-                    ForEach(Array(filteredTracks.enumerated()), id: \.element.id) { idx, track in
-                        desktopTrackTableRow(index: idx + 1, track: track)
+                VStack(alignment: .leading, spacing: 22) {
+                    // SECTION 1: NOW PLAYING CARD
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("NOW PLAYING")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(vm.currentTheme.primary)
+                        
+                        if let current = engine.currentTrack {
+                            HStack(spacing: 16) {
+                                ZStack {
+                                    if let art = vm.currentArtwork {
+                                        Image(nsImage: art)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 52, height: 52)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(vm.currentTheme.primaryContainer.opacity(0.5))
+                                            .frame(width: 52, height: 52)
+                                            .overlay(
+                                                Image(systemName: "waveform")
+                                                    .font(.system(size: 22))
+                                                    .foregroundColor(vm.currentTheme.primary)
+                                            )
+                                    }
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(current.title)
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(vm.currentTheme.textPrimary)
+                                        .lineLimit(1)
+                                    HStack(spacing: 8) {
+                                        Text(current.artist)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(vm.currentTheme.textSecondary)
+                                            .lineLimit(1)
+                                        Text("•")
+                                            .foregroundColor(vm.currentTheme.textMuted)
+                                        Text(current.album)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(vm.currentTheme.textMuted)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                // Format Badge & Duration
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("\(current.path.hasSuffix(".flac") ? "FLAC" : "WAV") \(current.bitDepth)-bit / \(String(format: "%.1fkHz", Double(current.sampleRate)/1000.0))")
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(vm.currentTheme.onPrimaryContainer)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(vm.currentTheme.primaryContainer)
+                                        .cornerRadius(6)
+                                    
+                                    Text("\(vm.formatTime(engine.currentTime)) / \(vm.formatTime(current.durationSeconds))")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundColor(vm.currentTheme.textSecondary)
+                                }
+                            }
+                            .padding(14)
+                            .background(vm.currentTheme.surfaceContainerHigh)
+                            .cornerRadius(14)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(vm.currentTheme.primary.opacity(0.4), lineWidth: 1)
+                            )
+                        } else {
+                            HStack(spacing: 12) {
+                                Image(systemName: "pause.circle")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(vm.currentTheme.textMuted)
+                                Text("No track currently playing. Pick a song from your library or queue to start listening.")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(vm.currentTheme.textSecondary)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.03))
+                            .cornerRadius(12)
+                        }
+                    }
+                    
+                    // SECTION 2: DYNAMIC UP NEXT IN QUEUE
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("UP NEXT IN QUEUE (\(vm.upNextQueue.count))")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.primary)
+                            
+                            Spacer()
+                            
+                            if !vm.upNextQueue.isEmpty {
+                                Text("These tracks play next in order before continuing normal playback")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(vm.currentTheme.textMuted)
+                            }
+                        }
+                        
+                        if vm.upNextQueue.isEmpty {
+                            VStack(spacing: 10) {
+                                Image(systemName: "text.badge.plus")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(vm.currentTheme.textMuted)
+                                Text("Your Up Next Queue is Empty")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(vm.currentTheme.textPrimary)
+                                Text("Use 'Play Next' or 'Add to Queue' from the track menu or right-click to queue tracks here dynamically like Google/Spotify.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(vm.currentTheme.textSecondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(24)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.02))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(vm.currentTheme.outline.opacity(0.18), lineWidth: 1)
+                            )
+                        } else {
+                            LazyVStack(spacing: 6) {
+                                ForEach(Array(vm.upNextQueue.enumerated()), id: \.element.id) { idx, track in
+                                    interactiveQueueItemRow(index: idx, track: track)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // SECTION 3: CONTINUATION FROM CURRENT CONTEXT
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("NEXT FROM: \(vm.selectedPlaylist?.name.uppercased() ?? "LIBRARY") (\(filteredTracks.count) TRACKS)")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                            Spacer()
+                            Text("Will resume automatically when Up Next queue finishes")
+                                .font(.system(size: 11))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                        }
+                        
+                        LazyVStack(spacing: 4) {
+                            ForEach(Array(filteredTracks.prefix(50).enumerated()), id: \.element.id) { idx, track in
+                                desktopTrackTableRow(index: idx + 1, track: track)
+                            }
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 16)
             }
         }
+    }
+    
+    private func interactiveQueueItemRow(index: Int, track: TrackMetadata) -> some View {
+        HStack(spacing: 12) {
+            // Reorder controls (Up / Down)
+            VStack(spacing: 2) {
+                Button(action: {
+                    if index > 0 {
+                        vm.moveInQueue(from: index, to: index - 1)
+                    }
+                }) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(index > 0 ? vm.currentTheme.textSecondary : Color.clear)
+                        .frame(width: 18, height: 12)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(index == 0)
+                
+                Button(action: {
+                    if index < vm.upNextQueue.count - 1 {
+                        vm.moveInQueue(from: index, to: index + 1)
+                    }
+                }) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(index < vm.upNextQueue.count - 1 ? vm.currentTheme.textSecondary : Color.clear)
+                        .frame(width: 18, height: 12)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(index == vm.upNextQueue.count - 1)
+            }
+            .frame(width: 20)
+            
+            // Queue position number
+            Text("#\(index + 1)")
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundColor(vm.currentTheme.primary)
+                .frame(width: 30, alignment: .leading)
+            
+            // Play now button
+            Button(action: {
+                vm.removeFromQueue(at: index)
+                engine.play(track: track)
+            }) {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(vm.currentTheme.primary)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Track Info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(track.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(vm.currentTheme.textPrimary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 6) {
+                    Text(track.artist)
+                        .font(.system(size: 11))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .lineLimit(1)
+                    Text("•")
+                        .foregroundColor(vm.currentTheme.textMuted)
+                    Text(track.album)
+                        .font(.system(size: 11))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                        .lineLimit(1)
+                }
+            }
+            
+            Spacer()
+            
+            // Format Badge
+            Text("\(track.path.hasSuffix(".flac") ? "FLAC" : "WAV") \(track.bitDepth)-bit")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(vm.currentTheme.primary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(vm.currentTheme.primaryContainer.opacity(0.35))
+                .cornerRadius(5)
+            
+            // Duration
+            Text(vm.formatTime(track.durationSeconds))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(vm.currentTheme.textSecondary)
+                .frame(width: 48, alignment: .trailing)
+            
+            // Remove from queue button (xmark)
+            Button(action: { vm.removeFromQueue(at: index) }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(vm.currentTheme.textMuted)
+                    .padding(4)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Remove from Queue")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(vm.currentTheme.surfaceContainerHigh.opacity(0.65))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(vm.currentTheme.outline.opacity(0.18), lineWidth: 1)
+        )
     }
     
     // =========================================================================

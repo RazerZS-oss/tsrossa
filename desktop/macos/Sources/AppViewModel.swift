@@ -68,6 +68,17 @@ public class AppViewModel: ObservableObject {
     @Published public var newPlaylistKeyword: String = ""
     @Published public var newPlaylistSelectedPaths: Set<String> = []
     
+    // Dynamic Play Queue & Up Next State (Google / Spotify style queue)
+    @Published public var upNextQueue: [TrackMetadata] = []
+    @Published public var toastMessage: String = ""
+    @Published public var showSaveQueueModal: Bool = false
+    @Published public var saveQueuePlaylistName: String = ""
+    
+    public var selectedPlaylist: UserPlaylist? {
+        guard let id = selectedPlaylistId else { return nil }
+        return playlists.first(where: { $0.id == id })
+    }
+    
     // Audiophile Hardware Filter State (Format, Bit Depth, Sample Rate kHz)
     @Published public var selectedFormatFilter: String = "ALL" // "ALL", "FLAC", "WAV"
     @Published public var selectedBitDepthFilter: UInt32 = 0   // 0 = All, 24, 16, 8, 32
@@ -320,7 +331,104 @@ public class AppViewModel: ObservableObject {
         }
     }
     
+    // =========================================================================
+    // DYNAMIC PLAY QUEUE & UP NEXT MANAGEMENT (Google / Spotify Style)
+    // =========================================================================
+    public func addToPlayNext(track: TrackMetadata) {
+        if let first = upNextQueue.first, first.path == track.path {
+            showToast("🎵 '\(track.title)' is already playing next")
+            return
+        }
+        upNextQueue.removeAll { $0.path == track.path }
+        upNextQueue.insert(track, at: 0)
+        showToast("🎵 Set to Play Next: \(track.title)")
+    }
+    
+    public func addToQueueEnd(track: TrackMetadata) {
+        if !upNextQueue.contains(where: { $0.path == track.path }) {
+            upNextQueue.append(track)
+            showToast("➕ Added to Queue (#\(upNextQueue.count)): \(track.title)")
+        } else {
+            if let pos = upNextQueue.firstIndex(where: { $0.path == track.path }) {
+                showToast("Track is already in queue (#\(pos + 1))")
+            }
+        }
+    }
+    
+    public func removeFromQueue(at index: Int) {
+        guard index >= 0 && index < upNextQueue.count else { return }
+        let removed = upNextQueue.remove(at: index)
+        showToast("Removed '\(removed.title)' from queue")
+    }
+    
+    public func moveInQueue(from: Int, to: Int) {
+        guard from >= 0 && from < upNextQueue.count && to >= 0 && to < upNextQueue.count && from != to else { return }
+        let item = upNextQueue.remove(at: from)
+        upNextQueue.insert(item, at: to)
+    }
+    
+    public func clearQueue() {
+        upNextQueue.removeAll()
+        showToast("Queue cleared")
+    }
+    
+    public func showToast(_ message: String) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            toastMessage = message
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self = self else { return }
+            if self.toastMessage == message {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.toastMessage = ""
+                }
+            }
+        }
+    }
+    
+    public func openSaveQueueModal() {
+        if let current = AudioEngine.shared.currentTrack {
+            saveQueuePlaylistName = "\(current.artist) Mix"
+        } else {
+            saveQueuePlaylistName = "Queued Mix"
+        }
+        showSaveQueueModal = true
+    }
+    
+    public func saveCurrentQueueAsPlaylist() {
+        var paths: [String] = []
+        if let current = AudioEngine.shared.currentTrack {
+            paths.append(current.path)
+        }
+        for t in upNextQueue {
+            if !paths.contains(t.path) {
+                paths.append(t.path)
+            }
+        }
+        guard !paths.isEmpty else {
+            showToast("No tracks in queue to save")
+            showSaveQueueModal = false
+            return
+        }
+        let trimmedName = saveQueuePlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = !trimmedName.isEmpty ? trimmedName : "Queue Playlist"
+        let newPl = UserPlaylist(name: name, filterKeyword: "", trackPaths: paths)
+        playlists.append(newPl)
+        savePlaylists()
+        selectedPlaylistId = newPl.id
+        showSaveQueueModal = false
+        showToast("✨ Saved \(paths.count) tracks to playlist '\(name)'")
+    }
+    
     public func playNextTrack() {
+        // 1. If user queued tracks manually (Play Next / Add to Queue), play the queue first!
+        if !upNextQueue.isEmpty {
+            let nextTrack = upNextQueue.removeFirst()
+            AudioEngine.shared.play(track: nextTrack)
+            return
+        }
+        
+        // 2. Otherwise fall back to library / playlist context
         let contextList = !filteredTracks.isEmpty ? filteredTracks : tracks
         guard !contextList.isEmpty else { return }
         if let current = AudioEngine.shared.currentTrack, let idx = contextList.firstIndex(where: { $0.path == current.path }) {

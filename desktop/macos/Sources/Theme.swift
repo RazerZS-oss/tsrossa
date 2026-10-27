@@ -80,6 +80,7 @@ public struct DynamicMaterialTheme: Equatable {
     public let textPrimary: Color
     public let textSecondary: Color
     public let textMuted: Color
+    public var error: Color { Color(red: 1.0, green: 0.36, blue: 0.36) }
     
     public static func == (lhs: DynamicMaterialTheme, rhs: DynamicMaterialTheme) -> Bool {
         return lhs.primary == rhs.primary && lhs.surface == rhs.surface
