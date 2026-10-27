@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreAudio
 
 public struct OutputDevice: Identifiable, Hashable {
     public let id: UInt32
@@ -50,27 +51,77 @@ public class AudioEngine: ObservableObject {
     @Published public var telemetryJson: String = "{}"
     
     private var progressTimer: Timer?
+    private var hotplugTimer: Timer?
     private var isAdvancingTrack: Bool = false
+    
+    // Hardware hot-plug tracking state (accessed on engineQueue)
+    private var lastKnownDeviceIds: Set<UInt32> = []
+    private var lastKnownSystemDefaultId: UInt32 = 0
+    private var hasInitializedDevices: Bool = false
     
     private init() {
         engineQueue.async { [weak self] in
             _ = tsrossa_init()
-            self?.refreshDevicesOnEngineQueue()
+            self?.refreshDevicesOnEngineQueue(checkHotplug: false)
         }
+        setupCoreAudioHotplugListeners()
+        startHotplugMonitorTimer()
     }
     
     deinit {
         stopProgressTimer()
+        hotplugTimer?.invalidate()
         tsrossa_shutdown()
+    }
+    
+    /// Registers native macOS CoreAudio HAL listeners for instant 3.5mm jack & USB DAC plug/unplug events
+    private func setupCoreAudioHotplugListeners() {
+        var devicesAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &devicesAddr,
+            engineQueue
+        ) { [weak self] _, _ in
+            self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+        }
+        
+        var defaultOutAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultOutAddr,
+            engineQueue
+        ) { [weak self] _, _ in
+            self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+        }
+    }
+    
+    /// Lightweight 1-second background poll as a fallback to guarantee jack plug detection
+    private func startHotplugMonitorTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.hotplugTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.engineQueue.async { [weak self] in
+                    self?.refreshDevicesOnEngineQueue(checkHotplug: true)
+                }
+            }
+        }
     }
     
     public func refreshDevices() {
         engineQueue.async { [weak self] in
-            self?.refreshDevicesOnEngineQueue()
+            self?.refreshDevicesOnEngineQueue(checkHotplug: true)
         }
     }
     
-    private func refreshDevicesOnEngineQueue() {
+    private func refreshDevicesOnEngineQueue(checkHotplug: Bool) {
         let count = tsrossa_get_device_count()
         var list: [OutputDevice] = []
         var defaultId: UInt32 = 0
@@ -85,9 +136,66 @@ public class AudioEngine: ObservableObject {
                 defaultId = id
             }
         }
+        
+        let currentIds = Set(list.map { $0.id })
+        
+        if !hasInitializedDevices {
+            hasInitializedDevices = true
+            lastKnownDeviceIds = currentIds
+            lastKnownSystemDefaultId = defaultId
+            let initialTarget = defaultId != 0 ? defaultId : (list.first?.id ?? 0)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.devices = list
+                if self.selectedDeviceId == 0 {
+                    self.selectedDeviceId = initialTarget
+                }
+            }
+            return
+        }
+        
+        let devicesChanged = (currentIds != lastKnownDeviceIds)
+        let defaultChanged = (defaultId != 0 && defaultId != lastKnownSystemDefaultId)
+        
+        if checkHotplug && (devicesChanged || defaultChanged) {
+            let newlyAdded = currentIds.subtracting(lastKnownDeviceIds)
+            lastKnownDeviceIds = currentIds
+            lastKnownSystemDefaultId = defaultId
+            
+            // Determine target device for hot-plug event:
+            // 1. If a new headset/USB DAC was just plugged in, route to it immediately
+            // 2. Otherwise if macOS changed its default output device (jack sense), route to new default
+            // 3. Otherwise if the active device was unplugged, fall back to default
+            var targetId: UInt32 = 0
+            if let addedId = newlyAdded.first {
+                targetId = addedId
+            } else if defaultChanged {
+                targetId = defaultId
+            } else if !currentIds.contains(selectedDeviceId) {
+                targetId = defaultId != 0 ? defaultId : (list.first?.id ?? 0)
+            }
+            
+            if targetId != 0 {
+                _ = tsrossa_select_device(targetId)
+                let json = String(cString: tsrossa_get_telemetry_json())
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.devices = list
+                    self.selectedDeviceId = targetId
+                    self.telemetryJson = json
+                }
+                return
+            }
+        }
+        
+        lastKnownDeviceIds = currentIds
+        lastKnownSystemDefaultId = defaultId
+        
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.devices = list
+            if self.devices != list {
+                self.devices = list
+            }
             if self.selectedDeviceId == 0 && defaultId != 0 {
                 self.selectedDeviceId = defaultId
             }
@@ -100,7 +208,7 @@ public class AudioEngine: ObservableObject {
         engineQueue.async { [weak self] in
             guard let self = self else { return }
             _ = tsrossa_select_device(id)
-            self.refreshDevicesOnEngineQueue()
+            self.refreshDevicesOnEngineQueue(checkHotplug: false)
             let json = String(cString: tsrossa_get_telemetry_json())
             DispatchQueue.main.async {
                 self.telemetryJson = json
@@ -125,7 +233,7 @@ public class AudioEngine: ObservableObject {
             let realChannels = tsrossa_get_track_channels()
             let realDuration = tsrossa_get_total_duration()
             let json = String(cString: tsrossa_get_telemetry_json())
-            self.refreshDevicesOnEngineQueue()
+            self.refreshDevicesOnEngineQueue(checkHotplug: false)
             
             DispatchQueue.main.async {
                 let updatedTrack = TrackMetadata(
