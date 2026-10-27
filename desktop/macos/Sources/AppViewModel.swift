@@ -4,20 +4,20 @@ import AppKit
 import SwiftUI
 
 public enum AppTab: String, CaseIterable {
-    case library = "Library"
-    case playlist = "Playlist"
     case nowPlaying = "Now Playing"
-    case settings = "Settings"
+    case library = "Library"
+    case playlist = "Queue"
+    case settings = "Audio Devices"
 }
 
 public class AppViewModel: ObservableObject {
     public static let shared = AppViewModel()
     
-    @Published public var activeTab: AppTab = .nowPlaying
+    @Published public var activeTab: AppTab = .library
     @Published public var tracks: [TrackMetadata] = []
     @Published public var searchText: String = ""
     @Published public var showTelemetry: Bool = false
-    @Published public var currentFolder: String = "Click 'Choose Music Folder' to begin"
+    @Published public var currentFolder: String = "/Users/alen/Music/Music"
     @Published public var copiedTelemetry: Bool = false
     @Published public var volumeDb: Int = 0 // 0 dBFS unity gain
     @Published public var isShuffle: Bool = false
@@ -27,14 +27,209 @@ public class AppViewModel: ObservableObject {
     // Material 3 Dynamic Theming & Artwork State
     @Published public var currentArtwork: NSImage? = nil
     @Published public var currentTheme: DynamicMaterialTheme = .defaultTheme
+    @Published public var hoveredTrackPath: String? = nil
+    
+    private var keyMonitor: Any?
+    
+    public init() {
+        setupKeyboardMonitor()
+    }
+    
+    deinit {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
     
     public func updateThemeForTrack(track: TrackMetadata) {
         ArtworkExtractor.loadArtworkAndTheme(for: track.path) { [weak self] artwork, theme in
             guard let self = self else { return }
-            withAnimation(.easeInOut(duration: 0.45)) {
+            withAnimation(.easeInOut(duration: 0.50)) {
                 self.currentArtwork = artwork
                 self.currentTheme = theme
             }
+        }
+    }
+    
+    public func playNextTrack() {
+        guard !tracks.isEmpty else { return }
+        if let current = AudioEngine.shared.currentTrack, let idx = tracks.firstIndex(where: { $0.path == current.path }) {
+            let nextIdx: Int
+            if isShuffle && tracks.count > 1 {
+                var rand = Int.random(in: 0..<tracks.count)
+                if rand == idx { rand = (idx + 1) % tracks.count }
+                nextIdx = rand
+            } else {
+                nextIdx = (idx + 1) % tracks.count
+            }
+            AudioEngine.shared.play(track: tracks[nextIdx])
+        } else if let first = tracks.first {
+            AudioEngine.shared.play(track: first)
+        }
+    }
+    
+    public func playPreviousTrack() {
+        guard !tracks.isEmpty else { return }
+        if let current = AudioEngine.shared.currentTrack, let idx = tracks.firstIndex(where: { $0.path == current.path }) {
+            let prevIdx = (idx - 1 + tracks.count) % tracks.count
+            AudioEngine.shared.play(track: tracks[prevIdx])
+        } else if let first = tracks.first {
+            AudioEngine.shared.play(track: first)
+        }
+    }
+    
+    public func volumeUp() {
+        volumeDb = min(0, volumeDb + 1)
+    }
+    
+    public func volumeDown() {
+        volumeDb = max(-60, volumeDb - 1)
+    }
+    
+    public func openFolderPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select Music Directory"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            currentFolder = url.path
+            tracks = MetadataScanner.scanDirectory(url: url)
+        }
+    }
+    
+    public func rescanCurrentFolder() {
+        let url = URL(fileURLWithPath: currentFolder)
+        if FileManager.default.fileExists(atPath: url.path) {
+            tracks = MetadataScanner.scanDirectory(url: url)
+        }
+    }
+    
+    public func loadInitialMusicDirectory() {
+        let defaultMusicUrl = URL(fileURLWithPath: currentFolder)
+        if FileManager.default.fileExists(atPath: defaultMusicUrl.path) {
+            tracks = MetadataScanner.scanDirectory(url: defaultMusicUrl)
+            if let first = tracks.first, AudioEngine.shared.currentTrack == nil {
+                AudioEngine.shared.currentTrack = first
+                updateThemeForTrack(track: first)
+            }
+        }
+    }
+    
+    public func toggleSort() {
+        if sortMode == "DATE (NEWEST)" {
+            sortMode = "A-Z TITLE"
+            tracks.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        } else if sortMode == "A-Z TITLE" {
+            sortMode = "ARTIST"
+            tracks.sort { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
+        } else {
+            sortMode = "DATE (NEWEST)"
+            tracks.reverse()
+        }
+    }
+    
+    public func formatTime(_ seconds: Double) -> String {
+        guard !seconds.isNaN && seconds >= 0 else { return "00:00" }
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%02d:%02d", mins, secs)
+    }
+    
+    // Keyboard Shortcut Monitor for Desktop
+    public func setupKeyboardMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
+            
+            // Check if user is typing in a text field
+            let firstResponder = NSApp.keyWindow?.firstResponder
+            let isEditingText = firstResponder is NSTextView && (firstResponder as? NSTextView)?.isEditable == true
+            
+            let isCommand = event.modifierFlags.contains(.command)
+            
+            if isEditingText {
+                if event.keyCode == 53 { // Escape
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    return nil
+                }
+                return event
+            }
+            
+            if isCommand {
+                switch event.keyCode {
+                case 3: // Cmd + F -> Focus search
+                    self.activeTab = .library
+                    NotificationCenter.default.post(name: NSNotification.Name("FocusSearchField"), object: nil)
+                    return nil
+                case 18: // Cmd + 1 -> Library
+                    self.activeTab = .library
+                    return nil
+                case 19: // Cmd + 2 -> Now Playing
+                    self.activeTab = .nowPlaying
+                    return nil
+                case 20: // Cmd + 3 -> Queue
+                    self.activeTab = .playlist
+                    return nil
+                case 21: // Cmd + 4 -> Settings / Devices
+                    self.activeTab = .settings
+                    return nil
+                case 2: // Cmd + D -> Diagnostics
+                    self.showTelemetry.toggle()
+                    return nil
+                case 15: // Cmd + R -> Rescan
+                    self.rescanCurrentFolder()
+                    return nil
+                case 1: // Cmd + S -> Shuffle
+                    self.isShuffle.toggle()
+                    return nil
+                case 17: // Cmd + T -> Repeat
+                    self.isRepeat.toggle()
+                    return nil
+                case 126: // Cmd + Up Arrow -> Volume Up
+                    self.volumeUp()
+                    return nil
+                case 125: // Cmd + Down Arrow -> Volume Down
+                    self.volumeDown()
+                    return nil
+                case 124: // Cmd + Right Arrow -> Next track
+                    self.playNextTrack()
+                    return nil
+                case 123: // Cmd + Left Arrow -> Prev track
+                    self.playPreviousTrack()
+                    return nil
+                default:
+                    break
+                }
+            } else {
+                switch event.keyCode {
+                case 49: // Spacebar -> Play / Pause
+                    AudioEngine.shared.togglePlayPause()
+                    return nil
+                case 124: // Right Arrow -> Next track
+                    self.playNextTrack()
+                    return nil
+                case 123: // Left Arrow -> Prev track
+                    self.playPreviousTrack()
+                    return nil
+                case 126: // Up Arrow -> Volume Up
+                    self.volumeUp()
+                    return nil
+                case 125: // Down Arrow -> Volume Down
+                    self.volumeDown()
+                    return nil
+                case 53: // Escape
+                    if self.showTelemetry {
+                        self.showTelemetry = false
+                        return nil
+                    }
+                default:
+                    break
+                }
+            }
+            
+            return event
         }
     }
 }

@@ -130,7 +130,6 @@ public struct DynamicMaterialTheme: Equatable {
 
 // ==============================================================================
 // ARTWORK & COLOR EXTRACTION UTILITIES
-// Extracts embedded cover art from FLAC / WAV and runs Monet Seed Quantization
 // ==============================================================================
 
 public class ArtworkExtractor {
@@ -232,6 +231,92 @@ public class ArtworkExtractor {
             }
         }
         return bestColor
+    }
+}
+
+// ==============================================================================
+// TACTILE INTERACTIVE CONTROLS (Guarantees 100% Full-Hit-Area Clickability on macOS)
+// ==============================================================================
+
+public struct TsrossaScaleButtonStyle: ButtonStyle {
+    public var scaleAmount: CGFloat = 0.94
+    
+    public init(scaleAmount: CGFloat = 0.94) {
+        self.scaleAmount = scaleAmount
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scaleAmount : 1.0)
+            .opacity(configuration.isPressed ? 0.82 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+public struct TsrossaCircleButtonStyle: ButtonStyle {
+    public var bg: Color
+    public var strokeColor: Color?
+    
+    public init(bg: Color = Color.white.opacity(0.08), strokeColor: Color? = nil) {
+        self.bg = bg
+        self.strokeColor = strokeColor
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Circle()
+                    .fill(configuration.isPressed ? bg.opacity(1.4) : bg)
+            )
+            .overlay(
+                Group {
+                    if let stroke = strokeColor {
+                        Circle().stroke(stroke, lineWidth: 1)
+                    }
+                }
+            )
+            .scaleEffect(configuration.isPressed ? 0.93 : 1.0)
+            .opacity(configuration.isPressed ? 0.82 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+public struct InteractiveCircleButton: View {
+    public let icon: String
+    public var size: CGFloat = 40
+    public var iconSize: CGFloat = 16
+    public var bg: Color = Color.white.opacity(0.08)
+    public var fg: Color = Color.white.opacity(0.90)
+    public var strokeColor: Color? = nil
+    public var action: () -> Void
+    
+    public init(
+        icon: String,
+        size: CGFloat = 40,
+        iconSize: CGFloat = 16,
+        bg: Color = Color.white.opacity(0.08),
+        fg: Color = Color.white.opacity(0.90),
+        strokeColor: Color? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.icon = icon
+        self.size = size
+        self.iconSize = iconSize
+        self.bg = bg
+        self.fg = fg
+        self.strokeColor = strokeColor
+        self.action = action
+    }
+    
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundColor(fg)
+                .frame(width: size, height: size)
+                .contentShape(Circle()) // 100% of circle bounds intercepts mouse clicks!
+        }
+        .buttonStyle(TsrossaCircleButtonStyle(bg: bg, strokeColor: strokeColor))
     }
 }
 

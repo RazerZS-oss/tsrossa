@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 
 public class MetadataScanner {
     public static func scanDirectory(url: URL) -> [TrackMetadata] {
@@ -20,8 +21,10 @@ public class MetadataScanner {
                 let filename = fileURL.deletingPathExtension().lastPathComponent
                 var title = filename
                 var artist = "Unknown Artist"
+                var album = fileURL.deletingLastPathComponent().lastPathComponent
+                var duration = 0.0
                 
-                // Parse common "Artist - Title" filename format
+                // Default heuristic parsing from filename
                 if filename.contains(" - ") {
                     let parts = filename.components(separatedBy: " - ")
                     if parts.count >= 2 {
@@ -30,17 +33,33 @@ public class MetadataScanner {
                     }
                 }
                 
-                // Use default or placeholder metadata if not yet probed
-                let path = fileURL.path
+                // Probe real AVAsset tags
+                let asset = AVURLAsset(url: fileURL)
+                let dur = CMTimeGetSeconds(asset.duration)
+                if !dur.isNaN && dur > 0 {
+                    duration = dur
+                }
+                
+                for item in asset.metadata {
+                    guard let key = item.commonKey else { continue }
+                    if key == .commonKeyTitle, let val = item.stringValue, !val.isEmpty {
+                        title = val
+                    } else if key == .commonKeyArtist, let val = item.stringValue, !val.isEmpty {
+                        artist = val
+                    } else if key == .commonKeyAlbumName, let val = item.stringValue, !val.isEmpty {
+                        album = val
+                    }
+                }
+                
                 let track = TrackMetadata(
-                    path: path,
+                    path: fileURL.path,
                     title: title,
                     artist: artist,
-                    album: fileURL.deletingLastPathComponent().lastPathComponent,
+                    album: album,
                     sampleRate: 44100,
                     bitDepth: 16,
                     channels: 2,
-                    durationSeconds: 0.0
+                    durationSeconds: duration
                 )
                 tracks.append(track)
             }
