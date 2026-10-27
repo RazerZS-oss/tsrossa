@@ -1,8 +1,26 @@
 import SwiftUI
 import AppKit
 
+final class TsrossaAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.regular)
+        TsrossaBrandLogo.applyMacDockIcon()
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        if let window = NSApplication.shared.windows.first {
+            window.makeKeyAndOrderFront(nil)
+            window.center()
+        }
+    }
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
+}
+
 @main
 struct TsrossaMacApp: App {
+    @NSApplicationDelegateAdaptor(TsrossaAppDelegate.self) var appDelegate
+    
     var body: some Scene {
         WindowGroup {
             MainAppView()
@@ -50,7 +68,7 @@ struct TsrossaMacApp: App {
                 .keyboardShortcut("t", modifiers: .command)
             }
             
-            CommandMenu("View") {
+            CommandMenu("Workspace") {
                 Button("Now Playing") {
                     AppViewModel.shared.activeTab = .nowPlaying
                 }

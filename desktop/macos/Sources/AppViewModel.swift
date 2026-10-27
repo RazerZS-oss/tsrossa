@@ -130,24 +130,44 @@ public class AppViewModel: ObservableObject {
         
         if panel.runModal() == .OK, let url = panel.url {
             currentFolder = url.path
-            tracks = MetadataScanner.scanDirectory(url: url)
+            UserDefaults.standard.set(url.path, forKey: "tsrossa.currentFolder")
+            scanFolderAsync(url: url, selectFirstIfIdle: false)
         }
     }
     
     public func rescanCurrentFolder() {
         let url = URL(fileURLWithPath: currentFolder)
-        if FileManager.default.fileExists(atPath: url.path) {
-            tracks = MetadataScanner.scanDirectory(url: url)
-        }
+        scanFolderAsync(url: url, selectFirstIfIdle: false)
     }
     
     public func loadInitialMusicDirectory() {
+        if let saved = UserDefaults.standard.string(forKey: "tsrossa.currentFolder"),
+           FileManager.default.fileExists(atPath: saved) {
+            currentFolder = saved
+        }
         let defaultMusicUrl = URL(fileURLWithPath: currentFolder)
-        if FileManager.default.fileExists(atPath: defaultMusicUrl.path) {
-            tracks = MetadataScanner.scanDirectory(url: defaultMusicUrl)
-            if let first = tracks.first, AudioEngine.shared.currentTrack == nil {
-                AudioEngine.shared.currentTrack = first
-                updateThemeForTrack(track: first)
+        // Delay slightly so the main macOS window renders & activates BEFORE any TCC / disk I/O
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.scanFolderAsync(url: defaultMusicUrl, selectFirstIfIdle: true)
+        }
+    }
+    
+    private func scanFolderAsync(url: URL, selectFirstIfIdle: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            let initialTracks = MetadataScanner.fastScanDirectory(url: url)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.tracks = initialTracks
+                if selectFirstIfIdle, let first = initialTracks.first, AudioEngine.shared.currentTrack == nil {
+                    AudioEngine.shared.currentTrack = first
+                    self.updateThemeForTrack(track: first)
+                }
+                // Enrich durations and FLAC/ID3 tags in the background without blocking UI
+                MetadataScanner.enrichMetadataInBackground(tracks: initialTracks) { [weak self] enriched in
+                    guard let self = self else { return }
+                    self.tracks = enriched
+                }
             }
         }
     }

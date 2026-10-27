@@ -20,6 +20,8 @@
     <string>12.0</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>tsrossa accesses your local FLAC and WAV files in your Music folder for bit-perfect CoreAudio playback.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
