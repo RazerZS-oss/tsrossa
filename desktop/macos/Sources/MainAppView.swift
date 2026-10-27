@@ -6,14 +6,7 @@ public struct MainAppView: View {
     @ObservedObject private var vm = AppViewModel.shared
     
     private var filteredTracks: [TrackMetadata] {
-        if vm.searchText.isEmpty {
-            return vm.tracks
-        }
-        return vm.tracks.filter {
-            $0.title.localizedCaseInsensitiveContains(vm.searchText) ||
-            $0.artist.localizedCaseInsensitiveContains(vm.searchText) ||
-            $0.album.localizedCaseInsensitiveContains(vm.searchText)
-        }
+        vm.filteredTracks
     }
     
     public init() {}
@@ -77,6 +70,18 @@ public struct MainAppView: View {
                 // ZONE 3: PERSISTENT BOTTOM TRANSPORT BAR (Full Width, 90px height)
                 desktopBottomTransportBar
                     .frame(height: 90)
+            }
+            
+            // ==========================================================
+            // NEW PLAYLIST CREATION MODAL (Cmd + N)
+            // ==========================================================
+            if vm.showNewPlaylistModal {
+                Color.black.opacity(0.72)
+                    .ignoresSafeArea()
+                    .onTapGesture { vm.showNewPlaylistModal = false }
+                
+                newPlaylistModalView
+                    .transition(.scale.combined(with: .opacity))
             }
             
             // ==========================================================
@@ -181,17 +186,17 @@ public struct MainAppView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 24)
+            .padding(.bottom, 18)
             
             // Navigation Section Label
             Text("WORKSPACE")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundColor(vm.currentTheme.textMuted)
                 .padding(.horizontal, 22)
-                .padding(.bottom, 8)
+                .padding(.bottom, 6)
             
             // Sidebar Navigation Items
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
                 sidebarNavButton(
                     tab: .nowPlaying,
                     icon: "play.square.stack.fill",
@@ -218,8 +223,75 @@ public struct MainAppView: View {
                 )
             }
             .padding(.horizontal, 12)
+            .padding(.bottom, 14)
             
-            Spacer()
+            // ==========================================================
+            // PLAYLISTS SECTION (Custom & Smart Filter Playlists like Polyphia)
+            // ==========================================================
+            HStack {
+                Text("PLAYLISTS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(vm.currentTheme.textMuted)
+                
+                Spacer()
+                
+                Button(action: { vm.openCreatePlaylistModal() }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("New")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(vm.currentTheme.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(vm.currentTheme.primaryContainer.opacity(0.55))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Create New Playlist / Smart Filter (⌘N)")
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 6)
+            
+            ScrollView {
+                VStack(spacing: 3) {
+                    // "All Tracks" reset item
+                    sidebarPlaylistRow(
+                        title: "All Master Tracks",
+                        icon: "opticaldisc.fill",
+                        count: vm.tracks.count,
+                        isSelected: vm.activeTab == .library && vm.selectedPlaylistId == nil,
+                        onSelect: {
+                            vm.selectedPlaylistId = nil
+                            vm.activeTab = .library
+                        },
+                        onDelete: nil
+                    )
+                    
+                    ForEach(vm.playlists) { pl in
+                        let matchCount = vm.tracks.filter { pl.matches(track: $0) }.count
+                        sidebarPlaylistRow(
+                            title: pl.name,
+                            icon: pl.filterKeyword.isEmpty ? "music.note.list" : "sparkles",
+                            count: matchCount,
+                            isSelected: vm.activeTab == .library && vm.selectedPlaylistId == pl.id,
+                            onSelect: {
+                                vm.selectedPlaylistId = pl.id
+                                vm.activeTab = .library
+                            },
+                            onDelete: {
+                                vm.deletePlaylist(id: pl.id)
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .frame(maxHeight: 165)
+            
+            Spacer(minLength: 6)
             
             // Quick Palette Switcher in Sidebar
             VStack(alignment: .leading, spacing: 8) {
@@ -235,7 +307,7 @@ public struct MainAppView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 14)
+            .padding(.bottom, 12)
             
             // Hardware Signal Path Mini-Card at Bottom of Sidebar (Roon / Audirvana Reference)
             Button(action: {
@@ -294,6 +366,55 @@ public struct MainAppView: View {
         .background(vm.currentTheme.surfaceContainerLowest.opacity(0.65))
     }
     
+    private func sidebarPlaylistRow(
+        title: String,
+        icon: String,
+        count: Int,
+        isSelected: Bool,
+        onSelect: @escaping () -> Void,
+        onDelete: (() -> Void)?
+    ) -> some View {
+        HStack(spacing: 8) {
+            Button(action: onSelect) {
+                HStack(spacing: 9) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                        .foregroundColor(isSelected ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
+                        .frame(width: 18)
+                    
+                    Text(title)
+                        .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                        .foregroundColor(isSelected ? vm.currentTheme.textPrimary : vm.currentTheme.textSecondary)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Text("\(count)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(isSelected ? vm.currentTheme.primary : vm.currentTheme.textMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            if let onDelete = onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 9))
+                        .foregroundColor(vm.currentTheme.textMuted.opacity(0.65))
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Delete Playlist")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(isSelected ? vm.currentTheme.primaryContainer.opacity(0.75) : Color.clear)
+        .cornerRadius(10)
+    }
+    
     private func sidebarNavButton(tab: AppTab, icon: String, title: String, shortcut: String) -> some View {
         let isSelected = vm.activeTab == tab
         return Button(action: { vm.activeTab = tab }) {
@@ -314,7 +435,7 @@ public struct MainAppView: View {
                     .foregroundColor(isSelected ? vm.currentTheme.primary : vm.currentTheme.textMuted.opacity(0.7))
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
             .frame(maxWidth: .infinity)
             .background(isSelected ? vm.currentTheme.primaryContainer.opacity(0.85) : Color.clear)
             .cornerRadius(12)
@@ -348,20 +469,23 @@ public struct MainAppView: View {
     }
     
     // =========================================================================
-    // TOP UTILITY BAR (Search, Quick Actions, Hardware Status)
+    // TOP UTILITY BAR (Typeahead Search with Enter-to-Play, New Playlist, Status)
     // =========================================================================
     private var desktopTopBar: some View {
-        HStack(spacing: 14) {
-            // Search Box (Spotify / Apple Music Desktop style)
+        HStack(spacing: 12) {
+            // Search Box (Spotify Typeahead + Enter to Play Top Hit)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 13))
                     .foregroundColor(vm.currentTheme.textSecondary)
                 
-                TextField("Search tracks, artists, or albums...", text: $vm.searchText)
+                TextField("Search tracks, artists... (Press ⏎ to play)", text: $vm.searchText)
                     .textFieldStyle(PlainTextFieldStyle())
                     .font(.system(size: 13))
                     .foregroundColor(vm.currentTheme.textPrimary)
+                    .onSubmit {
+                        vm.playSelectedSearchResult()
+                    }
                     .onChange(of: vm.searchText) { newValue in
                         if !newValue.isEmpty && vm.activeTab != .library {
                             vm.activeTab = .library
@@ -369,6 +493,19 @@ public struct MainAppView: View {
                     }
                 
                 if !vm.searchText.isEmpty {
+                    Button(action: { vm.playSelectedSearchResult() }) {
+                        Text("⏎ Play")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(vm.currentTheme.onPrimary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(vm.currentTheme.primary)
+                            .cornerRadius(6)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Press Return/Enter to immediately play the highlighted result")
+                    
                     Button(action: { vm.searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 12))
@@ -380,12 +517,12 @@ public struct MainAppView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .frame(width: 300)
+            .frame(width: 330)
             .background(vm.currentTheme.surfaceContainerHigh.opacity(0.85))
             .cornerRadius(20)
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
-                    .stroke(vm.currentTheme.outline.opacity(0.22), lineWidth: 1)
+                    .stroke(!vm.searchText.isEmpty ? vm.currentTheme.primary.opacity(0.6) : vm.currentTheme.outline.opacity(0.22), lineWidth: 1)
             )
             
             // Sort Button
@@ -400,6 +537,23 @@ public struct MainAppView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(vm.currentTheme.surfaceContainerHigh.opacity(0.65))
+                .cornerRadius(16)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(TsrossaScaleButtonStyle())
+            
+            // + New Playlist Quick Button
+            Button(action: { vm.openCreatePlaylistModal() }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus.rectangle.on.folder.fill")
+                        .font(.system(size: 11))
+                    Text("New Playlist")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(vm.currentTheme.onPrimaryContainer)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(vm.currentTheme.primaryContainer.opacity(0.65))
                 .cornerRadius(16)
                 .contentShape(Rectangle())
             }
@@ -673,60 +827,70 @@ public struct MainAppView: View {
     }
     
     // =========================================================================
-    // VIEW 2: WIDESCREEN MUSIC LIBRARY (Spotify / Apple Music Table + Hero)
+    // VIEW 2: WIDESCREEN MUSIC LIBRARY (Spotify / Apple Music Table + Hero + Filters)
     // =========================================================================
     private var desktopLibraryView: some View {
         VStack(spacing: 0) {
-            // Featured Hero Header Banner
+            // Featured Hero Header Banner (Adapts to Selected Playlist like "Polyphia")
             HStack(spacing: 20) {
                 ZStack {
                     if let art = vm.currentArtwork {
                         Image(nsImage: art)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 96, height: 96)
+                            .frame(width: 84, height: 84)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                             .shadow(color: vm.currentTheme.primary.opacity(0.35), radius: 12, x: 0, y: 6)
                     } else {
-                        TsrossaBrandIcon(size: 96, cornerRadius: 16)
+                        TsrossaBrandIcon(size: 84, cornerRadius: 16)
                             .shadow(color: vm.currentTheme.primary.opacity(0.28), radius: 12, x: 0, y: 6)
                     }
                 }
                 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("LOSSLESS MASTER COLLECTION")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(vm.currentTheme.primary)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text(vm.activePlaylist != nil ? "SMART PLAYLIST / COLLECTION" : "LOSSLESS MASTER COLLECTION")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(vm.currentTheme.primary)
+                        
+                        if let pl = vm.activePlaylist, !pl.filterKeyword.isEmpty {
+                            Text("FILTER: \(pl.filterKeyword.uppercased())")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.onPrimaryContainer)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(vm.currentTheme.primaryContainer)
+                                .cornerRadius(6)
+                        }
+                    }
                     
-                    Text("Local Audiophile Library")
-                        .font(.system(size: 24, weight: .bold))
+                    Text(vm.activePlaylist?.name ?? "Local Audiophile Library")
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundColor(vm.currentTheme.textPrimary)
                     
-                    Text("\(filteredTracks.count) tracks  •  \(vm.currentFolder)  •  Zero-Copy Direct Memory Engine")
-                        .font(.system(size: 12))
+                    Text("\(filteredTracks.count) of \(vm.tracks.count) tracks  •  \(vm.currentFolder)  •  Zero-Copy Direct Memory Engine")
+                        .font(.system(size: 11))
                         .foregroundColor(vm.currentTheme.textSecondary)
                         .lineLimit(1)
                 }
                 
                 Spacer()
                 
-                // Hero Play & Shuffle Actions
+                // Hero Play, Shuffle & New Playlist Actions
                 HStack(spacing: 10) {
                     Button(action: {
-                        if engine.currentTrack != nil {
-                            engine.togglePlayPause()
-                        } else if let first = filteredTracks.first {
+                        if let first = filteredTracks.first {
                             engine.play(track: first)
                         }
                     }) {
                         HStack(spacing: 8) {
-                            Image(systemName: engine.isPlaying && !engine.isPaused ? "pause.fill" : "play.fill")
-                            Text(engine.isPlaying && !engine.isPaused ? "Pause" : "Play Library")
+                            Image(systemName: "play.fill")
+                            Text(vm.activePlaylist != nil ? "Play \(vm.activePlaylist?.name ?? "Playlist")" : "Play Filtered")
                         }
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundColor(vm.currentTheme.onPrimary)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
                         .background(vm.currentTheme.primary)
                         .cornerRadius(20)
                         .contentShape(Rectangle())
@@ -741,10 +905,10 @@ public struct MainAppView: View {
                             Image(systemName: "shuffle")
                             Text("Shuffle")
                         }
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(vm.currentTheme.textPrimary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
                         .background(vm.currentTheme.surfaceContainerHigh)
                         .cornerRadius(20)
                         .contentShape(Rectangle())
@@ -753,8 +917,14 @@ public struct MainAppView: View {
                 }
             }
             .padding(.horizontal, 28)
-            .padding(.vertical, 18)
+            .padding(.vertical, 14)
             .background(vm.currentTheme.surfaceContainerLow.opacity(0.55))
+            
+            // ==========================================================
+            // AUDIOPHILE HARDWARE & PLAYLIST FILTER BAR
+            // (Playlists + Format [FLAC/WAV] + Bit Depth [24/16/8-bit] + Sample Rate [kHz])
+            // ==========================================================
+            desktopAudiophileFilterBar
             
             // Widescreen Multi-Column Table Header
             HStack(spacing: 14) {
@@ -763,120 +933,569 @@ public struct MainAppView: View {
                 Text("TITLE")
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("ARTIST")
-                    .frame(width: 170, alignment: .leading)
+                    .frame(width: 165, alignment: .leading)
                 Text("ALBUM")
-                    .frame(width: 160, alignment: .leading)
+                    .frame(width: 150, alignment: .leading)
                 Text("ENCODING")
                     .frame(width: 110, alignment: .center)
                 Image(systemName: "clock")
-                    .frame(width: 60, alignment: .trailing)
+                    .frame(width: 54, alignment: .trailing)
+                Text("LIST")
+                    .frame(width: 34, alignment: .center)
             }
             .font(.system(size: 10, weight: .bold, design: .monospaced))
             .foregroundColor(vm.currentTheme.textMuted)
             .padding(.horizontal, 28)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
             .background(vm.currentTheme.surfaceContainerLowest.opacity(0.5))
             
             Divider()
                 .background(vm.currentTheme.outline.opacity(0.15))
             
-            // Multi-Column Track Rows
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(Array(filteredTracks.enumerated()), id: \.element.id) { idx, track in
-                        desktopTrackTableRow(index: idx + 1, track: track)
+            // Multi-Column Track Rows (or Empty Filter State)
+            if filteredTracks.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "waveform.badge.magnifyingglass")
+                        .font(.system(size: 36))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                    Text("No tracks match the current filter")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(vm.currentTheme.textPrimary)
+                    Text("Try clearing your format, bit-depth, kHz, or playlist filters.")
+                        .font(.system(size: 12))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                    Button(action: { vm.resetAllFilters() }) {
+                        Text("Reset All Filters")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(vm.currentTheme.onPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(vm.currentTheme.primary)
+                            .cornerRadius(16)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(PlainButtonStyle())
+                    Spacer()
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(Array(filteredTracks.enumerated()), id: \.element.id) { idx, track in
+                            desktopTrackTableRow(index: idx + 1, track: track)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                }
             }
         }
     }
     
-    private func desktopTrackTableRow(index: Int, track: TrackMetadata) -> some View {
-        let isCurrent = engine.currentTrack?.path == track.path
-        let isFlac = track.path.lowercased().hasSuffix(".flac")
-        
-        return Button(action: { engine.play(track: track) }) {
-            HStack(spacing: 14) {
-                // Column 1: # or Playing Indicator
-                ZStack {
-                    if isCurrent {
-                        Image(systemName: engine.isPlaying && !engine.isPaused ? "waveform" : "speaker.wave.2.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(vm.currentTheme.primary)
-                    } else {
-                        Text("\(index)")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(vm.currentTheme.textMuted)
+    // =========================================================================
+    // AUDIOPHILE FILTER STRIP (Playlists, Format, Bit-Depth, Sample Rate kHz)
+    // =========================================================================
+    private var desktopAudiophileFilterBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Row 1: Playlist & Artist Filter Pills + "+ New Playlist"
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    Text("PLAYLIST:")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                    
+                    filterChipButton(
+                        title: "All (\(vm.tracks.count))",
+                        isSelected: vm.selectedPlaylistId == nil
+                    ) {
+                        vm.selectedPlaylistId = nil
                     }
-                }
-                .frame(width: 34, alignment: .center)
-                
-                // Column 2: Mini Thumbnail + Title
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(isCurrent ? vm.currentTheme.primaryContainer : Color.white.opacity(0.07))
-                            .frame(width: 38, height: 38)
-                        
-                        if isCurrent, let art = vm.currentArtwork {
-                            Image(nsImage: art)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 38, height: 38)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        } else {
-                            Image(systemName: "music.note")
-                                .font(.system(size: 14))
-                                .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
+                    
+                    ForEach(vm.playlists) { pl in
+                        let count = vm.tracks.filter { pl.matches(track: $0) }.count
+                        filterChipButton(
+                            title: "\(pl.name) (\(count))",
+                            icon: pl.filterKeyword.isEmpty ? "music.note.list" : "sparkles",
+                            isSelected: vm.selectedPlaylistId == pl.id
+                        ) {
+                            vm.selectedPlaylistId = (vm.selectedPlaylistId == pl.id) ? nil : pl.id
                         }
                     }
                     
-                    Text(track.title)
-                        .font(.system(size: 13, weight: isCurrent ? .bold : .semibold))
-                        .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textPrimary)
-                        .lineLimit(1)
+                    Button(action: { vm.openCreatePlaylistModal() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 10))
+                            Text("New Playlist")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundColor(vm.currentTheme.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(vm.currentTheme.primaryContainer.opacity(0.45))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(vm.currentTheme.primary.opacity(0.4), lineWidth: 1)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                // Column 3: Artist
-                Text(track.artist)
-                    .font(.system(size: 12))
-                    .foregroundColor(vm.currentTheme.textSecondary)
-                    .lineLimit(1)
-                    .frame(width: 170, alignment: .leading)
-                
-                // Column 4: Album
-                Text(track.album)
-                    .font(.system(size: 12))
-                    .foregroundColor(vm.currentTheme.textMuted)
-                    .lineLimit(1)
-                    .frame(width: 160, alignment: .leading)
-                
-                // Column 5: Format Badge
-                Text("\(isFlac ? "FLAC" : "WAV") \(track.bitDepth)/\(String(format: "%.1fk", Double(track.sampleRate)/1000.0))")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(isCurrent ? vm.currentTheme.onPrimaryContainer : vm.currentTheme.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(isCurrent ? vm.currentTheme.primaryContainer : vm.currentTheme.primaryContainer.opacity(0.35))
-                    .cornerRadius(6)
-                    .frame(width: 110, alignment: .center)
-                
-                // Column 6: Duration
-                Text(vm.formatTime(track.durationSeconds))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(vm.currentTheme.textSecondary)
-                    .frame(width: 60, alignment: .trailing)
+                .padding(.horizontal, 28)
             }
+            
+            // Row 2: Format (FLAC / WAV) + Bit Depth (24-bit / 16-bit / 8-bit) + Sample Rate (kHz)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    // FORMAT GROUP
+                    Text("FORMAT:")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                    
+                    ForEach(["ALL", "FLAC", "WAV"], id: \.self) { fmt in
+                        filterChipButton(
+                            title: fmt,
+                            isSelected: vm.selectedFormatFilter == fmt
+                        ) {
+                            vm.selectedFormatFilter = (vm.selectedFormatFilter == fmt && fmt != "ALL") ? "ALL" : fmt
+                        }
+                    }
+                    
+                    Divider()
+                        .frame(height: 14)
+                        .padding(.horizontal, 4)
+                    
+                    // BIT DEPTH GROUP (24-bit, 16-bit, 8-bit, 32-bit)
+                    Text("BIT DEPTH:")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                    
+                    ForEach([UInt32(24), UInt32(16), UInt32(8), UInt32(32)], id: \.self) { bits in
+                        filterChipButton(
+                            title: "\(bits)-BIT",
+                            isSelected: vm.selectedBitDepthFilter == bits
+                        ) {
+                            vm.selectedBitDepthFilter = (vm.selectedBitDepthFilter == bits) ? 0 : bits
+                        }
+                    }
+                    
+                    Divider()
+                        .frame(height: 14)
+                        .padding(.horizontal, 4)
+                    
+                    // SAMPLE RATE (kHz) GROUP
+                    Text("CLOCK:")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                    
+                    ForEach(
+                        [
+                            (UInt32(44100), "44.1 kHz"),
+                            (UInt32(48000), "48 kHz"),
+                            (UInt32(88200), "88.2 kHz"),
+                            (UInt32(96000), "96 kHz"),
+                            (UInt32(192000), "192 kHz")
+                        ],
+                        id: \.0
+                    ) { rate, label in
+                        filterChipButton(
+                            title: label,
+                            isSelected: vm.selectedSampleRateFilter == rate
+                        ) {
+                            vm.selectedSampleRateFilter = (vm.selectedSampleRateFilter == rate) ? 0 : rate
+                        }
+                    }
+                    
+                    if vm.hasActiveFilters {
+                        Button(action: { vm.resetAllFilters() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                Text("Reset")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .foregroundColor(Color(red: 1.0, green: 0.42, blue: 0.42))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color(red: 1.0, green: 0.25, blue: 0.25).opacity(0.16))
+                            .cornerRadius(12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 28)
+            }
+        }
+        .padding(.vertical, 10)
+        .background(vm.currentTheme.surfaceContainer.opacity(0.55))
+    }
+    
+    private func filterChipButton(
+        title: String,
+        icon: String? = nil,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let icon = icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 9, weight: .bold))
+                }
+                Text(title)
+                    .font(.system(size: 10, weight: isSelected ? .bold : .semibold, design: .monospaced))
+            }
+            .foregroundColor(isSelected ? vm.currentTheme.onPrimary : vm.currentTheme.textSecondary)
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(isCurrent ? vm.currentTheme.primaryContainer.opacity(0.32) : Color.white.opacity(0.02))
-            .cornerRadius(10)
+            .padding(.vertical, 5)
+            .background(isSelected ? vm.currentTheme.primary : Color.white.opacity(0.06))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? vm.currentTheme.primary : vm.currentTheme.outline.opacity(0.18), lineWidth: 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func desktopTrackTableRow(index: Int, track: TrackMetadata) -> some View {
+        let isCurrent = engine.currentTrack?.path == track.path
+        let isSearchTarget = !vm.searchText.isEmpty && (index - 1) == vm.searchSelectedIndex
+        let isFlac = track.path.lowercased().hasSuffix(".flac")
+        
+        return HStack(spacing: 14) {
+            Button(action: { engine.play(track: track) }) {
+                HStack(spacing: 14) {
+                    // Column 1: # or Playing Indicator
+                    ZStack {
+                        if isCurrent {
+                            Image(systemName: engine.isPlaying && !engine.isPaused ? "waveform" : "speaker.wave.2.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(vm.currentTheme.primary)
+                        } else if isSearchTarget {
+                            Image(systemName: "return")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(vm.currentTheme.primary)
+                        } else {
+                            Text("\(index)")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                        }
+                    }
+                    .frame(width: 34, alignment: .center)
+                    
+                    // Column 2: Mini Thumbnail + Title + Spotify-style Top Hit Badge
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isCurrent ? vm.currentTheme.primaryContainer : Color.white.opacity(0.07))
+                                .frame(width: 38, height: 38)
+                            
+                            if isCurrent, let art = vm.currentArtwork {
+                                Image(nsImage: art)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 38, height: 38)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            } else {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
+                            }
+                        }
+                        
+                        Text(track.title)
+                            .font(.system(size: 13, weight: (isCurrent || isSearchTarget) ? .bold : .semibold))
+                            .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textPrimary)
+                            .lineLimit(1)
+                        
+                        if isSearchTarget {
+                            Text("⏎ ENTER TO PLAY")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.onPrimary)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(vm.currentTheme.primary)
+                                .cornerRadius(5)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Column 3: Artist
+                    Text(track.artist)
+                        .font(.system(size: 12))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .lineLimit(1)
+                        .frame(width: 165, alignment: .leading)
+                    
+                    // Column 4: Album
+                    Text(track.album)
+                        .font(.system(size: 12))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                        .lineLimit(1)
+                        .frame(width: 150, alignment: .leading)
+                    
+                    // Column 5: Format Badge
+                    Text("\(isFlac ? "FLAC" : "WAV") \(track.bitDepth)/\(String(format: "%.1fk", Double(track.sampleRate)/1000.0))")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(isCurrent ? vm.currentTheme.onPrimaryContainer : vm.currentTheme.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(isCurrent ? vm.currentTheme.primaryContainer : vm.currentTheme.primaryContainer.opacity(0.35))
+                        .cornerRadius(6)
+                        .frame(width: 110, alignment: .center)
+                    
+                    // Column 6: Duration
+                    Text(vm.formatTime(track.durationSeconds))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .frame(width: 54, alignment: .trailing)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Column 7: Add to Playlist Menu Button
+            Menu {
+                Text("Add / Remove from Playlist")
+                Divider()
+                ForEach(vm.playlists) { pl in
+                    let inPlaylist = pl.matches(track: track)
+                    Button(action: {
+                        vm.toggleTrackInPlaylist(trackPath: track.path, playlistId: pl.id)
+                    }) {
+                        Text("\(inPlaylist ? "✓ " : "   ")\(pl.name)")
+                    }
+                }
+                Divider()
+                Button(action: {
+                    vm.openCreatePlaylistModal()
+                    vm.newPlaylistSelectedPaths.insert(track.path)
+                    if vm.newPlaylistName.isEmpty && track.artist != "Unknown Artist" {
+                        vm.newPlaylistName = track.artist
+                    }
+                }) {
+                    Text("+ New Playlist with '\(track.title)'...")
+                }
+            } label: {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 13))
+                    .foregroundColor(vm.currentTheme.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(BorderlessButtonMenuStyle())
+            .frame(width: 34, alignment: .center)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            isCurrent
+                ? vm.currentTheme.primaryContainer.opacity(0.35)
+                : (isSearchTarget ? vm.currentTheme.primaryContainer.opacity(0.22) : Color.white.opacity(0.02))
+        )
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSearchTarget ? vm.currentTheme.primary.opacity(0.65) : Color.clear, lineWidth: 1)
+        )
+    }
+    
+    // =========================================================================
+    // NEW PLAYLIST / SMART FILTER CREATION MODAL (Cmd + N)
+    // =========================================================================
+    private var newPlaylistModalView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("CREATE PLAYLIST OR SMART FILTER")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.primary)
+                    Text("New Playlist Module")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(vm.currentTheme.textPrimary)
+                }
+                Spacer()
+                Button(action: { vm.showNewPlaylistModal = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            
+            // 1. Playlist Name Input
+            VStack(alignment: .leading, spacing: 6) {
+                Text("PLAYLIST NAME")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(vm.currentTheme.textSecondary)
+                
+                TextField("e.g., Polyphia, Late Night 24-Bit, Favorites...", text: $vm.newPlaylistName)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 13))
+                    .foregroundColor(vm.currentTheme.textPrimary)
+                    .padding(10)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
+                    )
+            }
+            
+            // 2. Smart Auto-Filter Keyword (like "Polyphia")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("SMART AUTO-FILTER KEYWORD / ARTIST (OPTIONAL)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(vm.currentTheme.textSecondary)
+                
+                TextField("e.g., Polyphia (auto-includes all matching tracks)", text: $vm.newPlaylistKeyword)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 13))
+                    .foregroundColor(vm.currentTheme.textPrimary)
+                    .padding(10)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
+                    )
+                
+                // 1-Click Quick-Pick Artist Chips from Library
+                if !vm.distinctArtists.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            Text("Quick Fill Artist:")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textMuted)
+                            
+                            ForEach(vm.distinctArtists.prefix(12), id: \.self) { artist in
+                                Button(action: {
+                                    vm.newPlaylistName = artist
+                                    vm.newPlaylistKeyword = artist
+                                }) {
+                                    Text(artist)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor(vm.newPlaylistKeyword == artist ? vm.currentTheme.onPrimary : vm.currentTheme.textPrimary)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 4)
+                                        .background(vm.newPlaylistKeyword == artist ? vm.currentTheme.primary : Color.white.opacity(0.08))
+                                        .cornerRadius(8)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+                }
+            }
+            
+            // 3. Select / Toggle Specific Tracks from Library
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("MANUAL TRACK SELECTION (\(vm.newPlaylistSelectedPaths.count) SELECTED)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                    Spacer()
+                    if !vm.newPlaylistSelectedPaths.isEmpty {
+                        Button(action: { vm.newPlaylistSelectedPaths.removeAll() }) {
+                            Text("Clear Selection")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(vm.currentTheme.primary)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(vm.tracks) { t in
+                            let isChecked = vm.newPlaylistSelectedPaths.contains(t.path) ||
+                                (!vm.newPlaylistKeyword.trimmingCharacters(in: .whitespaces).isEmpty &&
+                                 (t.artist.localizedCaseInsensitiveContains(vm.newPlaylistKeyword) ||
+                                  t.title.localizedCaseInsensitiveContains(vm.newPlaylistKeyword)))
+                            Button(action: {
+                                if vm.newPlaylistSelectedPaths.contains(t.path) {
+                                    vm.newPlaylistSelectedPaths.remove(t.path)
+                                } else {
+                                    vm.newPlaylistSelectedPaths.insert(t.path)
+                                }
+                            }) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: isChecked ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(isChecked ? vm.currentTheme.primary : vm.currentTheme.textMuted)
+                                    Text(t.title)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(vm.currentTheme.textPrimary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(t.artist)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(vm.currentTheme.textSecondary)
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(isChecked ? vm.currentTheme.primaryContainer.opacity(0.30) : Color.white.opacity(0.03))
+                                .cornerRadius(8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+                .frame(height: 170)
+                .padding(6)
+                .background(Color.black.opacity(0.22))
+                .cornerRadius(10)
+            }
+            
+            // Modal Action Buttons
+            HStack {
+                Button(action: { vm.showNewPlaylistModal = false }) {
+                    Text("Cancel")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Spacer()
+                
+                Button(action: { vm.createPlaylistFromModal() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Create & Open Playlist")
+                    }
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(vm.currentTheme.onPrimary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(vm.currentTheme.primary)
+                    .cornerRadius(10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(TsrossaScaleButtonStyle())
+            }
+        }
+        .padding(24)
+        .frame(width: 540)
+        .background(vm.currentTheme.surfaceContainerHigh)
+        .cornerRadius(22)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(vm.currentTheme.outline.opacity(0.35), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.55), radius: 30, x: 0, y: 16)
     }
     
     // =========================================================================

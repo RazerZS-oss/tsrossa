@@ -10,6 +10,35 @@ public enum AppTab: String, CaseIterable {
     case settings = "Settings"
 }
 
+public struct UserPlaylist: Identifiable, Codable, Hashable {
+    public var id: String
+    public var name: String
+    /// Optional smart filter keyword (e.g. "Polyphia") that automatically matches track title/artist/album
+    public var filterKeyword: String
+    /// Explicitly added track file paths
+    public var trackPaths: [String]
+    
+    public init(id: String = UUID().uuidString, name: String, filterKeyword: String = "", trackPaths: [String] = []) {
+        self.id = id
+        self.name = name
+        self.filterKeyword = filterKeyword
+        self.trackPaths = trackPaths
+    }
+    
+    public func matches(track: TrackMetadata) -> Bool {
+        if trackPaths.contains(track.path) {
+            return true
+        }
+        let kw = filterKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !kw.isEmpty {
+            return track.title.localizedCaseInsensitiveContains(kw) ||
+                   track.artist.localizedCaseInsensitiveContains(kw) ||
+                   track.album.localizedCaseInsensitiveContains(kw)
+        }
+        return false
+    }
+}
+
 public class AppViewModel: ObservableObject {
     public static let shared = AppViewModel()
     
@@ -21,10 +50,29 @@ public class AppViewModel: ObservableObject {
         }
     }
     @Published public var tracks: [TrackMetadata] = []
-    @Published public var searchText: String = ""
+    @Published public var searchText: String = "" {
+        didSet {
+            searchSelectedIndex = 0
+        }
+    }
+    @Published public var searchSelectedIndex: Int = 0
     @Published public var showTelemetry: Bool = false
     @Published public var currentFolder: String = "/Users/alen/Music/Music"
     @Published public var copiedTelemetry: Bool = false
+    
+    // Playlists & New Playlist Modal State
+    @Published public var playlists: [UserPlaylist] = []
+    @Published public var selectedPlaylistId: String? = nil
+    @Published public var showNewPlaylistModal: Bool = false
+    @Published public var newPlaylistName: String = ""
+    @Published public var newPlaylistKeyword: String = ""
+    @Published public var newPlaylistSelectedPaths: Set<String> = []
+    
+    // Audiophile Hardware Filter State (Format, Bit Depth, Sample Rate kHz)
+    @Published public var selectedFormatFilter: String = "ALL" // "ALL", "FLAC", "WAV"
+    @Published public var selectedBitDepthFilter: UInt32 = 0   // 0 = All, 24, 16, 8, 32
+    @Published public var selectedSampleRateFilter: UInt32 = 0 // 0 = All, 44100, 48000, 88200, 96000, 192000
+    
     @Published public var volumeDb: Int = 0 { // 0 dBFS unity gain
         didSet {
             let db = Int32(volumeDb)
@@ -75,8 +123,10 @@ public class AppViewModel: ObservableObject {
     @Published public var accentColorMode: String = "DYNAMIC" // DYNAMIC, ROSE, MATCHA, GOLD, CYAN
     
     private var keyMonitor: Any?
+    private let playlistsStorageKey = "tsrossa.userPlaylists.v1"
     
     public init() {
+        loadSavedPlaylists()
         setupKeyboardMonitor()
     }
     
@@ -84,6 +134,156 @@ public class AppViewModel: ObservableObject {
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
         }
+    }
+    
+    // =========================================================================
+    // COMPUTED FILTERED TRACKS (Playlist + Format + BitDepth + kHz + Search)
+    // =========================================================================
+    public var activePlaylist: UserPlaylist? {
+        guard let id = selectedPlaylistId else { return nil }
+        return playlists.first(where: { $0.id == id })
+    }
+    
+    public var hasActiveFilters: Bool {
+        return selectedPlaylistId != nil ||
+               selectedFormatFilter != "ALL" ||
+               selectedBitDepthFilter != 0 ||
+               selectedSampleRateFilter != 0 ||
+               !searchText.isEmpty
+    }
+    
+    public var filteredTracks: [TrackMetadata] {
+        var result = tracks
+        
+        // 1. Playlist filter (Smart Keyword or Explicit Track Paths)
+        if let playlist = activePlaylist {
+            result = result.filter { playlist.matches(track: $0) }
+        }
+        
+        // 2. Audio Format filter (FLAC, WAV)
+        if selectedFormatFilter != "ALL" {
+            let targetExt = selectedFormatFilter.lowercased()
+            result = result.filter { $0.path.lowercased().hasSuffix(".\(targetExt)") }
+        }
+        
+        // 3. Bit Depth filter (24-bit, 16-bit, 8-bit, 32-bit)
+        if selectedBitDepthFilter != 0 {
+            result = result.filter { $0.bitDepth == selectedBitDepthFilter }
+        }
+        
+        // 4. Sample Rate (kHz) filter (44.1k, 48k, 88.2k, 96k, 192k)
+        if selectedSampleRateFilter != 0 {
+            result = result.filter { $0.sampleRate == selectedSampleRateFilter }
+        }
+        
+        // 5. Typeahead Search filter
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            result = result.filter {
+                $0.title.localizedCaseInsensitiveContains(query) ||
+                $0.artist.localizedCaseInsensitiveContains(query) ||
+                $0.album.localizedCaseInsensitiveContains(query)
+            }
+        }
+        
+        return result
+    }
+    
+    public var distinctArtists: [String] {
+        var seen = Set<String>()
+        var list: [String] = []
+        for t in tracks {
+            let primary = t.artist.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? t.artist
+            if !primary.isEmpty && primary != "Unknown Artist" && !seen.contains(primary) {
+                seen.insert(primary)
+                list.append(primary)
+            }
+        }
+        return list.sorted()
+    }
+    
+    public func resetAllFilters() {
+        selectedPlaylistId = nil
+        selectedFormatFilter = "ALL"
+        selectedBitDepthFilter = 0
+        selectedSampleRateFilter = 0
+        searchText = ""
+    }
+    
+    /// Spotify-style Submit-to-Play (Enter in Search Box plays the highlighted / Top Hit track)
+    public func playSelectedSearchResult() {
+        let list = filteredTracks
+        guard !list.isEmpty else { return }
+        let idx = min(max(0, searchSelectedIndex), list.count - 1)
+        AudioEngine.shared.play(track: list[idx])
+        NSApp.keyWindow?.makeFirstResponder(nil)
+    }
+    
+    // =========================================================================
+    // PLAYLIST MANAGEMENT
+    // =========================================================================
+    private func loadSavedPlaylists() {
+        if let data = UserDefaults.standard.data(forKey: playlistsStorageKey),
+           let decoded = try? JSONDecoder().decode([UserPlaylist].self, from: data),
+           !decoded.isEmpty {
+            playlists = decoded
+        } else {
+            // Seed default smart playlists including Polyphia
+            playlists = [
+                UserPlaylist(name: "Polyphia", filterKeyword: "Polyphia"),
+                UserPlaylist(name: "Nadin Amizah", filterKeyword: "Nadin Amizah"),
+                UserPlaylist(name: "Chase & Status", filterKeyword: "Chase & Status")
+            ]
+            savePlaylists()
+        }
+    }
+    
+    public func savePlaylists() {
+        if let data = try? JSONEncoder().encode(playlists) {
+            UserDefaults.standard.set(data, forKey: playlistsStorageKey)
+        }
+    }
+    
+    public func openCreatePlaylistModal() {
+        newPlaylistName = ""
+        newPlaylistKeyword = ""
+        newPlaylistSelectedPaths = []
+        showNewPlaylistModal = true
+    }
+    
+    public func createPlaylistFromModal() {
+        let trimmedName = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKeyword = newPlaylistKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = !trimmedName.isEmpty ? trimmedName : (!trimmedKeyword.isEmpty ? trimmedKeyword : "New Playlist")
+        
+        let created = UserPlaylist(
+            name: finalName,
+            filterKeyword: trimmedKeyword,
+            trackPaths: Array(newPlaylistSelectedPaths)
+        )
+        playlists.append(created)
+        savePlaylists()
+        selectedPlaylistId = created.id
+        activeTab = .library
+        showNewPlaylistModal = false
+    }
+    
+    public func deletePlaylist(id: String) {
+        playlists.removeAll { $0.id == id }
+        if selectedPlaylistId == id {
+            selectedPlaylistId = nil
+        }
+        savePlaylists()
+    }
+    
+    public func toggleTrackInPlaylist(trackPath: String, playlistId: String) {
+        guard let idx = playlists.firstIndex(where: { $0.id == playlistId }) else { return }
+        if let pathIdx = playlists[idx].trackPaths.firstIndex(of: trackPath) {
+            playlists[idx].trackPaths.remove(at: pathIdx)
+        } else {
+            playlists[idx].trackPaths.append(trackPath)
+        }
+        savePlaylists()
     }
     
     public func updateThemeForTrack(track: TrackMetadata) {
@@ -121,28 +321,30 @@ public class AppViewModel: ObservableObject {
     }
     
     public func playNextTrack() {
-        guard !tracks.isEmpty else { return }
-        if let current = AudioEngine.shared.currentTrack, let idx = tracks.firstIndex(where: { $0.path == current.path }) {
+        let contextList = !filteredTracks.isEmpty ? filteredTracks : tracks
+        guard !contextList.isEmpty else { return }
+        if let current = AudioEngine.shared.currentTrack, let idx = contextList.firstIndex(where: { $0.path == current.path }) {
             let nextIdx: Int
-            if isShuffle && tracks.count > 1 {
-                var rand = Int.random(in: 0..<tracks.count)
-                if rand == idx { rand = (idx + 1) % tracks.count }
+            if isShuffle && contextList.count > 1 {
+                var rand = Int.random(in: 0..<contextList.count)
+                if rand == idx { rand = (idx + 1) % contextList.count }
                 nextIdx = rand
             } else {
-                nextIdx = (idx + 1) % tracks.count
+                nextIdx = (idx + 1) % contextList.count
             }
-            AudioEngine.shared.play(track: tracks[nextIdx])
-        } else if let first = tracks.first {
+            AudioEngine.shared.play(track: contextList[nextIdx])
+        } else if let first = contextList.first {
             AudioEngine.shared.play(track: first)
         }
     }
     
     public func playPreviousTrack() {
-        guard !tracks.isEmpty else { return }
-        if let current = AudioEngine.shared.currentTrack, let idx = tracks.firstIndex(where: { $0.path == current.path }) {
-            let prevIdx = (idx - 1 + tracks.count) % tracks.count
-            AudioEngine.shared.play(track: tracks[prevIdx])
-        } else if let first = tracks.first {
+        let contextList = !filteredTracks.isEmpty ? filteredTracks : tracks
+        guard !contextList.isEmpty else { return }
+        if let current = AudioEngine.shared.currentTrack, let idx = contextList.firstIndex(where: { $0.path == current.path }) {
+            let prevIdx = (idx - 1 + contextList.count) % contextList.count
+            AudioEngine.shared.play(track: contextList[prevIdx])
+        } else if let first = contextList.first {
             AudioEngine.shared.play(track: first)
         }
     }
@@ -226,7 +428,7 @@ public class AppViewModel: ObservableObject {
         return String(format: "%02d:%02d", mins, secs)
     }
     
-    // Desktop Keyboard Shortcut Monitor (intercepts both keyDown & keyUp for Spacebar so focused buttons don't re-fire)
+    // Desktop Keyboard Shortcut Monitor (supports Typeahead Search ↑/↓/Enter + Global Media Shortcuts)
     public func setupKeyboardMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
@@ -236,9 +438,26 @@ public class AppViewModel: ObservableObject {
             let isEditingText = firstResponder is NSTextView && (firstResponder as? NSTextView)?.isEditable == true
             
             if isEditingText {
-                if event.type == .keyDown && event.keyCode == 53 { // Escape
-                    NSApp.keyWindow?.makeFirstResponder(nil)
-                    return nil
+                if event.type == .keyDown {
+                    // Escape -> unfocus text field or close modal
+                    if event.keyCode == 53 {
+                        NSApp.keyWindow?.makeFirstResponder(nil)
+                        return nil
+                    }
+                    // When searching in the top Omnibar (not in New Playlist modal):
+                    if !self.showNewPlaylistModal && !self.searchText.isEmpty {
+                        let count = self.filteredTracks.count
+                        if (event.keyCode == 36 || event.keyCode == 76) && count > 0 { // Return / Enter -> Play selected search result!
+                            self.playSelectedSearchResult()
+                            return nil
+                        } else if event.keyCode == 125 && count > 0 { // Down Arrow -> Move search highlight down
+                            self.searchSelectedIndex = min(count - 1, self.searchSelectedIndex + 1)
+                            return nil
+                        } else if event.keyCode == 126 && count > 0 { // Up Arrow -> Move search highlight up
+                            self.searchSelectedIndex = max(0, self.searchSelectedIndex - 1)
+                            return nil
+                        }
+                    }
                 }
                 return event
             }
@@ -266,6 +485,9 @@ public class AppViewModel: ObservableObject {
                     return nil
                 case 21: // Cmd + 4 -> Settings
                     self.activeTab = .settings
+                    return nil
+                case 45: // Cmd + N -> New Playlist Modal
+                    self.openCreatePlaylistModal()
                     return nil
                 case 2: // Cmd + D -> Diagnostics
                     self.showTelemetry.toggle()
@@ -300,6 +522,11 @@ public class AppViewModel: ObservableObject {
                     NSApp.keyWindow?.makeFirstResponder(nil)
                     AudioEngine.shared.togglePlayPause()
                     return nil
+                case 36, 76: // Return / Enter -> Play highlighted search result if searching
+                    if !self.searchText.isEmpty && !self.filteredTracks.isEmpty {
+                        self.playSelectedSearchResult()
+                        return nil
+                    }
                 case 124: // Right Arrow -> Next track
                     self.playNextTrack()
                     return nil
@@ -313,6 +540,10 @@ public class AppViewModel: ObservableObject {
                     self.volumeDown()
                     return nil
                 case 53: // Escape
+                    if self.showNewPlaylistModal {
+                        self.showNewPlaylistModal = false
+                        return nil
+                    }
                     if self.showTelemetry {
                         self.showTelemetry = false
                         return nil
