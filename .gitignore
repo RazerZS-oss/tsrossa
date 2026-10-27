@@ -70,5 +70,6 @@ Test.kt
 compile_commands.json
 graphify-out/
 .agents/
+.superpowers/
 docs/superpowers/
 tools/

@@ -19,8 +19,14 @@ public struct MainAppView: View {
     
     public var body: some View {
         ZStack {
-            // Background
-            TsrossaColors.deepNavy.ignoresSafeArea()
+            // Material You Dynamic Ambient Background
+            LinearGradient(
+                colors: [vm.currentTheme.surfaceContainerLowest, vm.currentTheme.surface],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            .animation(.easeInOut(duration: 0.5), value: vm.currentTheme)
             
             VStack(spacing: 0) {
                 // 1. TOP HEADER (tsrossa ● Bit-Perfect + Quick Action Icons)
@@ -81,7 +87,7 @@ public struct MainAppView: View {
             HStack(spacing: 8) {
                 Text("tsrossa")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(TsrossaColors.textPrimary)
+                    .foregroundColor(vm.currentTheme.textPrimary)
                 
                 Circle()
                     .fill(TsrossaColors.bitPerfectGold)
@@ -89,34 +95,28 @@ public struct MainAppView: View {
                 
                 Text("Bit-Perfect")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(TsrossaColors.textSecondary)
+                    .foregroundColor(vm.currentTheme.textSecondary)
             }
             
             Spacer()
             
             // 4 Circular Quick Action Buttons
             HStack(spacing: 12) {
-                // Pulse icon (Telemetry / Logs)
                 headerCircleButton(icon: "waveform.path.ecg") {
                     engine.updateTelemetry()
                     vm.showTelemetry = true
                 }
                 
-                // Refresh / Scan icon
                 headerCircleButton(icon: "arrow.clockwise") {
                     openFolderPicker()
                 }
                 
-                // Warmup bolt icon
                 headerCircleButton(icon: "bolt.fill") {
-                    // Quick warmup / status
                     engine.updateTelemetry()
                     vm.showTelemetry = true
                 }
                 
-                // Lock icon (Exclusive Mode)
                 headerCircleButton(icon: "lock.fill") {
-                    // Toggle hog mode / status
                     engine.updateTelemetry()
                     vm.showTelemetry = true
                 }
@@ -132,47 +132,60 @@ public struct MainAppView: View {
                     .frame(width: 40, height: 40)
                 Image(systemName: icon)
                     .font(.system(size: 16))
-                    .foregroundColor(TsrossaColors.textSecondary)
+                    .foregroundColor(vm.currentTheme.textSecondary)
             }
         }
         .buttonStyle(PlainButtonStyle())
     }
     
     // ==========================================
-    // NOW PLAYING VIEW (Matching Screenshot 01)
+    // NOW PLAYING VIEW (Material You Dynamic)
     // ==========================================
     private var nowPlayingView: some View {
         VStack(spacing: 20) {
             Spacer()
             
-            // Large Squircle Album Art Card
+            // Large Squircle Album Art Card with Material You Dynamic Glow
             ZStack {
-                RoundedRectangle(cornerRadius: 32)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(red: 0.16, green: 0.18, blue: 0.14), TsrossaColors.surfaceContainer],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if let artwork = vm.currentArtwork {
+                    Image(nsImage: artwork)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 320, height: 320)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 32)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
                         )
-                    )
-                    .frame(width: 320, height: 320)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 32)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-                    .shadow(color: TsrossaColors.accentGreen.opacity(0.18), radius: 25, x: 0, y: 12)
-                
-                VStack(spacing: 14) {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 80))
-                        .foregroundColor(TsrossaColors.accentGreen)
+                        .shadow(color: vm.currentTheme.primary.opacity(0.35), radius: 30, x: 0, y: 14)
+                } else {
+                    RoundedRectangle(cornerRadius: 32)
+                        .fill(
+                            LinearGradient(
+                                colors: [vm.currentTheme.surfaceContainerHigh, vm.currentTheme.surfaceContainer],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 320, height: 320)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 32)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .shadow(color: vm.currentTheme.primary.opacity(0.25), radius: 25, x: 0, y: 12)
                     
-                    if let track = engine.currentTrack {
-                        Text(track.album.uppercased())
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(TsrossaColors.textSecondary)
-                            .lineLimit(1)
-                            .padding(.horizontal, 24)
+                    VStack(spacing: 14) {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 80))
+                            .foregroundColor(vm.currentTheme.primary)
+                        
+                        if let track = engine.currentTrack {
+                            Text(track.album.uppercased())
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(vm.currentTheme.textSecondary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 24)
+                        }
                     }
                 }
             }
@@ -182,12 +195,12 @@ public struct MainAppView: View {
             VStack(spacing: 6) {
                 Text(engine.currentTrack?.title ?? "No Track Selected")
                     .font(.system(size: 26, weight: .bold))
-                    .foregroundColor(TsrossaColors.textPrimary)
+                    .foregroundColor(vm.currentTheme.textPrimary)
                     .lineLimit(1)
                 
                 Text(subtitleText)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(TsrossaColors.textSecondary)
+                    .foregroundColor(vm.currentTheme.textSecondary)
                     .lineLimit(1)
             }
             .padding(.horizontal, 32)
@@ -201,16 +214,16 @@ public struct MainAppView: View {
                     ),
                     in: 0...max(1.0, engine.totalDuration)
                 )
-                .accentColor(TsrossaColors.accentGreen)
+                .accentColor(vm.currentTheme.primary)
                 
                 HStack {
                     Text(formatTime(engine.currentTime))
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                     Spacer()
                     Text(formatTime(engine.totalDuration))
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                 }
             }
             .padding(.horizontal, 32)
@@ -219,7 +232,7 @@ public struct MainAppView: View {
             HStack(spacing: 8) {
                 Text(formatBadgeText)
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(TsrossaColors.textSecondary)
+                    .foregroundColor(vm.currentTheme.textSecondary)
             }
             
             // Media Controls (Shuffle, Prev, Play/Pause, Next, Repeat)
@@ -228,7 +241,7 @@ public struct MainAppView: View {
                 Button(action: { vm.isShuffle.toggle() }) {
                     Image(systemName: "shuffle")
                         .font(.system(size: 18))
-                        .foregroundColor(vm.isShuffle ? TsrossaColors.accentGreen : TsrossaColors.textMuted)
+                        .foregroundColor(vm.isShuffle ? vm.currentTheme.primary : vm.currentTheme.textMuted)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
@@ -240,22 +253,22 @@ public struct MainAppView: View {
                             .frame(width: 52, height: 52)
                         Image(systemName: "backward.fill")
                             .font(.system(size: 18))
-                            .foregroundColor(TsrossaColors.textPrimary)
+                            .foregroundColor(vm.currentTheme.textPrimary)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
                 
-                // Large Play/Pause Accent Button
+                // Large Play/Pause Dynamic Accent Button
                 Button(action: { engine.togglePlayPause() }) {
                     ZStack {
                         Circle()
-                            .fill(TsrossaColors.accentGreen)
+                            .fill(vm.currentTheme.primary)
                             .frame(width: 72, height: 72)
-                            .shadow(color: TsrossaColors.accentGreen.opacity(0.4), radius: 14, x: 0, y: 6)
+                            .shadow(color: vm.currentTheme.primary.opacity(0.42), radius: 14, x: 0, y: 6)
                         
                         Image(systemName: engine.isPlaying && !engine.isPaused ? "pause.fill" : "play.fill")
                             .font(.system(size: 28))
-                            .foregroundColor(Color.black)
+                            .foregroundColor(vm.currentTheme.onPrimary)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -268,7 +281,7 @@ public struct MainAppView: View {
                             .frame(width: 52, height: 52)
                         Image(systemName: "forward.fill")
                             .font(.system(size: 18))
-                            .foregroundColor(TsrossaColors.textPrimary)
+                            .foregroundColor(vm.currentTheme.textPrimary)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -277,12 +290,12 @@ public struct MainAppView: View {
                 Button(action: { vm.isRepeat.toggle() }) {
                     Image(systemName: "repeat")
                         .font(.system(size: 18))
-                        .foregroundColor(vm.isRepeat ? TsrossaColors.accentGreen : TsrossaColors.textMuted)
+                        .foregroundColor(vm.isRepeat ? vm.currentTheme.primary : vm.currentTheme.textMuted)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
             
-            // Volume Pill & Queue Row
+            // Volume Pill & Queue Row (Material You Dynamic Tones)
             HStack(spacing: 12) {
                 // Wide Volume Pill
                 HStack {
@@ -293,7 +306,7 @@ public struct MainAppView: View {
                                 .frame(width: 32, height: 32)
                             Image(systemName: "minus")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(TsrossaColors.textPrimary)
+                                .foregroundColor(vm.currentTheme.textPrimary)
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -303,10 +316,10 @@ public struct MainAppView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "speaker.wave.2.fill")
                             .font(.system(size: 13))
-                            .foregroundColor(TsrossaColors.accentGreen)
+                            .foregroundColor(vm.currentTheme.primary)
                         Text("\(vm.volumeDb) dBFS")
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(TsrossaColors.accentGreen)
+                            .foregroundColor(vm.currentTheme.primary)
                     }
                     
                     Spacer()
@@ -318,7 +331,7 @@ public struct MainAppView: View {
                                 .frame(width: 32, height: 32)
                             Image(systemName: "plus")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(TsrossaColors.textPrimary)
+                                .foregroundColor(vm.currentTheme.textPrimary)
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -326,26 +339,26 @@ public struct MainAppView: View {
                 .padding(.horizontal, 10)
                 .frame(height: 52)
                 .frame(maxWidth: .infinity)
-                .background(Color(red: 0.16, green: 0.22, blue: 0.14).opacity(0.7))
+                .background(vm.currentTheme.primaryContainer.opacity(0.55))
                 .cornerRadius(26)
                 .overlay(
                     RoundedRectangle(cornerRadius: 26)
-                        .stroke(TsrossaColors.accentGreen.opacity(0.2), lineWidth: 1)
+                        .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
                 )
                 
                 // Queue Button
                 Button(action: { vm.activeTab = .playlist }) {
                     ZStack {
                         Circle()
-                            .fill(Color(red: 0.16, green: 0.22, blue: 0.14).opacity(0.7))
+                            .fill(vm.currentTheme.primaryContainer.opacity(0.55))
                             .frame(width: 52, height: 52)
                             .overlay(
-                                Circle().stroke(TsrossaColors.accentGreen.opacity(0.2), lineWidth: 1)
+                                Circle().stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
                             )
                         
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(TsrossaColors.accentGreen)
+                            .foregroundColor(vm.currentTheme.primary)
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -364,28 +377,28 @@ public struct MainAppView: View {
             // Search Bar Container
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(TsrossaColors.textSecondary)
+                    .foregroundColor(vm.currentTheme.textSecondary)
                 
                 TextField("Search your music...", text: $vm.searchText)
                     .textFieldStyle(PlainTextFieldStyle())
-                    .foregroundColor(TsrossaColors.textPrimary)
+                    .foregroundColor(vm.currentTheme.textPrimary)
                     .font(.system(size: 14))
                 
                 Button(action: openFolderPicker) {
                     Image(systemName: "folder")
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
                 Button(action: { loadInitialMusicDirectory() }) {
                     Image(systemName: "arrow.clockwise")
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color.black.opacity(0.4))
+            .background(Color.black.opacity(0.35))
             .cornerRadius(24)
             .padding(.horizontal, 24)
             .padding(.top, 8)
@@ -399,7 +412,7 @@ public struct MainAppView: View {
                         Text(vm.sortMode)
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
                     }
-                    .foregroundColor(TsrossaColors.textPrimary)
+                    .foregroundColor(vm.currentTheme.textPrimary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.08))
@@ -411,7 +424,7 @@ public struct MainAppView: View {
                 
                 Text("Music • \(vm.tracks.count) tracks")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(TsrossaColors.textSecondary)
+                    .foregroundColor(vm.currentTheme.textSecondary)
             }
             .padding(.horizontal, 24)
             
@@ -438,21 +451,29 @@ public struct MainAppView: View {
                         .fill(Color.white.opacity(0.08))
                         .frame(width: 48, height: 48)
                     
-                    Image(systemName: isCurrent && engine.isPlaying ? "waveform" : "music.note")
-                        .font(.system(size: 18))
-                        .foregroundColor(isCurrent ? TsrossaColors.accentGreen : TsrossaColors.textSecondary)
+                    if isCurrent, let art = vm.currentArtwork {
+                        Image(nsImage: art)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Image(systemName: isCurrent && engine.isPlaying ? "waveform" : "music.note")
+                            .font(.system(size: 18))
+                            .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
+                    }
                 }
                 
                 // Track Info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(track.title)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(isCurrent ? TsrossaColors.accentGreen : TsrossaColors.textPrimary)
+                        .foregroundColor(isCurrent ? vm.currentTheme.primary : vm.currentTheme.textPrimary)
                         .lineLimit(1)
                     
                     Text("\(track.artist)  •  \(track.path.hasSuffix(".flac") ? "FLAC" : "WAV")")
                         .font(.system(size: 12))
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                         .lineLimit(1)
                 }
                 
@@ -463,12 +484,12 @@ public struct MainAppView: View {
                     Image(systemName: "ellipsis")
                         .rotationEffect(.degrees(90))
                         .font(.system(size: 14))
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
             .padding(10)
-            .background(isCurrent ? Color.white.opacity(0.06) : Color.clear)
+            .background(isCurrent ? vm.currentTheme.primaryContainer.opacity(0.28) : Color.clear)
             .cornerRadius(12)
         }
         .buttonStyle(PlainButtonStyle())
@@ -481,29 +502,37 @@ public struct MainAppView: View {
         HStack(spacing: 12) {
             // Mini Thumbnail
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(0.12))
-                    .frame(width: 42, height: 42)
-                Image(systemName: "music.note")
-                    .foregroundColor(TsrossaColors.accentGreen)
+                if let art = vm.currentArtwork {
+                    Image(nsImage: art)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "music.note")
+                        .foregroundColor(vm.currentTheme.primary)
+                }
             }
             
             // Title & Format Badge
             VStack(alignment: .leading, spacing: 3) {
                 Text(engine.currentTrack?.title ?? "")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(TsrossaColors.textPrimary)
+                    .foregroundColor(vm.currentTheme.textPrimary)
                     .lineLimit(1)
                 
                 HStack(spacing: 6) {
                     Text(engine.currentTrack?.artist ?? "")
                         .font(.system(size: 11))
-                        .foregroundColor(TsrossaColors.textSecondary)
+                        .foregroundColor(vm.currentTheme.textSecondary)
                         .lineLimit(1)
                     
                     Text("FLAC • 44.1k")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(red: 1.0, green: 0.55, blue: 0.65))
+                        .foregroundColor(vm.currentTheme.primary)
                 }
             }
             
@@ -513,23 +542,23 @@ public struct MainAppView: View {
             Button(action: { engine.togglePlayPause() }) {
                 ZStack {
                     Circle()
-                        .fill(Color(red: 0.85, green: 0.45, blue: 0.45))
+                        .fill(vm.currentTheme.primary)
                         .frame(width: 38, height: 38)
                     
                     Image(systemName: engine.isPlaying && !engine.isPaused ? "pause.fill" : "play.fill")
                         .font(.system(size: 16))
-                        .foregroundColor(Color.black)
+                        .foregroundColor(vm.currentTheme.onPrimary)
                 }
             }
             .buttonStyle(PlainButtonStyle())
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color(red: 0.16, green: 0.14, blue: 0.18))
+        .background(vm.currentTheme.surfaceContainerHigh)
         .cornerRadius(24)
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
         )
         .onTapGesture {
             vm.activeTab = .nowPlaying
@@ -548,11 +577,11 @@ public struct MainAppView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(TsrossaColors.surfaceLow)
+        .background(vm.currentTheme.surfaceContainerLow)
         .cornerRadius(32)
         .overlay(
             RoundedRectangle(cornerRadius: 32)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(vm.currentTheme.outline.opacity(0.20), lineWidth: 1)
         )
     }
     
@@ -563,19 +592,19 @@ public struct MainAppView: View {
                 ZStack {
                     if isSelected {
                         Capsule()
-                            .fill(TsrossaColors.accentGreen.opacity(0.22))
+                            .fill(vm.currentTheme.primary.opacity(0.22))
                             .frame(width: 58, height: 28)
                     }
                     
                     Image(systemName: icon)
                         .font(.system(size: 16))
-                        .foregroundColor(isSelected ? TsrossaColors.accentGreen : TsrossaColors.textSecondary)
+                        .foregroundColor(isSelected ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
                 }
                 .frame(height: 28)
                 
                 Text(title)
                     .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                    .foregroundColor(isSelected ? TsrossaColors.accentGreen : TsrossaColors.textSecondary)
+                    .foregroundColor(isSelected ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)
         }
@@ -589,12 +618,12 @@ public struct MainAppView: View {
         VStack(spacing: 16) {
             Text("Queue & Playlists")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundColor(TsrossaColors.textPrimary)
+                .foregroundColor(vm.currentTheme.textPrimary)
                 .padding(.top, 24)
             
             Text("Currently Queued: \(vm.tracks.count) tracks")
                 .font(.system(size: 13, design: .monospaced))
-                .foregroundColor(TsrossaColors.textSecondary)
+                .foregroundColor(vm.currentTheme.textSecondary)
             
             ScrollView {
                 LazyVStack(spacing: 8) {
@@ -602,18 +631,18 @@ public struct MainAppView: View {
                         HStack {
                             Text("\(idx + 1)")
                                 .font(.system(size: 12, design: .monospaced))
-                                .foregroundColor(TsrossaColors.textMuted)
+                                .foregroundColor(vm.currentTheme.textMuted)
                                 .frame(width: 24)
                             
                             Text(track.title)
                                 .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(TsrossaColors.textPrimary)
+                                .foregroundColor(vm.currentTheme.textPrimary)
                             
                             Spacer()
                             
                             Text(track.path.hasSuffix(".flac") ? "FLAC" : "WAV")
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(TsrossaColors.accentGreen)
+                                .foregroundColor(vm.currentTheme.primary)
                         }
                         .padding(10)
                         .background(Color.white.opacity(0.04))
@@ -629,34 +658,34 @@ public struct MainAppView: View {
         VStack(spacing: 20) {
             Text("Audio Output & Settings")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundColor(TsrossaColors.textPrimary)
+                .foregroundColor(vm.currentTheme.textPrimary)
                 .padding(.top, 24)
             
             VStack(alignment: .leading, spacing: 14) {
                 Text("OUTPUT DEVICE SELECTION")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(TsrossaColors.accentGreen)
+                    .foregroundColor(vm.currentTheme.primary)
                 
                 ForEach(engine.devices) { dev in
                     Button(action: { engine.selectDevice(id: dev.id) }) {
                         HStack {
                             Image(systemName: dev.isUsb ? "cable.connector" : "speaker.wave.2")
-                                .foregroundColor(TsrossaColors.accentGreen)
+                                .foregroundColor(vm.currentTheme.primary)
                             
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(dev.name)
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(TsrossaColors.textPrimary)
+                                    .foregroundColor(vm.currentTheme.textPrimary)
                                 Text(dev.isUsb ? "External USB DAC (UAC2)" : "Internal CoreAudio Output")
                                     .font(.system(size: 11))
-                                    .foregroundColor(TsrossaColors.textSecondary)
+                                    .foregroundColor(vm.currentTheme.textSecondary)
                             }
                             
                             Spacer()
                             
                             if dev.id == engine.selectedDeviceId {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(TsrossaColors.accentGreen)
+                                    .foregroundColor(vm.currentTheme.primary)
                             }
                         }
                         .padding(12)
@@ -667,7 +696,12 @@ public struct MainAppView: View {
                 }
             }
             .padding(20)
-            .glassmorphic(cornerRadius: 16)
+            .background(vm.currentTheme.surfaceContainer)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(vm.currentTheme.outline.opacity(0.25), lineWidth: 1)
+            )
             .padding(.horizontal, 24)
             
             Spacer()
@@ -729,6 +763,7 @@ public struct MainAppView: View {
             vm.tracks = MetadataScanner.scanDirectory(url: defaultMusicUrl)
             if let first = vm.tracks.first, engine.currentTrack == nil {
                 engine.currentTrack = first
+                vm.updateThemeForTrack(track: first)
             }
         }
     }
