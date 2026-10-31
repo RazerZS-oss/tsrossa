@@ -10,7 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0-BETA] - 2026-10-18
 
 ### Added
-- **Material 3 (Material You) Glassmorphic UI Overhaul:**
+- **Multiplatform Monorepo Structure:**
+  - Restructured codebase into clean top-level subprojects: `android/` (Android Studio Gradle build) and `mac/` (SwiftUI + standalone C++ build script).
+  - Dedicated subproject documentation (`android/README.md`, `mac/README.md`) and project-scoped `.gitignore` files.
+  - Standalone macOS disk image packaging script (`mac/package_dmg.sh`) creating ready-to-distribute DMG installer bundles.
+- **Material 3 (Material You) Glassmorphic UI Overhaul (Android):**
   - Dynamic tonal elevation surface tokens (`m3SurfaceBase`, `m3SurfaceContainerLow`, `m3SurfaceContainer`, `m3SurfaceContainerHigh`, `m3OnSurface`, `m3OnSurfaceVariant`).
   - `AnimatedM3Palette` root-level color provider with 500ms smooth cross-palette transitions, eliminating abrupt theme snaps when switching songs or theme modes without per-item animation overhead.
   - `AppBackgroundContainer` supporting OLED Black, Signature M3 Glow, and Blurred Album Artwork with hardware-accelerated 550ms `Crossfade`.

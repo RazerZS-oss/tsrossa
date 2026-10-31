@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yukaatsu/tsrossa/releases"><img src="https://img.shields.io/badge/Release-v1.6.0--beta-orange.svg" alt="Release v1.6.0-beta"></a>
+  <a href="https://github.com/Sembir-Garage/tsrossa/releases"><img src="https://img.shields.io/badge/Release-v1.6.0--beta-orange.svg" alt="Release v1.6.0-beta"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Android%208.0%2B%20%7C%20macOS%2012.0%2B-2ea44f.svg" alt="Platform"></a>
   <a href="#"><img src="https://img.shields.io/badge/Engine-Native%20C%2B%2B17%20%2F%20CoreAudio-0052cc.svg" alt="Engine"></a>
   <a href="#"><img src="https://img.shields.io/badge/Audio-Bit--Perfect%20UAC1%20%7C%20UAC2%20%7C%20Hog%20Mode-success.svg" alt="Audio"></a>
@@ -32,6 +32,32 @@ Standard operating system audio architectures route playback through software mi
 tsrossa bypasses both operating system audio stacks entirely:
 - On **Android**, the native C++17 engine uses `libusb-1.0` and raw Linux `usbfs` handles to stream linear PCM directly to external DACs over asynchronous Isochronous endpoints.
 - On **macOS**, the engine talks directly to hardware via CoreAudio HAL in Exclusive Hog Mode (`kAudioDevicePropertyHogMode`), dynamically switching physical DAC hardware clocks to match native file frequencies from 44.1 kHz up to 384 kHz.
+
+---
+
+## Repository Structure
+
+tsrossa is organized as a clean modular repository:
+
+```text
+tsrossa/
+├── android/               # Android project (Kotlin + Jetpack Compose + C++ NDK)
+│   ├── app/               # Android app module & native C++ audio engine
+│   ├── gradle/            # Gradle wrapper files
+│   ├── release/           # Standalone release APK
+│   └── README.md          # Dedicated Android documentation
+├── mac/                   # macOS project (SwiftUI + C++ CoreAudio HAL driver)
+│   ├── macos/             # SwiftUI frontend & app configuration
+│   ├── src/nativeMain/    # CoreAudio HAL driver & C++ audio bridge
+│   ├── build_mac.sh       # Native build and app bundling script
+│   ├── package_dmg.sh     # Disk image (.dmg) packaging script
+│   └── README.md          # Dedicated macOS documentation
+├── screenshots/           # Application screenshots for documentation
+├── CHANGELOG.md           # Version history and release notes
+├── CONTRIBUTING.md        # Contribution guidelines and local dev setup
+├── LICENSE                # Apache License 2.0
+└── README.md              # Project overview and monorepo root guide
+```
 
 ---
 
@@ -128,6 +154,7 @@ tsrossa bypasses both operating system audio stacks entirely:
 | **Memory Buffer** | POSIX `mlock()` RAM Pinning | POSIX `mlock()` RAM Pinning |
 | **Volume Control** | Hardware Feature Unit (0 dBFS Unity Gain) | CoreAudio HAL Master Scalar / Hardware Direct |
 | **OS Requirements** | Android 8.0 (API 26) through Android 15+ (API 35) | macOS 12.0 (Monterey) through macOS 15+ (Apple Silicon & Intel) |
+| **Subproject Docs** | [Android Subproject Guide](android/README.md) | [macOS Subproject Guide](mac/README.md) |
 | **License** | Apache License 2.0 | Apache License 2.0 |
 
 ---
@@ -135,15 +162,15 @@ tsrossa bypasses both operating system audio stacks entirely:
 ## Quick Start
 
 ### Android Installation
-1. Download the latest `app-release.apk` from [GitHub Releases](https://github.com/yukaatsu/tsrossa/releases).
+1. Download the latest `app-release.apk` from [GitHub Releases](https://github.com/Sembir-Garage/tsrossa/releases).
 2. Install the APK on your device.
 3. Connect your USB DAC via OTG and grant USB permission when prompted.
 4. Select a FLAC or WAV file in the Library to start playback.
 5. Tap **`[LOGS]`** in the header to view hardware telemetry and verify bit-perfect lock.
 
 ### macOS Installation
-1. Download `tsrossa-*-macos.zip` or `tsrossa-*.dmg` from [GitHub Releases](https://github.com/yukaatsu/tsrossa/releases).
-2. Decompress and drag `tsrossa.app` into `/Applications`.
+1. Download `tsrossa-*-macos.zip` or `tsrossa-*.dmg` from [GitHub Releases](https://github.com/Sembir-Garage/tsrossa/releases).
+2. Decompress and drag `tsrossa.app` into `/Applications` (or open the `.dmg` and drag the app to Applications).
 3. If macOS Gatekeeper blocks opening the app (unidentified developer), run this once in Terminal:
    ```bash
    xattr -cr /Applications/tsrossa.app
@@ -182,42 +209,55 @@ Make sure your `.lrc` file has the same name as the song and sits in the same di
 
 ### Clone
 ```bash
-git clone https://github.com/yukaatsu/tsrossa.git
+git clone https://github.com/Sembir-Garage/tsrossa.git
 cd tsrossa
 ```
 
 ### Build Android APK
 ```bash
+cd android
 ./gradlew assembleRelease
 ```
-Output: `app/build/outputs/apk/release/app-release.apk`
+- Outputs:
+  - `android/app/build/outputs/apk/release/app-release.apk`
+  - `android/release/app-release.apk`
 
-### Build macOS App
+For deep-dive Android architecture, build flavors, and testing details, see [android/README.md](android/README.md).
+
+### Build macOS App & Package DMG
 ```bash
-chmod +x desktop/build_mac.sh
-./desktop/build_mac.sh
+cd mac
+chmod +x build_mac.sh package_dmg.sh
+./build_mac.sh
 ```
-Output: `desktop/build/tsrossa.app`
+- Output: `mac/build/tsrossa.app`
 
-Deploy to `/Applications`:
+Package as distributable DMG:
+```bash
+./package_dmg.sh
+```
+- Output: `mac/build/tsrossa-1.6.0.dmg`
+
+Deploy directly to `/Applications`:
 ```bash
 rm -rf /Applications/tsrossa.app
-cp -R desktop/build/tsrossa.app /Applications/tsrossa.app
+cp -R build/tsrossa.app /Applications/tsrossa.app
 xattr -cr /Applications/tsrossa.app
 codesign --force --deep -s - /Applications/tsrossa.app
 open /Applications/tsrossa.app
 ```
 
+For comprehensive macOS setup, Swift toolchain options, and audio engine architecture, see [mac/README.md](mac/README.md).
+
 ---
 
 ## Support & Contributions
 
-we are brok so 
-If you find tsrossa useful for your portable audiophile setup, consider supporting ongoing development:
+If you find tsrossa useful for your portable or desktop audiophile setup, consider supporting ongoing development:
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Donate-BagiBagi-FFDD00.svg?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://bagibagi.co/Yukaatsu) 
+[![Support via BagiBagi](https://img.shields.io/badge/Donate-BagiBagi-FFDD00.svg?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://bagibagi.co/Yukaatsu) 
 
-Contributions, issue reports, and DAC compatibility logs are welcome on [GitHub Issues](https://github.com/yukaatsu/tsrossa/issues).
+Contributions, issue reports, and DAC compatibility logs are welcome on [GitHub Issues](https://github.com/Sembir-Garage/tsrossa/issues). Check out [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ---
 
