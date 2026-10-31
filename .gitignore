@@ -1,8 +1,10 @@
 # Built application files
 *.apk
 !release/*.apk
+!android/release/*.apk
 *.aar
 *.aab
+*.dmg
 
 # Files for the ART/Dalvik VM
 *.dex
@@ -14,13 +16,9 @@
 bin/
 gen/
 out/
-/build
-/app/build
-*/build/
-
-# Gradle files
-.gradle/
 build/
+*/build/
+.gradle/
 
 # Local configuration file (sdk path, etc) - DO NOT COMMIT!
 local.properties
@@ -31,7 +29,7 @@ proguard/
 # Log Files
 *.log
 
-# Android Studio / IntelliJ IDEA
+# IDE & Editor files (Android Studio, IntelliJ, VS Code, Xcode)
 *.iml
 .idea/
 .idea/caches
@@ -42,19 +40,22 @@ proguard/
 .idea/assetWizardSettings.xml
 .idea/codeStyles/
 .idea/shelf/
+.vscode/
 
-# External Native Build / CMake artifacts
+# External Native Build / CMake / Native artifacts
 .externalNativeBuild/
 .cxx/
-app/src/main/cpp/build/
-app/src/main/cpp/native-lib.cpp.bak
+*/.cxx/
+*.dylib
 *.bak
+.cache/
 
 # OS specific files
 .DS_Store
 Thumbs.db
 
 # Android Profiling & Captures
+captures/
 /captures
 
 # Python temporary and patch scripts
