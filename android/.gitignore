@@ -1,0 +1,48 @@
+# Built application files
+*.apk
+!release/*.apk
+*.aar
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated build files
+.gradle/
+build/
+app/build/
+*/build/
+
+# Local configuration file (sdk path, etc) - DO NOT COMMIT!
+local.properties
+
+# Android Studio / IntelliJ IDEA
+*.iml
+.idea/
+.idea/caches
+.idea/libraries
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/codeStyles/
+.idea/shelf/
+
+# External Native Build / CMake artifacts
+.externalNativeBuild/
+.cxx/
+*/.cxx/
+app/src/main/cpp/build/
+*.bak
+.cache/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Android Profiling & Captures
+captures/
+*.log
