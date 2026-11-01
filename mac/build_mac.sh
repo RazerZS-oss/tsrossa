@@ -7,6 +7,8 @@ BUILD_DIR="$DIR/build"
 
 echo "==> Building native CoreAudio & FLAC/WAV engine (Apple Silicon arm64)..."
 mkdir -p "$BUILD_DIR"
+touch "$BUILD_DIR/.metadata_never_index" 2>/dev/null || true
+touch "$BUILD_DIR/.noindex" 2>/dev/null || true
 clang++ -dynamiclib -std=c++17 -O2 \
     -install_name @rpath/libtsrossa-mac.dylib \
     -I "$DIR/cpp" \
@@ -77,6 +79,11 @@ if [ "$1" == "--install" ] || [ "$INSTALL_APP" == "1" ]; then
     rm -rf /Applications/tsrossa.app
     cp -R "$BUILD_DIR/tsrossa.app" /Applications/tsrossa.app
     xattr -cr /Applications/tsrossa.app 2>/dev/null || true
+    LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    if [ -f "$LSREG" ]; then
+        "$LSREG" -u "$BUILD_DIR/tsrossa.app" 2>/dev/null || true
+        "$LSREG" -f -R /Applications/tsrossa.app 2>/dev/null || true
+    fi
     echo "    Installed successfully to /Applications/tsrossa.app"
 fi
 
