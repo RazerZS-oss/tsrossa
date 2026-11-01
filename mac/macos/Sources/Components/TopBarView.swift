@@ -9,15 +9,48 @@ public struct TopBarView: View {
     
     public var body: some View {
         HStack(spacing: 12) {
-            // Search Box (Spotify Typeahead + Enter to Play Top Hit)
+            // Navigation Back/Forward History Buttons
+            HStack(spacing: 4) {
+                Button(action: {
+                    if vm.activeTab != .library {
+                        vm.activeTab = .library
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .background(vm.currentTheme.surfaceContainerHigh.opacity(0.60))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Back to Library")
+                
+                Button(action: {
+                    if vm.activeTab != .nowPlaying {
+                        vm.activeTab = .nowPlaying
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(vm.currentTheme.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .background(vm.currentTheme.surfaceContainerHigh.opacity(0.60))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Go to Now Playing")
+            }
+            
+            // Search Box with ⌘K Badge (Aether & Spotify Style)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundColor(vm.currentTheme.textSecondary)
                 
-                TextField("Search tracks, artists... (Press ⏎ to play)", text: $vm.searchText)
+                TextField("Search lossless tracks, artists, albums...", text: $vm.searchText)
                     .textFieldStyle(PlainTextFieldStyle())
-                    .font(.system(size: 13))
+                    .font(.system(size: 12))
                     .foregroundColor(vm.currentTheme.textPrimary)
                     .onSubmit {
                         vm.playSelectedSearchResult()
@@ -33,116 +66,147 @@ public struct TopBarView: View {
                         Text("⏎ Play")
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
                             .foregroundColor(vm.currentTheme.onPrimary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(vm.currentTheme.primary)
-                            .cornerRadius(6)
+                            .cornerRadius(5)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .help("Press Return/Enter to immediately play the highlighted result")
                     
                     Button(action: { vm.searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 12))
                             .foregroundColor(vm.currentTheme.textSecondary)
-                            .contentShape(Circle())
                     }
                     .buttonStyle(PlainButtonStyle())
+                } else {
+                    Text("⌘K")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textMuted)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.black.opacity(0.35))
+                        .cornerRadius(4)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .frame(width: 330)
-            .background(vm.currentTheme.surfaceContainerHigh.opacity(0.85))
-            .cornerRadius(20)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .frame(minWidth: 240, maxWidth: 360)
+            .background(vm.currentTheme.surfaceContainerHigh.opacity(0.75))
+            .cornerRadius(12)
             .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(!vm.searchText.isEmpty ? vm.currentTheme.primary.opacity(0.6) : vm.currentTheme.outline.opacity(0.22), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(!vm.searchText.isEmpty ? vm.currentTheme.primary.opacity(0.6) : vm.currentTheme.outline.opacity(0.18), lineWidth: 1)
             )
             
             // Sort Button
             Button(action: { vm.toggleSort() }) {
                 HStack(spacing: 5) {
                     Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10))
                     Text(vm.sortMode)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
                 }
                 .foregroundColor(vm.currentTheme.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
                 .background(vm.currentTheme.surfaceContainerHigh.opacity(0.65))
-                .cornerRadius(16)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(TsrossaScaleButtonStyle())
-            
-            // + New Playlist Quick Button
-            Button(action: { vm.openCreatePlaylistModal() }) {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus.rectangle.on.folder.fill")
-                        .font(.system(size: 11))
-                    Text("New Playlist")
-                        .font(.system(size: 11, weight: .bold))
-                }
-                .foregroundColor(vm.currentTheme.onPrimaryContainer)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(vm.currentTheme.primaryContainer.opacity(0.65))
-                .cornerRadius(16)
+                .cornerRadius(10)
                 .contentShape(Rectangle())
             }
             .buttonStyle(TsrossaScaleButtonStyle())
             
             Spacer()
             
-            // Hardware Status Pill
-            HStack(spacing: 8) {
-                Image(systemName: "cpu")
-                    .font(.system(size: 12))
-                    .foregroundColor(vm.currentTheme.primary)
-                Text(engine.formatBadgeText)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(vm.currentTheme.textPrimary)
+            // DAC Audio Quality Badge with Live Pulsing Indicator (Click opens diagnostics)
+            Button(action: {
+                engine.updateTelemetry()
+                vm.showTelemetry = true
+            }) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(TsrossaColors.terminalGreen)
+                        .frame(width: 6, height: 6)
+                    
+                    Text(engine.formatBadgeText)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(vm.currentTheme.textPrimary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(vm.currentTheme.primaryContainer.opacity(0.40))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(vm.currentTheme.primary.opacity(0.28), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(vm.currentTheme.primaryContainer.opacity(0.45))
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(vm.currentTheme.primary.opacity(0.30), lineWidth: 1)
-            )
+            .buttonStyle(TsrossaScaleButtonStyle())
+            .help("Click to view Lossless Hardware Signal Path (⌘D)")
             
-            // Quick Action Circle Buttons
-            HStack(spacing: 8) {
-                topActionCircleButton(icon: "folder.badge.plus", helpText: "Choose Music Folder") {
+            // Mini Player Pop-out Toggle Button
+            Button(action: { vm.toggleMiniPlayer() }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "picture.in.picture")
+                        .font(.system(size: 11))
+                        .foregroundColor(vm.currentTheme.primary)
+                    Text("Mini Player")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(vm.currentTheme.textPrimary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(vm.currentTheme.surfaceContainerHigh.opacity(0.60))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(vm.currentTheme.outline.opacity(0.20), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(TsrossaScaleButtonStyle())
+            .help("Switch to Floating Mini Player Mode")
+            
+            // Right Inspector Sidebar Toggle Button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.20)) {
+                    vm.toggleRightInspector()
+                }
+            }) {
+                Image(systemName: vm.showRightInspector ? "sidebar.right" : "sidebar.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(vm.showRightInspector ? vm.currentTheme.primary : vm.currentTheme.textSecondary)
+                    .frame(width: 30, height: 30)
+                    .background(vm.showRightInspector ? vm.currentTheme.primary.opacity(0.18) : vm.currentTheme.surfaceContainerHigh.opacity(0.60))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(TsrossaScaleButtonStyle())
+            .help(vm.showRightInspector ? "Hide Right Inspector" : "Show Right Inspector (Lyrics, EQ, Queue)")
+            
+            // Quick Action Folder & Rescan Buttons
+            HStack(spacing: 6) {
+                topActionIconButton(icon: "folder.badge.plus", helpText: "Choose Music Folder") {
                     vm.openFolderPicker()
                 }
-                topActionCircleButton(icon: "arrow.clockwise", helpText: "Rescan Music Library (⌘R)") {
+                topActionIconButton(icon: "arrow.clockwise", helpText: "Rescan Music Library (⌘R)") {
                     vm.rescanCurrentFolder()
-                }
-                topActionCircleButton(icon: "waveform.path.ecg", helpText: "Signal Path & Hardware Diagnostics (⌘D)") {
-                    engine.updateTelemetry()
-                    vm.showTelemetry = true
                 }
             }
         }
     }
     
-    private func topActionCircleButton(icon: String, helpText: String, action: @escaping () -> Void) -> some View {
+    private func topActionIconButton(icon: String, helpText: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(vm.currentTheme.surfaceContainerHigh)
-                    .frame(width: 34, height: 34)
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(vm.currentTheme.textPrimary)
-            }
-            .frame(width: 34, height: 34)
-            .contentShape(Circle())
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(vm.currentTheme.textPrimary)
+                .frame(width: 28, height: 28)
+                .background(vm.currentTheme.surfaceContainerHigh.opacity(0.60))
+                .cornerRadius(8)
+                .contentShape(Rectangle())
         }
         .buttonStyle(TsrossaScaleButtonStyle())
         .help(helpText)

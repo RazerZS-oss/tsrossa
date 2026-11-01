@@ -91,6 +91,13 @@ public class AppViewModel: ObservableObject {
     @Published public var isTheaterMode: Bool = false
     @Published public var theaterTabMode: String = "LYRICS" // "LYRICS" or "QUEUE"
     
+    // Right Inspector Panel State (Aether Studio 3-Column Layout)
+    @Published public var showRightInspector: Bool = true
+    @Published public var inspectorTab: String = "LYRICS" // "LYRICS", "EQ", "QUEUE"
+    
+    // Mini-Player Floating Window Mode
+    @Published public var isMiniPlayerMode: Bool = false
+    
     // Autoplay Infinite Radio (YouTube Music / Spotify style)
     @Published public var isAutoplayRadio: Bool = true {
         didSet {
@@ -309,6 +316,21 @@ public class AppViewModel: ObservableObject {
         selectedPlaylistId = created.id
         activeTab = .library
         showNewPlaylistModal = false
+    }
+    
+    public func toggleRightInspector() {
+        showRightInspector.toggle()
+    }
+    
+    public func switchInspectorTab(_ tab: String) {
+        showRightInspector = true
+        inspectorTab = tab
+    }
+    
+    public func toggleMiniPlayer() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isMiniPlayerMode.toggle()
+        }
     }
     
     public func deletePlaylist(id: String) {

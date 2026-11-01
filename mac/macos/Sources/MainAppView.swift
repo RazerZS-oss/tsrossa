@@ -9,98 +9,119 @@ public struct MainAppView: View {
     public init() {}
     
     public var body: some View {
-        ZStack {
-            // Material You / Monet Ambient Background
-            backgroundLayer
+        GeometryReader { geometry in
+            let isCompact = geometry.size.width < 1060
             
-            // Main Architecture
-            if vm.isTheaterMode {
-                TheaterView()
-                    .transition(.opacity)
-            } else {
-                VStack(spacing: 0) {
-                    // Upper Workspace: Left Navigation Sidebar + Content Area
-                    HStack(spacing: 0) {
-                        SidebarView()
-                            .frame(width: 236)
+            ZStack {
+                // Material You Dynamic Ambient Background
+                backgroundLayer
+                
+                // 1. Mini-Player Mode (Pop-out Floating Window)
+                if vm.isMiniPlayerMode {
+                    MiniPlayerView()
+                        .transition(.scale.combined(with: .opacity))
+                }
+                // 2. Fullscreen Theater Mode (Cmd + F)
+                else if vm.isTheaterMode {
+                    TheaterView()
+                        .transition(.opacity)
+                }
+                // 3. Full 3-Column Aether Desktop Workspace
+                else {
+                    VStack(spacing: 0) {
+                        // Upper Workspace: Sidebar + Center Stage + Right Inspector
+                        HStack(spacing: 0) {
+                            // Column 1: Left Navigation Sidebar
+                            SidebarView()
+                                .frame(width: 236)
+                            
+                            // Vertical Divider
+                            Rectangle()
+                                .fill(vm.currentTheme.outline.opacity(0.14))
+                                .frame(width: 1)
+                            
+                            // Column 2: Main Center Stage
+                            VStack(spacing: 0) {
+                                TopBarView()
+                                    .padding(.horizontal, 22)
+                                    .padding(.top, 14)
+                                    .padding(.bottom, 12)
+                                
+                                Divider()
+                                    .background(vm.currentTheme.outline.opacity(0.12))
+                                
+                                ZStack {
+                                    switch vm.activeTab {
+                                    case .library:
+                                        LibraryView()
+                                    case .nowPlaying:
+                                        NowPlayingView()
+                                    case .playlist:
+                                        QueueView()
+                                    case .settings:
+                                        SettingsView()
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            
+                            // Column 3: Collapsible Right Inspector (Lyrics, Signal/EQ, Queue)
+                            if vm.showRightInspector && !isCompact {
+                                Rectangle()
+                                    .fill(vm.currentTheme.outline.opacity(0.14))
+                                    .frame(width: 1)
+                                
+                                InspectorView()
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
                         Rectangle()
                             .fill(vm.currentTheme.outline.opacity(0.18))
-                            .frame(width: 1)
+                            .frame(height: 1)
                         
-                        VStack(spacing: 0) {
-                            TopBarView()
-                                .padding(.horizontal, 28)
-                                .padding(.top, 18)
-                                .padding(.bottom, 14)
-                            
-                            Divider()
-                                .background(vm.currentTheme.outline.opacity(0.14))
-                            
-                            ZStack {
-                                switch vm.activeTab {
-                                case .library:
-                                    LibraryView()
-                                case .nowPlaying:
-                                    NowPlayingView()
-                                case .playlist:
-                                    QueueView()
-                                case .settings:
-                                    SettingsView()
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        // Persistent Bottom Player Transport Bar
+                        TransportBarView()
+                            .frame(height: 86)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                
+                // Modals & Overlays
+                if vm.showNewPlaylistModal {
+                    Color.black.opacity(0.72)
+                        .ignoresSafeArea()
+                        .onTapGesture { vm.showNewPlaylistModal = false }
                     
-                    Rectangle()
-                        .fill(vm.currentTheme.outline.opacity(0.22))
-                        .frame(height: 1)
+                    NewPlaylistModalView()
+                        .transition(.scale.combined(with: .opacity))
+                }
+                
+                if vm.showSaveQueueModal {
+                    Color.black.opacity(0.72)
+                        .ignoresSafeArea()
+                        .onTapGesture { vm.showSaveQueueModal = false }
                     
-                    // Persistent Bottom Transport Bar
-                    TransportBarView()
-                        .frame(height: 90)
+                    SaveQueueModalView()
+                        .transition(.scale.combined(with: .opacity))
+                }
+                
+                if vm.showTelemetry {
+                    Color.black.opacity(0.72)
+                        .ignoresSafeArea()
+                        .onTapGesture { vm.showTelemetry = false }
+                    
+                    TelemetryModalView()
+                        .transition(.scale.combined(with: .opacity))
+                }
+                
+                if !vm.toastMessage.isEmpty {
+                    toastOverlay
                 }
             }
-            
-            // New Playlist Modal (Cmd + N)
-            if vm.showNewPlaylistModal {
-                Color.black.opacity(0.72)
-                    .ignoresSafeArea()
-                    .onTapGesture { vm.showNewPlaylistModal = false }
-                
-                NewPlaylistModalView()
-                    .transition(.scale.combined(with: .opacity))
-            }
-            
-            // Save Active Queue as Playlist Modal
-            if vm.showSaveQueueModal {
-                Color.black.opacity(0.72)
-                    .ignoresSafeArea()
-                    .onTapGesture { vm.showSaveQueueModal = false }
-                
-                SaveQueueModalView()
-                    .transition(.scale.combined(with: .opacity))
-            }
-            
-            // Hardware Diagnostics & Telemetry Modal (Cmd + D)
-            if vm.showTelemetry {
-                Color.black.opacity(0.72)
-                    .ignoresSafeArea()
-                    .onTapGesture { vm.showTelemetry = false }
-                
-                TelemetryModalView()
-                    .transition(.scale.combined(with: .opacity))
-            }
-            
-            // Toast Notification Overlay
-            if !vm.toastMessage.isEmpty {
-                toastOverlay
-            }
         }
-        .frame(minWidth: 980, minHeight: 680)
+        .frame(minWidth: 960, minHeight: 640)
         .onAppear {
             TsrossaBrandLogo.applyMacDockIcon()
             vm.loadInitialMusicDirectory()
@@ -110,9 +131,7 @@ public struct MainAppView: View {
         }
     }
     
-    // =========================================================================
-    // AMBIENT BACKGROUND
-    // =========================================================================
+    // Ambient Background Layer
     @ViewBuilder
     private var backgroundLayer: some View {
         if vm.bgCanvasMode == "BLACK" {
@@ -144,7 +163,7 @@ public struct MainAppView: View {
                 .ignoresSafeArea()
                 
                 RadialGradient(
-                    colors: [vm.currentTheme.primary.opacity(0.16), Color.clear],
+                    colors: [vm.currentTheme.primary.opacity(0.18), Color.clear],
                     center: .topLeading,
                     startRadius: 40,
                     endRadius: 680
@@ -163,29 +182,27 @@ public struct MainAppView: View {
         }
     }
     
-    // =========================================================================
-    // TOAST OVERLAY
-    // =========================================================================
+    // Floating Toast Notification Overlay
     private var toastOverlay: some View {
         VStack {
             HStack(spacing: 8) {
                 Image(systemName: "music.note")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(vm.currentTheme.primary)
                 Text(vm.toastMessage)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(vm.currentTheme.textPrimary)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
             .background(vm.currentTheme.surfaceContainerHigh)
-            .cornerRadius(24)
+            .cornerRadius(20)
             .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(vm.currentTheme.primary.opacity(0.5), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(vm.currentTheme.primary.opacity(0.4), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.45), radius: 12, x: 0, y: 6)
-            .padding(.top, 24)
+            .shadow(color: Color.black.opacity(0.40), radius: 10, x: 0, y: 5)
+            .padding(.top, 22)
             .transition(.move(edge: .top).combined(with: .opacity))
             
             Spacer()
