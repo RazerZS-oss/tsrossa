@@ -375,7 +375,7 @@ public enum TsrossaBrandLogo {
            let img = NSImage(contentsOfFile: bundlePath) {
             return img
         }
-        let repoPath = "/Users/alen/Music/tsrossa/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+        let repoPath = "/Users/alen/project/tsrossa/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
         if FileManager.default.fileExists(atPath: repoPath),
            let img = NSImage(contentsOfFile: repoPath) {
             return img
@@ -388,7 +388,7 @@ public enum TsrossaBrandLogo {
            let img = NSImage(contentsOfFile: bundlePath) {
             return img
         }
-        let repoPath = "/Users/alen/Music/tsrossa/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+        let repoPath = "/Users/alen/project/tsrossa/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
         if FileManager.default.fileExists(atPath: repoPath),
            let img = NSImage(contentsOfFile: repoPath) {
             return img

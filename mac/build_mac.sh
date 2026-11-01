@@ -9,7 +9,7 @@ echo "==> Building native CoreAudio & FLAC/WAV engine (Apple Silicon arm64)..."
 mkdir -p "$BUILD_DIR"
 clang++ -dynamiclib -std=c++17 -O2 \
     -install_name @rpath/libtsrossa-mac.dylib \
-    -I "$ROOT_DIR/app/src/main/cpp" \
+    -I "$ROOT_DIR/android/app/src/main/cpp" \
     -I "$DIR/src/nativeMain/cpp" \
     -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
     "$DIR/src/nativeMain/cpp/dr_impl.c" \
@@ -39,9 +39,9 @@ cp "$BUILD_DIR/libtsrossa-mac.dylib" "$BUILD_DIR/tsrossa.app/Contents/Frameworks
 cp "$DIR/macos/Info.plist" "$BUILD_DIR/tsrossa.app/Contents/"
 
 # Copy authentic Android logo assets & compile native macOS AppIcon.icns
-ANDROID_ICON="$ROOT_DIR/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
-ANDROID_ICON_ROUND="$ROOT_DIR/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png"
-ANDROID_ICON_FG="$ROOT_DIR/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+ANDROID_ICON="$ROOT_DIR/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+ANDROID_ICON_ROUND="$ROOT_DIR/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png"
+ANDROID_ICON_FG="$ROOT_DIR/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
 
 if [ -f "$ANDROID_ICON" ]; then
     cp "$ANDROID_ICON" "$BUILD_DIR/tsrossa.app/Contents/Resources/ic_launcher.png"
