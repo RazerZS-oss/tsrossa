@@ -375,22 +375,12 @@ public enum TsrossaBrandLogo {
            let img = NSImage(contentsOfFile: bundlePath) {
             return img
         }
-        let repoPath = "/Users/alen/project/tsrossa/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
-        if FileManager.default.fileExists(atPath: repoPath),
-           let img = NSImage(contentsOfFile: repoPath) {
-            return img
-        }
         return nil
     }()
     
     public static let foregroundImage: NSImage? = {
         if let bundlePath = Bundle.main.path(forResource: "ic_launcher_foreground", ofType: "png"),
            let img = NSImage(contentsOfFile: bundlePath) {
-            return img
-        }
-        let repoPath = "/Users/alen/project/tsrossa/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
-        if FileManager.default.fileExists(atPath: repoPath),
-           let img = NSImage(contentsOfFile: repoPath) {
             return img
         }
         return launcherImage

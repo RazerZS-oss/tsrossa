@@ -153,8 +153,6 @@ public class AppViewModel: ObservableObject {
             }
         }
     }
-    @Published public var keepScreenAwake: Bool = true
-    @Published public var bufferProfile: String = "192ms Jitter Safe"
     
     // Appearance & Customization Settings
     @Published public var themeMode: String = "DARK" // DARK, OLED, LIGHT

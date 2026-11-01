@@ -9,23 +9,23 @@ echo "==> Building native CoreAudio & FLAC/WAV engine (Apple Silicon arm64)..."
 mkdir -p "$BUILD_DIR"
 clang++ -dynamiclib -std=c++17 -O2 \
     -install_name @rpath/libtsrossa-mac.dylib \
-    -I "$ROOT_DIR/android/app/src/main/cpp" \
-    -I "$DIR/src/nativeMain/cpp" \
+    -I "$DIR/cpp" \
     -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
-    "$DIR/src/nativeMain/cpp/dr_impl.c" \
-    "$DIR/src/nativeMain/cpp/CoreAudioSink.cpp" \
-    "$DIR/src/nativeMain/cpp/TsrossaAudioBridge.cpp" \
+    "$DIR/cpp/dr_impl.c" \
+    "$DIR/cpp/CoreAudioSink.cpp" \
+    "$DIR/cpp/TsrossaAudioBridge.cpp" \
     -o "$BUILD_DIR/libtsrossa-mac.dylib"
 
 echo "==> Compiling tsrossa macOS application..."
 mkdir -p "$BUILD_DIR/ModuleCache"
+SWIFT_SOURCES=$(find "$DIR/macos/Sources" -name "*.swift")
 swiftc -parse-as-library \
     -module-cache-path "$BUILD_DIR/ModuleCache" \
-    -import-objc-header "$DIR/src/nativeMain/cpp/TsrossaAudioBridge.h" \
+    -import-objc-header "$DIR/cpp/TsrossaAudioBridge.h" \
     -L "$BUILD_DIR" -ltsrossa-mac \
     -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -Xlinker -rpath -Xlinker @loader_path \
-    "$DIR/macos/Sources"/*.swift \
+    $SWIFT_SOURCES \
     -o "$BUILD_DIR/tsrossa"
 
 echo "==> Bundling tsrossa.app..."

@@ -50,6 +50,28 @@ public class AudioEngine: ObservableObject {
     @Published public var selectedDeviceId: UInt32 = 0
     @Published public var telemetryJson: String = "{}"
     
+    public var activeDeviceName: String {
+        if let dev = devices.first(where: { $0.id == selectedDeviceId }) {
+            return dev.name
+        }
+        return devices.first?.name ?? "Apple Silicon CoreAudio DAC"
+    }
+    
+    public var subtitleText: String {
+        if let track = currentTrack {
+            return "\(track.artist)  •  \(track.album)"
+        }
+        return "Select a track from your library"
+    }
+    
+    public var formatBadgeText: String {
+        if let track = currentTrack {
+            let fmt = track.path.lowercased().hasSuffix(".flac") ? "FLAC" : "WAV"
+            return "\(fmt)  •  \(String(format: "%.1f", Double(track.sampleRate) / 1000.0)) kHz  •  \(track.bitDepth)-BIT HARDWARE"
+        }
+        return "FLAC  •  BIT-PERFECT DIRECT"
+    }
+    
     private var progressTimer: Timer?
     private var hotplugTimer: Timer?
     private var isAdvancingTrack: Bool = false

@@ -5,7 +5,7 @@ import Combine
 public class UpdateManager: NSObject, ObservableObject, URLSessionDownloadDelegate {
     public static let shared = UpdateManager()
     
-    public let repoOwner = "RazerZS-oss"
+    public let repoOwner = "Sembir-Garage"
     public let repoName = "tsrossa"
     
     @Published public var isChecking: Bool = false

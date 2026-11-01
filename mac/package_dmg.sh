@@ -19,12 +19,7 @@ cp -R "$APP_PATH" "$STAGE_DIR/"
 ln -s /Applications "$STAGE_DIR/Applications"
 
 echo "==> Creating disk image: $DMG_PATH..."
-if command -v diskutil >/dev/null 2>&1; then
-    diskutil image create from --volumeName "tsrossa" --format UDZO "$STAGE_DIR" "$DMG_PATH" || \
-    hdiutil create -srcfolder "$STAGE_DIR" -volname "tsrossa" -format UDZO "$DMG_PATH"
-else
-    hdiutil create -srcfolder "$STAGE_DIR" -volname "tsrossa" -format UDZO "$DMG_PATH"
-fi
+hdiutil create -srcfolder "$STAGE_DIR" -volname "tsrossa" -format UDZO "$DMG_PATH"
 
 rm -rf "$STAGE_DIR"
 echo "==> Successfully created $DMG_PATH!"
