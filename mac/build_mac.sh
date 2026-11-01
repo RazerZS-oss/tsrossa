@@ -3,10 +3,11 @@ set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$DIR/.." && pwd)"
-BUILD_DIR="$DIR/build"
+BUILD_DIR="$DIR/build.noindex"
 
 echo "==> Building native CoreAudio & FLAC/WAV engine (Apple Silicon arm64)..."
 mkdir -p "$BUILD_DIR"
+ln -sfn "$BUILD_DIR" "$DIR/build"
 touch "$BUILD_DIR/.metadata_never_index" 2>/dev/null || true
 touch "$BUILD_DIR/.noindex" 2>/dev/null || true
 clang++ -dynamiclib -std=c++17 -O2 \
@@ -37,6 +38,7 @@ mkdir -p "$BUILD_DIR/tsrossa.app/Contents/Frameworks"
 mkdir -p "$BUILD_DIR/tsrossa.app/Contents/Resources"
 
 cp "$BUILD_DIR/tsrossa" "$BUILD_DIR/tsrossa.app/Contents/MacOS/"
+rm -f "$BUILD_DIR/tsrossa"
 cp "$BUILD_DIR/libtsrossa-mac.dylib" "$BUILD_DIR/tsrossa.app/Contents/Frameworks/"
 cp "$DIR/macos/Info.plist" "$BUILD_DIR/tsrossa.app/Contents/"
 
@@ -77,7 +79,7 @@ echo "==> Packaging tsrossa-${VERSION}-macos.zip..."
 if [ "$1" == "--install" ] || [ "$INSTALL_APP" == "1" ]; then
     echo "==> Installing to /Applications/tsrossa.app..."
     rm -rf /Applications/tsrossa.app
-    cp -R "$BUILD_DIR/tsrossa.app" /Applications/tsrossa.app
+    mv "$BUILD_DIR/tsrossa.app" /Applications/tsrossa.app
     xattr -cr /Applications/tsrossa.app 2>/dev/null || true
     LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
     if [ -f "$LSREG" ]; then
@@ -88,5 +90,5 @@ if [ "$1" == "--install" ] || [ "$INSTALL_APP" == "1" ]; then
 fi
 
 echo "==> Build complete! Output located at:"
-echo "    App: $BUILD_DIR/tsrossa.app"
+echo "    App: /Applications/tsrossa.app"
 echo "    Zip: $BUILD_DIR/tsrossa-${VERSION}-macos.zip"

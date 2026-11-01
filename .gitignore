@@ -18,6 +18,8 @@ gen/
 out/
 build/
 */build/
+*.noindex/
+*/build.noindex/
 .gradle/
 
 # Local configuration file (sdk path, etc) - DO NOT COMMIT!
